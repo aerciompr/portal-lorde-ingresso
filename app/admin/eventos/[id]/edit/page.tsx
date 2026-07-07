@@ -313,7 +313,7 @@ export default function EditEventPage() {
       </div>
 
       <div className="px-8 pt-6 pb-10 space-y-6">
-        {/* Grid: Descrição (3 col / ~75%) + Imagem (1 col / ~25%) */}
+        {/* Grid: stacks full on mobile (grid-cols-1); Descrição (lg:col-span-3 ~75%) + Imagem (lg:col-span-1) on lg+ */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Descrição */}
           <div className="card p-6 lg:col-span-3">
@@ -328,7 +328,7 @@ export default function EditEventPage() {
           </div>
 
           {/* Imagem */}
-          <div className="card p-6 lg:col-span-1 flex flex-col">
+          <div className="card p-6 lg:col-span-1 flex flex-col overflow-visible">
             <div className="label">Imagem do Evento</div>
             <div className="flex flex-col gap-2 mb-3 mt-2">
               <label className="btn btn-secondary text-xs cursor-pointer text-center px-3 py-1.5">
@@ -339,21 +339,21 @@ export default function EditEventPage() {
             </div>
 
             {form.imageUrl ? (
-              <div className="relative w-full flex-1 bg-zinc-900 rounded-2xl border border-white/10 min-h-[120px]">
+              <div className="relative w-full bg-zinc-900 rounded-2xl border border-white/10 min-h-[120px]">
                 <img 
                   src={form.imageUrl} 
-                  alt="Preview da imagem completa (sem corte)" 
-                  className="w-full h-auto max-h-[320px] lg:max-h-[240px] object-contain bg-zinc-800" 
+                  alt={`${form.title || 'Evento'} - preview (sem corte)`} 
+                  className="w-full h-auto max-h-[360px] lg:max-h-[260px] object-contain bg-zinc-800" 
                 />
                 <button 
                   onClick={() => updateForm('imageUrl', '')} 
-                  className="absolute top-2 right-2 bg-black/70 hover:bg-black/90 text-[10px] px-2 py-0.5 rounded"
+                  className="absolute top-2 right-2 z-10 bg-black/70 hover:bg-black/90 text-[10px] px-2 py-0.5 rounded"
                 >
                   Remover
                 </button>
               </div>
             ) : (
-              <div className="h-48 lg:h-40 w-full flex items-center justify-center border border-dashed border-white/20 rounded-2xl text-zinc-500 text-xs bg-zinc-950 flex-1">
+              <div className="min-h-[120px] max-h-[360px] lg:max-h-[260px] w-full flex items-center justify-center border border-dashed border-white/20 rounded-2xl text-zinc-500 text-xs bg-zinc-950">
                 Nenhuma imagem
               </div>
             )}
