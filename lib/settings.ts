@@ -1,0 +1,153 @@
+import { prisma } from './prisma';
+
+export type GatewayFees = {
+  pixPercent: number;
+  pixFixedCents: number;
+  cardPercent: number;
+  cardFixedCents: number;
+};
+
+export type AppSettings = {
+  fees: GatewayFees;
+  fromEmail: string;
+  cancelHours: number;
+  cancelFeePercent: number;
+  payment: {
+    stripePublishableKey: string;
+    stripeSecretKey: string;
+    mpPublicKey: string;
+    mpAccessToken: string;
+    mpClientId: string;
+    mpClientSecret: string;
+  };
+  branding: {
+    logoUrl: string;
+    faviconUrl: string;
+    siteName: string;
+    bannerImageUrl: string;
+    bannerTitle: string;
+    bannerSubtitle: string;
+    footerLeft: string;
+    footerRight: string;
+  };
+};
+
+// Default values (safe fallbacks)
+const DEFAULTS: AppSettings = {
+  fees: {
+    pixPercent: 1.99,
+    pixFixedCents: 0,
+    cardPercent: 3.99,
+    cardFixedCents: 49,
+  },
+  fromEmail: 'ingressos@lordenelson.com.br',
+  cancelHours: 12,
+  cancelFeePercent: 10,
+  payment: {
+    stripePublishableKey: '',
+    stripeSecretKey: '',
+    mpPublicKey: '',
+    mpAccessToken: '',
+    mpClientId: '',
+    mpClientSecret: '',
+  },
+  branding: {
+    logoUrl: '/logo-lordenelson.jpg',
+    faviconUrl: '',
+    siteName: 'Lorde Nelson',
+    bannerImageUrl: '',
+    bannerTitle: 'LORDE NELSON',
+    bannerSubtitle: 'Rest Pub • Shows, forró e grandes jogos. Compre seu ingresso agora.',
+    footerLeft: 'Lorde Nelson Rest Pub • Rua Silvério Jorge, 241, Jaraguá — Maceió/AL\nQui a Sáb • 20h às 02h • WhatsApp (82) 99647-1998',
+    footerRight: '© {year} Lorde Nelson. Portal moderno de ingressos.\nPagamentos via Stripe e Mercado Pago • Check-in no local',
+  },
+};
+
+let cachedSettings: AppSettings | null = null;
+let lastFetch = 0;
+const CACHE_TTL = 60_000; // 1 minute
+
+async function loadRawSettings(): Promise<Record<string, string>> {
+  try {
+    const rows = await prisma.setting.findMany();
+    const obj: Record<string, string> = {};
+    rows.forEach(r => { obj[r.key] = r.value; });
+    return obj;
+  } catch {
+    return {};
+  }
+}
+
+export async function getAppSettings(force = false): Promise<AppSettings> {
+  const now = Date.now();
+  if (!force && cachedSettings && (now - lastFetch) < CACHE_TTL) {
+    return cachedSettings;
+  }
+
+  const raw = await loadRawSettings();
+
+  const fees: GatewayFees = {
+    pixPercent: parseFloat(raw.pix_fee_percent ?? DEFAULTS.fees.pixPercent.toString()) || DEFAULTS.fees.pixPercent,
+    pixFixedCents: parseInt(raw.pix_fee_fixed_cents ?? DEFAULTS.fees.pixFixedCents.toString(), 10) || DEFAULTS.fees.pixFixedCents,
+    cardPercent: parseFloat(raw.card_fee_percent ?? DEFAULTS.fees.cardPercent.toString()) || DEFAULTS.fees.cardPercent,
+    cardFixedCents: parseInt(raw.card_fee_fixed_cents ?? DEFAULTS.fees.cardFixedCents.toString(), 10) || DEFAULTS.fees.cardFixedCents,
+  };
+
+  const settings: AppSettings = {
+    fees,
+    fromEmail: raw.from_email || DEFAULTS.fromEmail,
+    cancelHours: parseInt(raw.cancel_hours ?? raw.cancelHours ?? DEFAULTS.cancelHours.toString(), 10) || DEFAULTS.cancelHours,
+    cancelFeePercent: parseFloat(raw.cancel_fee ?? raw.cancelFee ?? DEFAULTS.cancelFeePercent.toString()) || DEFAULTS.cancelFeePercent,
+    payment: {
+      stripePublishableKey: raw.stripe_publishable_key || raw.STRIPE_PUBLISHABLE_KEY || DEFAULTS.payment.stripePublishableKey,
+      stripeSecretKey: raw.stripe_secret_key || raw.STRIPE_SECRET_KEY || DEFAULTS.payment.stripeSecretKey,
+      mpPublicKey: raw.mercadopago_public_key || raw.MERCADOPAGO_PUBLIC_KEY || DEFAULTS.payment.mpPublicKey,
+      mpAccessToken: raw.mercadopago_access_token || raw.MERCADOPAGO_ACCESS_TOKEN || DEFAULTS.payment.mpAccessToken,
+      mpClientId: raw.mercadopago_client_id || raw.MERCADOPAGO_CLIENT_ID || DEFAULTS.payment.mpClientId,
+      mpClientSecret: raw.mercadopago_client_secret || raw.MERCADOPAGO_CLIENT_SECRET || DEFAULTS.payment.mpClientSecret,
+    },
+    branding: {
+      logoUrl: raw.logo_url || raw.LOGO_URL || DEFAULTS.branding.logoUrl,
+      faviconUrl: raw.favicon_url || raw.FAVICON_URL || DEFAULTS.branding.faviconUrl,
+      siteName: raw.site_name || raw.SITE_NAME || DEFAULTS.branding.siteName,
+      bannerImageUrl: raw.banner_image_url || raw.BANNER_IMAGE_URL || DEFAULTS.branding.bannerImageUrl,
+      bannerTitle: raw.banner_title || raw.BANNER_TITLE || DEFAULTS.branding.bannerTitle,
+      bannerSubtitle: raw.banner_subtitle || raw.BANNER_SUBTITLE || DEFAULTS.branding.bannerSubtitle,
+      footerLeft: raw.footer_left || raw.FOOTER_LEFT || DEFAULTS.branding.footerLeft,
+      footerRight: raw.footer_right || raw.FOOTER_RIGHT || DEFAULTS.branding.footerRight,
+    },
+  };
+
+  cachedSettings = settings;
+  lastFetch = now;
+  return settings;
+}
+
+export async function saveAppSettings(data: Partial<Record<string, string | number>>) {
+  const toSave: Record<string, string> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== undefined && v !== null) {
+      toSave[k] = String(v);
+    }
+  }
+
+  for (const [key, value] of Object.entries(toSave)) {
+    await prisma.setting.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value },
+    });
+  }
+
+  // Invalidate cache
+  cachedSettings = null;
+}
+
+export async function getFeeForMethod(method: 'pix' | 'card' | string): Promise<{ percent: number; fixedCents: number; details: string }> {
+  const s = await getAppSettings();
+  const isPix = method === 'pix';
+  const percent = isPix ? s.fees.pixPercent : s.fees.cardPercent;
+  const fixed = isPix ? s.fees.pixFixedCents : s.fees.cardFixedCents;
+  const details = `${isPix ? 'pix' : 'card'} ${percent}% + R$${(fixed / 100).toFixed(2)}`;
+  return { percent, fixedCents: fixed, details };
+}

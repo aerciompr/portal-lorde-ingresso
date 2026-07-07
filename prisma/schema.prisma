@@ -1,0 +1,131 @@
+// Lorde Nelson Ingressos - Modern Ticket Portal
+// MySQL provider (for production)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id                String    @id @default(cuid())
+  slug              String    @unique
+  title             String
+  description       String?
+  date              DateTime
+  openTime          String? // e.g. "20:00"
+  address           String    @default("Rua Silvério Jorge, 241, Jaraguá, Maceió - AL, 57022-110")
+  location          String?   // Nome do Pub / Local para exibição no card
+  imageUrl          String?
+  salesDeadline     DateTime?
+  allowCancel       Boolean   @default(true)
+  cancelHoursBefore Int       @default(24)
+  cancelFeePercent  Float     @default(10.0) // e.g. 10%
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Lotes com virada automática
+  lotes              Lote[]  @relation("EventToLotes")
+  activeLoteId       String? @unique
+  activeLote         Lote?   @relation("EventToActiveLote", fields: [activeLoteId], references: [id])
+  loteAcrescimoCents Int     @default(500) // R$ 5.00 default increase
+  loteDefaultQty     Int     @default(50)
+
+  ticketTypes TicketType[]
+  orders      Order[]
+}
+
+model TicketType {
+  id          String    @id @default(cuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  priceCents  Int // always store in cents
+  totalQty    Int
+  sold        Int       @default(0)
+  salesEndAt  DateTime?
+
+  tickets Ticket[]
+}
+
+model Order {
+  id                String    @id @default(cuid())
+  eventId           String
+  event             Event     @relation(fields: [eventId], references: [id])
+  buyerName         String
+  buyerEmail        String
+  buyerCpf          String?
+  buyerPhone        String?
+  buyerPasswordHash String? // bcrypt hash for client password login (email/cpf + senha)
+  totalCents        Int
+  status            String    @default("pending")
+  paymentGateway    String?
+  paymentId         String?
+  paymentMethod     String?
+  accessCode        String?   @unique // unique short code for guest access (passwordless)
+  createdAt         DateTime  @default(now())
+  paidAt            DateTime?
+
+  // Lote e valores financeiros
+  loteId     String?
+  lote       Lote?   @relation(fields: [loteId], references: [id])
+  grossCents Int     @default(0)
+  netCents   Int     @default(0)
+  feeCents   Int     @default(0)
+  feeDetails String? // e.g. "pix 1.99% + R$0.49"
+
+  tickets              Ticket[]
+  cancellationRequests CancellationRequest[]
+}
+
+model Ticket {
+  id           String     @id @default(cuid())
+  orderId      String
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+  uniqueCode   String     @unique
+  qrPayload    String // the data encoded in QR (usually uniqueCode or signed json)
+  status       String     @default("valid") // valid | used | cancelled
+  checkedInAt  DateTime?
+  checkedInBy  String?
+
+  @@index([uniqueCode])
+}
+
+model CancellationRequest {
+  id          String    @id @default(cuid())
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id])
+  reason      String
+  status      String    @default("pending") // pending | approved | rejected
+  adminNotes  String?
+  requestedAt DateTime  @default(now())
+  processedAt DateTime?
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+model Lote {
+  id               String   @id @default(cuid())
+  eventId          String
+  event            Event    @relation("EventToLotes", fields: [eventId], references: [id], onDelete: Cascade)
+  nome             String
+  precoCents       Int
+  totalQty         Int
+  sold             Int      @default(0)
+  ordem            Int
+  viradaAutomatica Boolean  @default(true)
+  ativo            Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  orders         Order[]
+  activeForEvent Event?  @relation("EventToActiveLote")
+}

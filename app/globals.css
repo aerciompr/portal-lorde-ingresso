@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+:root {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  font-family: var(--font-geist-sans);
+}
+
+/* Modern dark elegant theme — Lorde Nelson Pub vibe (dark + emerald/gold accents) */
+:root {
+  --accent: #10b981;
+  --accent-dark: #059669;
+  --gold: #d4af37;
+}
+
+.card {
+  @apply bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-white/20 hover:shadow-xl;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-2xl px-6 py-3 text-sm font-medium transition-all active:scale-[0.985] disabled:opacity-60 cursor-pointer;
+}
+
+.btn-primary {
+  @apply bg-white text-black hover:bg-zinc-100 shadow-sm cursor-pointer;
+}
+
+.btn-secondary {
+  @apply border border-white/20 hover:bg-white/5 hover:border-white/30 cursor-pointer;
+}
+
+.btn-ghost {
+  @apply text-sm hover:bg-white/5 cursor-pointer;
+}
+
+.input {
+  @apply bg-zinc-950 border border-white/15 focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] placeholder:text-zinc-500 rounded-2xl px-4 py-3 text-sm w-full outline-none transition;
+}
+
+.label {
+  @apply text-xs uppercase tracking-[1.5px] text-zinc-500 mb-1.5 block font-medium;
+}
+
+.section-title {
+  @apply text-3xl md:text-4xl font-semibold tracking-[-1.5px];
+}
+
+/* Check-in mobile app style: hide public header/footer when on checkin */
+body.checkin-app header,
+body.checkin-app footer {
+  display: none !important;
+}
+body.checkin-app main {
+  padding: 0 !important;
+  max-width: 100% !important;
+}
+
+.event-card {
+  transition: transform 0.2s cubic-bezier(0.23, 1.0, 0.32, 1), box-shadow 0.2s;
+}
+.event-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+.event-card img {
+  transition: transform 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.event-card:hover img {
+  transform: scale(1.035);
+}
+
+.ticket-preview {
+  @apply bg-zinc-900 border border-white/10 rounded-3xl p-8 font-mono text-sm;
+}
+
+/* TipTap Rich Text Editor styles */
+.ProseMirror {
+  min-height: 120px;
+  outline: none;
+}
+
+.ProseMirror p {
+  margin-bottom: 0.5em;
+}
+
+.ProseMirror h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 0.75em;
+  margin-bottom: 0.25em;
+}
+
+.ProseMirror h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 0.5em;
+  margin-bottom: 0.25em;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.25rem;
+  margin-bottom: 0.5em;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid #10b981;
+  padding-left: 0.75rem;
+  margin-left: 0;
+  font-style: italic;
+  color: #a1a1aa;
+}
+
+.ProseMirror a {
+  color: #10b981;
+  text-decoration: underline;
+}
