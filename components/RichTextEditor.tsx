@@ -6,7 +6,28 @@ import Link from '@tiptap/extension-link';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import CodeBlock from '@tiptap/extension-code-block';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import {
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Quote,
+  Code2,
+  Link2,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Undo2,
+  Redo2,
+  Code,
+  Eraser,
+  Eye,
+} from 'lucide-react';
 
 interface RichTextEditorProps {
   value: string;
@@ -14,59 +35,102 @@ interface RichTextEditorProps {
   placeholder?: string;
 }
 
-export default function RichTextEditor({ value, onChange, placeholder = 'Escreva a descrição...' }: RichTextEditorProps) {
+function ToolbarButton({
+  onClick,
+  active,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  active?: boolean;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition ${
+        active
+          ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/40'
+          : 'text-zinc-400 hover:bg-white/10 hover:text-white'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolbarDivider() {
+  return <span className="mx-0.5 h-5 w-px self-center bg-white/10" aria-hidden />;
+}
+
+export default function RichTextEditor({
+  value,
+  onChange,
+  placeholder = 'Escreva a descrição do evento…',
+}: RichTextEditorProps) {
   const [isSource, setIsSource] = useState(false);
   const [sourceValue, setSourceValue] = useState(value || '');
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [2, 3] },
         codeBlock: false,
+        bulletList: {
+          HTMLAttributes: { class: 'list-disc pl-5 my-2 space-y-1' },
+        },
+        orderedList: {
+          HTMLAttributes: { class: 'list-decimal pl-5 my-2 space-y-1' },
+        },
+        listItem: {
+          HTMLAttributes: { class: 'leading-relaxed' },
+        },
+        paragraph: {
+          HTMLAttributes: { class: 'my-1.5' },
+        },
       }),
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { class: 'text-emerald-400 underline' },
+        HTMLAttributes: { class: 'text-emerald-400 underline underline-offset-2' },
       }),
       Underline,
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      CodeBlock,
+      CodeBlock.configure({
+        HTMLAttributes: {
+          class: 'rounded-lg bg-zinc-900 border border-white/10 p-3 font-mono text-xs my-2',
+        },
+      }),
     ],
     content: value || '',
-    onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
+    onUpdate: ({ editor: ed }) => {
+      const html = ed.getHTML();
       setSourceValue(html);
       onChange(html);
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm prose-invert max-w-none focus:outline-none min-h-[180px] p-3 bg-zinc-950 border border-white/10 rounded-xl text-sm text-zinc-200',
+        class:
+          'tiptap-editor max-w-none focus:outline-none min-h-[200px] px-4 py-3 text-sm text-zinc-200 leading-relaxed',
+        'data-placeholder': placeholder,
       },
     },
   });
 
   useEffect(() => {
     if (editor && value !== editor.getHTML() && !isSource) {
-      editor.commands.setContent(value || '');
+      editor.commands.setContent(value || '', { emitUpdate: false });
       setSourceValue(value || '');
     }
   }, [value, editor, isSource]);
 
-  if (!editor) return null;
-
-  const toggleBold = () => editor.chain().focus().toggleBold().run();
-  const toggleItalic = () => editor.chain().focus().toggleItalic().run();
-  const toggleUnderline = () => editor.chain().focus().toggleUnderline().run();
-  const toggleStrike = () => editor.chain().focus().toggleStrike().run();
-  const toggleHeading2 = () => editor.chain().focus().toggleHeading({ level: 2 }).run();
-  const toggleHeading3 = () => editor.chain().focus().toggleHeading({ level: 3 }).run();
-  const toggleBulletList = () => editor.chain().focus().toggleBulletList().run();
-  const toggleOrderedList = () => editor.chain().focus().toggleOrderedList().run();
-  const toggleBlockquote = () => editor.chain().focus().toggleBlockquote().run();
-  const toggleCodeBlock = () => editor.chain().focus().toggleCodeBlock().run();
-  const setLink = () => {
+  const setLink = useCallback(() => {
+    if (!editor) return;
     const previousUrl = editor.getAttributes('link').href;
     const url = window.prompt('URL do link:', previousUrl || 'https://');
     if (url === null) return;
@@ -75,70 +139,178 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escreva
       return;
     }
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-  };
-  const alignLeft = () => editor.chain().focus().setTextAlign('left').run();
-  const alignCenter = () => editor.chain().focus().setTextAlign('center').run();
-  const alignRight = () => editor.chain().focus().setTextAlign('right').run();
+  }, [editor]);
 
-  const isActive = (name: string, options?: any) => editor.isActive(name, options);
+  if (!editor) {
+    return (
+      <div className="min-h-[240px] rounded-2xl border border-white/10 bg-zinc-950 animate-pulse" />
+    );
+  }
 
   const handleSourceChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newHtml = e.target.value;
     setSourceValue(newHtml);
     onChange(newHtml);
-    editor.commands.setContent(newHtml);
+    editor.commands.setContent(newHtml, { emitUpdate: false });
   };
 
   const toggleSource = () => {
     if (!isSource) {
-      // switching to source, sync current
       setSourceValue(editor.getHTML());
     } else {
-      // switching back to visual
       editor.commands.setContent(sourceValue);
     }
     setIsSource(!isSource);
   };
 
   return (
-    <div className="border border-white/10 rounded-2xl overflow-hidden bg-zinc-900">
-      {/* Toolbar */}
-      <div className="flex flex-wrap gap-1 border-b border-white/10 bg-zinc-950 p-2 text-xs">
-        <button type="button" onClick={toggleBold} className={`px-2 py-1 rounded hover:bg-white/10 ${isActive('bold') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}><strong>B</strong></button>
-        <button type="button" onClick={toggleItalic} className={`px-2 py-1 rounded hover:bg-white/10 italic ${isActive('italic') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>I</button>
-        <button type="button" onClick={toggleUnderline} className={`px-2 py-1 rounded hover:bg-white/10 underline ${isActive('underline') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>U</button>
-        <button type="button" onClick={toggleStrike} className={`px-2 py-1 rounded hover:bg-white/10 line-through ${isActive('strike') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>S</button>
-        <span className="mx-1 text-white/30">|</span>
-        <button type="button" onClick={toggleHeading2} className={`px-2 py-1 rounded hover:bg-white/10 ${isActive('heading', { level: 2 }) ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>H2</button>
-        <button type="button" onClick={toggleHeading3} className={`px-2 py-1 rounded hover:bg-white/10 ${isActive('heading', { level: 3 }) ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>H3</button>
-        <span className="mx-1 text-white/30">|</span>
-        <button type="button" onClick={alignLeft} className="px-2 py-1 rounded hover:bg-white/10">←</button>
-        <button type="button" onClick={alignCenter} className="px-2 py-1 rounded hover:bg-white/10">↔</button>
-        <button type="button" onClick={alignRight} className="px-2 py-1 rounded hover:bg-white/10">→</button>
-        <span className="mx-1 text-white/30">|</span>
-        <button type="button" onClick={toggleBulletList} className={`px-2 py-1 rounded hover:bg-white/10 ${isActive('bulletList') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>• Lista</button>
-        <button type="button" onClick={toggleOrderedList} className={`px-2 py-1 rounded hover:bg-white/10 ${isActive('orderedList') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>1. Lista</button>
-        <button type="button" onClick={toggleBlockquote} className={`px-2 py-1 rounded hover:bg-white/10 ${isActive('blockquote') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>“ ”</button>
-        <button type="button" onClick={toggleCodeBlock} className={`px-2 py-1 rounded hover:bg-white/10 ${isActive('codeBlock') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>{`< >`}</button>
-        <button type="button" onClick={setLink} className={`px-2 py-1 rounded hover:bg-white/10 ${isActive('link') ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>Link</button>
-        <button type="button" onClick={toggleSource} className={`px-2 py-1 rounded hover:bg-white/10 ml-1 ${isSource ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>
-          {isSource ? 'Visual' : 'HTML'}
-        </button>
-        <button type="button" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()} className="ml-auto px-2 py-1 rounded text-xs text-zinc-400 hover:bg-white/10">Limpar</button>
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-inner">
+      {/* Toolbar moderna */}
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-white/10 bg-zinc-900/90 px-2 py-1.5 backdrop-blur">
+        <ToolbarButton
+          title="Negrito"
+          active={editor.isActive('bold')}
+          onClick={() => editor.chain().focus().toggleBold().run()}
+        >
+          <Bold size={15} strokeWidth={2.5} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Itálico"
+          active={editor.isActive('italic')}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+        >
+          <Italic size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Sublinhado"
+          active={editor.isActive('underline')}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+        >
+          <UnderlineIcon size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Riscado"
+          active={editor.isActive('strike')}
+          onClick={() => editor.chain().focus().toggleStrike().run()}
+        >
+          <Strikethrough size={15} />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        <ToolbarButton
+          title="Título"
+          active={editor.isActive('heading', { level: 2 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        >
+          <Heading2 size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Subtítulo"
+          active={editor.isActive('heading', { level: 3 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        >
+          <Heading3 size={15} />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        <ToolbarButton
+          title="Lista com marcadores"
+          active={editor.isActive('bulletList')}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+        >
+          <List size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Lista numerada"
+          active={editor.isActive('orderedList')}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        >
+          <ListOrdered size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Citação"
+          active={editor.isActive('blockquote')}
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        >
+          <Quote size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Bloco de código"
+          active={editor.isActive('codeBlock')}
+          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        >
+          <Code2 size={15} />
+        </ToolbarButton>
+        <ToolbarButton title="Link" active={editor.isActive('link')} onClick={setLink}>
+          <Link2 size={15} />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        <ToolbarButton
+          title="Alinhar à esquerda"
+          active={editor.isActive({ textAlign: 'left' })}
+          onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        >
+          <AlignLeft size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Centralizar"
+          active={editor.isActive({ textAlign: 'center' })}
+          onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        >
+          <AlignCenter size={15} />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Alinhar à direita"
+          active={editor.isActive({ textAlign: 'right' })}
+          onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        >
+          <AlignRight size={15} />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        <ToolbarButton title="Desfazer" onClick={() => editor.chain().focus().undo().run()}>
+          <Undo2 size={15} />
+        </ToolbarButton>
+        <ToolbarButton title="Refazer" onClick={() => editor.chain().focus().redo().run()}>
+          <Redo2 size={15} />
+        </ToolbarButton>
+
+        <div className="ml-auto flex items-center gap-0.5">
+          <ToolbarButton
+            title={isSource ? 'Modo visual' : 'Ver HTML'}
+            active={isSource}
+            onClick={toggleSource}
+          >
+            {isSource ? <Eye size={15} /> : <Code size={15} />}
+          </ToolbarButton>
+          <ToolbarButton
+            title="Limpar formatação"
+            onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+          >
+            <Eraser size={15} />
+          </ToolbarButton>
+        </div>
       </div>
 
       {isSource ? (
         <textarea
-          className="w-full min-h-[180px] p-3 bg-zinc-950 font-mono text-sm text-zinc-200 border-0 focus:outline-none"
+          className="w-full min-h-[200px] resize-y border-0 bg-zinc-950 p-4 font-mono text-xs text-zinc-300 focus:outline-none"
           value={sourceValue}
           onChange={handleSourceChange}
+          spellCheck={false}
         />
       ) : (
         <EditorContent editor={editor} />
       )}
 
-      <div className="px-3 py-1.5 text-[10px] text-zinc-500 border-t border-white/10 bg-zinc-950">
-        Editor rico • Use o botão HTML para ver/editar o código fonte
+      <div className="flex items-center justify-between border-t border-white/5 bg-zinc-900/50 px-3 py-1.5 text-[10px] text-zinc-500">
+        <span>Listas, títulos e links aparecem formatados no site público</span>
+        <span className="hidden sm:inline">Ctrl+B · Ctrl+I · Ctrl+Z</span>
       </div>
     </div>
   );

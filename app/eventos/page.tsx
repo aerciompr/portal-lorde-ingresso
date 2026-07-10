@@ -58,11 +58,16 @@ export default async function Programacao() {
 
                 <div className="flex items-center justify-between pt-4 border-t border-white/10">
                   <div className="text-sm">
-                    {available > 0 ? (
-                      <span className="text-emerald-400">{available} ingressos disponíveis</span>
-                    ) : <span className="text-red-400">Esgotado</span>}
+                    {available < 1 ? (
+                      <span className="text-red-400">Esgotado</span>
+                    ) : null}
                   </div>
-                  <Link href={`/evento/${event.slug}`} className="btn btn-primary">Comprar Ingressos</Link>
+                  <Link
+                    href={`/evento/${event.slug}`}
+                    className={`btn btn-primary ${available < 1 ? 'pointer-events-none opacity-50' : ''}`}
+                  >
+                    {available < 1 ? 'Esgotado' : 'Comprar Ingressos'}
+                  </Link>
                 </div>
               </div>
             </div>

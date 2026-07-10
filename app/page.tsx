@@ -65,8 +65,6 @@ export default async function Home() {
             <div className="space-y-3">
               {events.map((event) => {
                 const minPrice = Math.min(...event.ticketTypes.map(t => t.priceCents));
-                const totalSold = event.ticketTypes.reduce((s, t) => s + t.sold, 0);
-                const totalQty = event.ticketTypes.reduce((s, t) => s + t.totalQty, 0);
                 return (
                   <Link 
                     key={event.id} 

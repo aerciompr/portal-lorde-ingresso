@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/cleanup-pending",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-payments",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

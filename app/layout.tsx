@@ -46,10 +46,16 @@ export default async function RootLayout({
   const footerLeft = (b.footerLeft || "").replace("{year}", new Date().getFullYear().toString());
   const footerRight = (b.footerRight || "").replace("{year}", new Date().getFullYear().toString());
 
+  // Pass initial branding from server to avoid client fetch on public pages (reduces latency on startup/load)
+  const initialBranding = {
+    siteName: b.siteName,
+    logoUrl: b.logoUrl,
+  };
+
   return (
     <html lang="pt-BR" className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-200">
-        <Header />
+        <Header initialBranding={initialBranding} />
 
         <main className="flex-1">{children}</main>
 

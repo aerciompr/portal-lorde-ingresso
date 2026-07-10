@@ -19,7 +19,9 @@ export default function Checkin() {
     const match = document.cookie.match(/(?:^|; )admin_user=([^;]*)/);
     return match ? decodeURIComponent(match[1]) : '';
   };
-  const [adminUser, setAdminUser] = useState<string>(getAdminUser());
+
+  // Initialize to empty to match SSR (prevents hydration mismatch on adminUser display)
+  const [adminUser, setAdminUser] = useState<string>('');
 
   // Make it feel like a standalone mobile app: hide public header/footer
   useEffect(() => {

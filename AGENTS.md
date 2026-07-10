@@ -1,9 +1,16 @@
 # AGENTS.md
 
+# Projeto: Lorde Nelson Ingressos (portal de vendas)
+
+**Caminho oficial:** `C:\Users\aerciompr\projects\lordenelson-ingressos`  
+**Deploy:** ver `docs/DEPLOY_SUBDOMAIN.md` e `docs/SESSION_HANDOFF.md`.
+
 # Regras de Comportamento
 - O idioma principal de comunicação é o Português Brasileiro (pt-BR).
 - Responda sempre em português, mesmo que eu digite em inglês ou que as ferramentas internas retornem mensagens em inglês.
 - Se houver dúvidas, peça esclarecimentos em português.
+- Não commitar `.env`, bancos `*.db` nem segredos.
+- Em produção, `NEXT_PUBLIC_APP_URL` deve ser HTTPS do subdomínio; crons e webhooks usam essa base.
 
 ## Mission
 

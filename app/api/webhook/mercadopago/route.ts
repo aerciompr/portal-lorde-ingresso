@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendOrderConfirmation } from '@/lib/email';
-import { signCode } from '@/lib/validate-ticket';
-import { getFeeForMethod, getAppSettings } from '@/lib/settings';
+import { getAppSettings } from '@/lib/settings';
+import { finalizePaidOrder } from '@/lib/finalize-paid-order';
+import { releaseOrderStock } from '@/lib/order-stock';
+import { MercadoPagoConfig, Payment } from 'mercadopago';
 import crypto from 'crypto';
 
 const getMPAccessToken = async () => {
@@ -10,18 +11,26 @@ const getMPAccessToken = async () => {
   return s.payment.mpAccessToken || process.env.MERCADOPAGO_ACCESS_TOKEN || '';
 };
 
-// Mercado Pago envia notificações no formato { id, type, ... }
-// Validamos x-signature quando presente e sempre confirmamos o status buscando o pagamento.
+async function fetchMpPayment(paymentId: string | number, accessToken: string) {
+  try {
+    const client = new MercadoPagoConfig({ accessToken });
+    const payment = new Payment(client);
+    const result: any = await payment.get({ id: String(paymentId) });
+    return result?.body || result;
+  } catch (e) {
+    console.error('[MP WEBHOOK] payment.get failed', e);
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const xSignature = req.headers.get('x-signature') || '';
   const xRequestId = req.headers.get('x-request-id') || '';
   const MP_ACCESS_TOKEN = await getMPAccessToken();
 
-  console.log('[MP WEBHOOK] Received:', body);
+  console.log('[MP WEBHOOK] Received:', JSON.stringify(body).slice(0, 500));
 
-  // Validação básica de assinatura (seguindo docs do MP)
   if (xSignature && MP_ACCESS_TOKEN) {
     const match = xSignature.match(/ts=(\d+),v1=([a-f0-9]+)/i);
     if (match) {
@@ -40,76 +49,77 @@ export async function POST(req: NextRequest) {
   }
 
   const paymentId = body.data?.id || body.id;
-
   if (!paymentId) {
     return NextResponse.json({ ok: true });
   }
 
-  const order = await prisma.order.findFirst({
+  // Busca status real do pagamento na API do MP (fonte da verdade)
+  const mpPayment = MP_ACCESS_TOKEN
+    ? await fetchMpPayment(paymentId, MP_ACCESS_TOKEN)
+    : null;
+
+  const status = (mpPayment?.status || body.data?.status || body.status || '').toString().toLowerCase();
+  const externalRef = mpPayment?.external_reference
+    ? String(mpPayment.external_reference)
+    : body.external_reference
+      ? String(body.external_reference)
+      : null;
+
+  // Localiza o pedido pelo paymentId ou external_reference (orderId)
+  let order = await prisma.order.findFirst({
     where: { paymentId: String(paymentId) },
     include: { tickets: true, event: true, cancellationRequests: true },
   });
 
+  if (!order && externalRef) {
+    order = await prisma.order.findUnique({
+      where: { id: externalRef },
+      include: { tickets: true, event: true, cancellationRequests: true },
+    });
+  }
+
   if (!order) {
+    console.log('[MP WEBHOOK] order not found for payment', paymentId);
     return NextResponse.json({ ok: true });
   }
 
-  // Confirma status buscando o pagamento (recomendado pela doc)
-  // Para simplificar, usamos o que veio no payload + action.
-
-  if ((body.type === 'payment' || body.action === 'payment.updated') && order.status === 'pending') {
-    // Marcar como pago (o payload de pagamento atualizado deve indicar sucesso)
-    const updateData: any = { status: 'paid', paidAt: new Date() };
-    if (!order.accessCode) {
-      updateData.accessCode = 'LN-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+  // Pagamento aprovado → liberar ingressos + e-mail
+  if (
+    (body.type === 'payment' || body.action === 'payment.updated' || body.action === 'payment.created' || !body.type) &&
+    (status === 'approved' || status === 'accredited')
+  ) {
+    if (order.status === 'pending') {
+      await finalizePaidOrder(order.id, {
+        paymentId: String(paymentId),
+        paymentMethod: 'pix',
+        paymentGateway: 'mercadopago',
+      });
     }
-
-    // fee from DB Settings
-    const feeInfo = await getFeeForMethod('pix');
-    const fee = Math.round(order.totalCents * feeInfo.percent / 100) + feeInfo.fixedCents;
-    updateData.grossCents = order.totalCents;
-    updateData.netCents = order.totalCents - fee;
-    updateData.feeCents = fee;
-    updateData.feeDetails = feeInfo.details;
-
-    await prisma.order.update({
-      where: { id: order.id },
-      data: updateData,
-    });
-
-    for (const t of order.tickets) {
-      await prisma.ticket.update({ where: { id: t.id }, data: { qrPayload: signCode(t.uniqueCode) } });
-    }
-
-    const full = await prisma.order.findUnique({
-      where: { id: order.id },
-      include: { tickets: { include: { ticketType: true } }, event: true },
-    });
-    if (full) await sendOrderConfirmation(full as unknown as import('@/lib/email').OrderWithDetails);
-
-    // Virada automática (Fase 2) - após venda paga
-    if (order.loteId) {
-      const { performAutomaticVirada } = await import('@/app/api/admin/lotes/virar/route');
-      await performAutomaticVirada(order.eventId);
-    }
-
-    console.log(`[MP] paid ${order.id}`);
   }
 
-  // Refund handling (action payment.refunded ou status atualizado para refunded)
-  if (body.action === 'payment.refunded' || body.data?.status === 'refunded') {
-    if (order.status === 'paid' || order.status === 'pending') {
+  // Pagamento rejeitado/cancelado/expirado → devolve estoque se ainda pending
+  if (['rejected', 'cancelled', 'canceled', 'expired', 'refunded'].includes(status)) {
+    if (order.status === 'pending') {
+      await releaseOrderStock(order.id);
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: status === 'refunded' ? 'refunded' : 'cancelled',
+          feeDetails: `mp status: ${status}`,
+        },
+      });
+      console.log(`[MP] pending order ${order.id} closed (${status}), stock released`);
+    } else if (status === 'refunded' && order.status === 'paid') {
       await prisma.order.update({ where: { id: order.id }, data: { status: 'refunded' } });
       await prisma.ticket.updateMany({ where: { orderId: order.id }, data: { status: 'cancelled' } });
 
-      const pending = order.cancellationRequests.find((cr: any) => cr.status === 'pending');
+      const pending = order.cancellationRequests?.find((cr: { status: string }) => cr.status === 'pending');
       if (pending) {
         await prisma.cancellationRequest.update({
           where: { id: pending.id },
           data: { status: 'approved', processedAt: new Date(), adminNotes: 'Reembolso processado via webhook MP' },
         });
       }
-
       console.log(`[MP] refund processed for ${order.id}`);
     }
   }

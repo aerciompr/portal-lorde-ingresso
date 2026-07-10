@@ -12,9 +12,18 @@ export type AppSettings = {
   fromEmail: string;
   cancelHours: number;
   cancelFeePercent: number;
+  /** Minutos para expirar pedidos pending e devolver estoque (cron / limpeza). */
+  pendingOrderTtlMinutes: number;
+  publicUrl: string;   // para webhooks, links em emails e notification_url (ex: https://seudominio.com ou ngrok)
   payment: {
     stripePublishableKey: string;
     stripeSecretKey: string;
+    // Stripe Connect OAuth
+    stripeClientId?: string;       // ca_... from Stripe Connect settings
+    stripeAccountId?: string;      // acct_xxx
+    stripeAccessToken?: string;    // sk_... or access token from OAuth
+    stripeRefreshToken?: string;
+    // MP
     mpPublicKey: string;
     mpAccessToken: string;
     mpClientId: string;
@@ -43,9 +52,15 @@ const DEFAULTS: AppSettings = {
   fromEmail: 'ingressos@lordenelson.com.br',
   cancelHours: 12,
   cancelFeePercent: 10,
+  pendingOrderTtlMinutes: 30,
+  publicUrl: '',
   payment: {
     stripePublishableKey: '',
     stripeSecretKey: '',
+    stripeClientId: '',
+    stripeAccountId: '',
+    stripeAccessToken: '',
+    stripeRefreshToken: '',
     mpPublicKey: '',
     mpAccessToken: '',
     mpClientId: '',
@@ -98,9 +113,18 @@ export async function getAppSettings(force = false): Promise<AppSettings> {
     fromEmail: raw.from_email || DEFAULTS.fromEmail,
     cancelHours: parseInt(raw.cancel_hours ?? raw.cancelHours ?? DEFAULTS.cancelHours.toString(), 10) || DEFAULTS.cancelHours,
     cancelFeePercent: parseFloat(raw.cancel_fee ?? raw.cancelFee ?? DEFAULTS.cancelFeePercent.toString()) || DEFAULTS.cancelFeePercent,
+    pendingOrderTtlMinutes: Math.max(
+      5,
+      parseInt(raw.pending_order_ttl_minutes ?? DEFAULTS.pendingOrderTtlMinutes.toString(), 10) || DEFAULTS.pendingOrderTtlMinutes
+    ),
+    publicUrl: raw.public_url || raw.NEXT_PUBLIC_APP_URL || DEFAULTS.publicUrl,
     payment: {
       stripePublishableKey: raw.stripe_publishable_key || raw.STRIPE_PUBLISHABLE_KEY || DEFAULTS.payment.stripePublishableKey,
       stripeSecretKey: raw.stripe_secret_key || raw.STRIPE_SECRET_KEY || DEFAULTS.payment.stripeSecretKey,
+      stripeClientId: raw.stripe_client_id || raw.STRIPE_CLIENT_ID || DEFAULTS.payment.stripeClientId,
+      stripeAccountId: raw.stripe_account_id || raw.STRIPE_ACCOUNT_ID || DEFAULTS.payment.stripeAccountId,
+      stripeAccessToken: raw.stripe_access_token || raw.STRIPE_ACCESS_TOKEN || DEFAULTS.payment.stripeAccessToken,
+      stripeRefreshToken: raw.stripe_refresh_token || raw.STRIPE_REFRESH_TOKEN || DEFAULTS.payment.stripeRefreshToken,
       mpPublicKey: raw.mercadopago_public_key || raw.MERCADOPAGO_PUBLIC_KEY || DEFAULTS.payment.mpPublicKey,
       mpAccessToken: raw.mercadopago_access_token || raw.MERCADOPAGO_ACCESS_TOKEN || DEFAULTS.payment.mpAccessToken,
       mpClientId: raw.mercadopago_client_id || raw.MERCADOPAGO_CLIENT_ID || DEFAULTS.payment.mpClientId,
@@ -148,6 +172,16 @@ export async function getFeeForMethod(method: 'pix' | 'card' | string): Promise<
   const isPix = method === 'pix';
   const percent = isPix ? s.fees.pixPercent : s.fees.cardPercent;
   const fixed = isPix ? s.fees.pixFixedCents : s.fees.cardFixedCents;
-  const details = `${isPix ? 'pix' : 'card'} ${percent}% + R$${(fixed / 100).toFixed(2)}`;
+  const fixedLabel = (fixed / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+  });
+  const details = `${isPix ? 'pix' : 'card'} ${percent.toLocaleString('pt-BR')}% + ${fixedLabel}`;
   return { percent, fixedCents: fixed, details };
+}
+
+// Invalidate settings cache (call after admin updates keys)
+export function bustSettingsCache() {
+  cachedSettings = null;
 }

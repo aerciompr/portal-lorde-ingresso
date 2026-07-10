@@ -2,6 +2,23 @@
 
 Substituição completa do site lento WordPress + WooCommerce (www.lordenelson.com.br) por uma aplicação **Next.js 16 moderna**, rápida, com todas as funcionalidades solicitadas.
 
+## Produção / subdomínio
+
+| Documento | Conteúdo |
+|-----------|----------|
+| [`docs/DEPLOY_SUBDOMAIN.md`](./docs/DEPLOY_SUBDOMAIN.md) | Deploy HTTPS em subdomínio (Vercel ou VPS) |
+| [`docs/GO_LIVE_CHECKLIST.md`](./docs/GO_LIVE_CHECKLIST.md) | Checklist go-live |
+| [`docs/SESSION_HANDOFF.md`](./docs/SESSION_HANDOFF.md) | Resumo da sessão + arquitetura atual |
+| [`PRODUCTION_SETUP.md`](./PRODUCTION_SETUP.md) | Chaves Stripe/MP, webhooks, crons |
+| [`.env.example`](./.env.example) | Variáveis de ambiente |
+
+```bash
+cp .env.example .env   # preencher
+npm install
+npx prisma generate && npx prisma db push
+npm run build && npm start
+```
+
 ## Análise do Site Atual (resumo)
 
 **Problemas identificados:**

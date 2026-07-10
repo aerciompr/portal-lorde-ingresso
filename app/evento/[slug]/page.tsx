@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { formatDate, isPastDeadline } from "@/lib/utils";
+import { formatDate, isPastDeadline, getEventFooterNotice } from "@/lib/utils";
 import TicketSelector from "./TicketSelector";
 import { MapPin, Clock, Calendar } from "lucide-react";
 
@@ -12,14 +12,20 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
     where: { slug },
     include: { 
       ticketTypes: true,
-      lotes: true,
+      lotes: { orderBy: { ordem: 'asc' } },
       activeLote: true,
     },
   });
 
   if (!event) notFound();
 
-  const soldOut = event.ticketTypes.every((tt: any) => tt.sold >= tt.totalQty);
+  // Esgotado: sem lote ativo com vaga, ou todos os tipos sem estoque
+  const loteAtivo = event.activeLote;
+  const loteEsgotado = loteAtivo
+    ? loteAtivo.sold >= loteAtivo.totalQty
+    : (event.lotes?.length || 0) > 0;
+  const tiposEsgotados = event.ticketTypes.every((tt: { sold: number; totalQty: number }) => tt.sold >= tt.totalQty);
+  const soldOut = tiposEsgotados || loteEsgotado;
   const past = isPastDeadline(event);
 
   return (
@@ -44,20 +50,37 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
             <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /> {event.address}</div>
           </div>
 
-          <div className="prose prose-invert text-zinc-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: event.description || '' }} />
+          <div
+            className="event-description"
+            dangerouslySetInnerHTML={{ __html: event.description || '' }}
+          />
 
-          {event.salesDeadline && (
-            <div className="mt-6 inline-block text-xs bg-amber-950 text-amber-400 px-4 py-1 rounded-full">
-              Vendas até {new Date(event.salesDeadline).toLocaleString('pt-BR')}
-            </div>
-          )}
+          {/* Aviso legal + prazo de vendas — bloco único, discreto */}
+          <div className="mt-8 pt-5 border-t border-white/10 space-y-1.5">
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              {getEventFooterNotice(event.footerNotice)}
+            </p>
+            {event.salesDeadline && (
+              <p className="text-xs text-zinc-600">
+                Vendas até {new Date(event.salesDeadline).toLocaleString('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Ticket selector + purchase */}
         <div className="lg:col-span-2">
           <div className="card p-6 sticky top-20">
             <div className="uppercase text-xs tracking-[2px] text-emerald-400 mb-1">INGRESSOS</div>
-            <div className="text-xl font-semibold mb-5 tracking-tight">Selecione quantidades</div>
+            <div className="text-base font-medium mb-5 tracking-tight text-zinc-300">
+              Escolha a quantidade
+            </div>
 
             {soldOut || past ? (
               <div className="p-6 text-center text-red-400 bg-red-950/30 rounded-xl">

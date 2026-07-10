@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDate, DEFAULT_EVENT_FOOTER_NOTICE, centsToInput, parseBRLToCents } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Edit, Copy, Trash2, Users, ShoppingCart, Plus, Ticket } from 'lucide-react';
+import { Edit, Copy, Trash2, Plus, Ticket, ArrowRightLeft, Settings2, ExternalLink } from 'lucide-react';
 import RichTextEditor from '@/components/RichTextEditor';
 
 interface Event {
@@ -15,6 +15,7 @@ interface Event {
   imageUrl?: string;
   address?: string;
   location?: string;
+  footerNotice?: string | null;
   cancelHoursBefore?: number;
   cancelFeePercent?: number;
   ticketTypes: { id: string; name: string; priceCents: number; totalQty: number; sold: number }[];
@@ -29,8 +30,8 @@ export default function AdminEventos() {
   const [showLoteModal, setShowLoteModal] = useState(false);
   const [loteEventId, setLoteEventId] = useState('');
   const [editingLote, setEditingLote] = useState<any>(null);
-  const [newEvent, setNewEvent] = useState({ title: '', date: '', price: '35.00', qty: '150', description: '', imageUrl: '', address: '', location: '', cancelHours: '24', cancelFee: '10' });
-  const [loteForm, setLoteForm] = useState({ nome: '', preco: '30.00', qty: '50' });
+  const [newEvent, setNewEvent] = useState({ title: '', date: '', price: '35,00', qty: '150', description: '', imageUrl: '', address: '', location: '', footerNotice: '', cancelHours: '24', cancelFee: '10' });
+  const [loteForm, setLoteForm] = useState({ nome: '', preco: '30,00', qty: '50' });
 
   const load = useCallback(async () => {
     const res = await fetch('/api/admin/events');
@@ -44,12 +45,13 @@ export default function AdminEventos() {
       ...(editingEvent && { id: editingEvent.id }),
       title: newEvent.title,
       date: newEvent.date,
-      priceCents: Math.round(parseFloat(newEvent.price) * 100),
+      priceCents: parseBRLToCents(newEvent.price),
       qty: parseInt(newEvent.qty),
       description: newEvent.description,
       imageUrl: newEvent.imageUrl,
       address: newEvent.address,
       location: newEvent.location,
+      footerNotice: newEvent.footerNotice?.trim() || null,
       cancelHoursBefore: parseInt(newEvent.cancelHours),
       cancelFeePercent: parseFloat(newEvent.cancelFee),
     };
@@ -70,7 +72,7 @@ export default function AdminEventos() {
 
   function openCreateEvent() {
     setEditingEvent(null);
-    setNewEvent({ title: '', date: '', price: '3500', qty: '150', description: '', imageUrl: '', address: '', location: '', cancelHours: '24', cancelFee: '10' });
+    setNewEvent({ title: '', date: '', price: '35,00', qty: '150', description: '', imageUrl: '', address: '', location: '', footerNotice: '', cancelHours: '24', cancelFee: '10' });
     setShowEventModal(true);
   }
 
@@ -79,12 +81,13 @@ export default function AdminEventos() {
     setNewEvent({
       title: ev.title,
       date: new Date(ev.date).toISOString().slice(0, 16),
-      price: ((ev.ticketTypes[0]?.priceCents || 3500) / 100).toFixed(2),
+      price: centsToInput(ev.ticketTypes[0]?.priceCents || 3500),
       qty: (ev.ticketTypes[0]?.totalQty || 150).toString(),
       description: ev.description || '',
       imageUrl: ev.imageUrl || '',
       address: ev.address || '',
       location: ev.location || '',
+      footerNotice: ev.footerNotice || '',
       cancelHours: (ev.cancelHoursBefore || 24).toString(),
       cancelFee: (ev.cancelFeePercent || 10).toString(),
     });
@@ -105,7 +108,7 @@ export default function AdminEventos() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editingLote.id,
-          precoCents: Math.round(parseFloat(loteForm.preco) * 100),
+          precoCents: parseBRLToCents(loteForm.preco),
           totalQty: parseInt(loteForm.qty),
         }),
       });
@@ -124,7 +127,7 @@ export default function AdminEventos() {
         body: JSON.stringify({
           eventId: loteEventId,
           newNome: loteForm.nome,
-          newPreco: Math.round(parseFloat(loteForm.preco) * 100),
+          newPreco: parseBRLToCents(loteForm.preco),
           newQty: parseInt(loteForm.qty),
         }),
       });
@@ -144,7 +147,7 @@ export default function AdminEventos() {
     setEditingLote(lote);
     setLoteForm({
       nome: lote.nome,
-      preco: (lote.precoCents / 100).toFixed(2),
+      preco: centsToInput(lote.precoCents),
       qty: lote.totalQty.toString(),
     });
     setShowLoteModal(true);
@@ -152,7 +155,7 @@ export default function AdminEventos() {
 
   function virarLote(eventId: string) {
     setLoteEventId(eventId);
-    setLoteForm({ nome: `Lote ${Date.now() % 100}`, preco: '3000', qty: '50' });
+    setLoteForm({ nome: `Lote ${Date.now() % 100}`, preco: '30,00', qty: '50' });
     setShowLoteModal(true);
   }
 
@@ -179,63 +182,159 @@ export default function AdminEventos() {
       </div>
 
       <div className="space-y-4">
-        {events.map(ev => (
+        {events.map(ev => {
+          const activeLote = ev.lotes?.find((l: any) => l.ativo) || ev.lotes?.[0];
+          return (
           <div key={ev.id} className="card p-5">
-            <div className="flex flex-wrap justify-between gap-2">
-              <div>
-                <div className="font-semibold">{ev.title}</div>
-                <div className="text-xs text-zinc-400">{formatDate(ev.date)}</div>
+            {/* Header: título + ações agrupadas */}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="font-semibold text-lg tracking-tight truncate">{ev.title}</div>
+                <div className="text-xs text-zinc-400 mt-0.5">{formatDate(ev.date)}</div>
               </div>
-              <div className="flex gap-2">
-                <a href={`/admin/eventos/${ev.id}/edit`} className="text-xs px-3 py-1 rounded bg-white/10 hover:bg-white/20 cursor-pointer">Editar</a>
-                <button onClick={() => virarLote(ev.id)} className="text-xs px-3 py-1 rounded bg-blue-600/80 hover:bg-blue-600 cursor-pointer">Virar Lote</button>
-                <button onClick={() => openEditLote(ev.lotes?.find((l: any) => l.ativo) || ev.lotes?.[0], ev.id)} className="text-xs px-3 py-1 rounded bg-white/10 hover:bg-white/20 cursor-pointer">Editar Lote Ativo</button>
-                <button onClick={() => deleteEvent(ev.id)} className="text-xs px-3 py-1 rounded bg-red-600/70 hover:bg-red-600 cursor-pointer">Deletar</button>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {/* Grupo principal */}
+                <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-zinc-950/50 p-1">
+                  <a
+                    href={`/admin/eventos/${ev.id}/edit`}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-zinc-200 hover:bg-white/10 transition cursor-pointer"
+                  >
+                    <Edit size={13} className="opacity-70" />
+                    Editar
+                  </a>
+                  <span className="hidden sm:block w-px h-4 bg-white/10" aria-hidden />
+                  <button
+                    type="button"
+                    onClick={() => virarLote(ev.id)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white transition cursor-pointer"
+                  >
+                    <ArrowRightLeft size={13} />
+                    Virar lote
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditLote(activeLote, ev.id)}
+                    disabled={!activeLote}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-white/10 transition cursor-pointer disabled:opacity-40"
+                  >
+                    <Ticket size={13} className="opacity-70" />
+                    Lote ativo
+                  </button>
+                </div>
+
+                {/* Destrutivo separado */}
+                <button
+                  type="button"
+                  onClick={() => deleteEvent(ev.id)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border border-red-500/25 text-red-400/90 hover:bg-red-950/40 hover:border-red-500/40 transition cursor-pointer"
+                >
+                  <Trash2 size={13} />
+                  Deletar
+                </button>
               </div>
             </div>
 
             {ev.lotes && ev.lotes.length > 0 && (
-              <div className="mt-4">
-                <div className="flex gap-2 mb-2">
-                  <button onClick={() => virarLote(ev.id)} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-blue-500/50 text-blue-400 hover:bg-blue-500/10">
-                    <Plus size={14} /> Novo ingresso
+              <div className="mt-5">
+                {/* Ações de lote — linha secundária, mais leve */}
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => virarLote(ev.id)}
+                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-white/10 text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-400 hover:bg-emerald-950/20 transition cursor-pointer"
+                  >
+                    <Plus size={13} />
+                    Novo lote
                   </button>
-                  <button onClick={() => virarLote(ev.id)} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-blue-500/50 text-blue-400 hover:bg-blue-500/10">
-                    <Plus size={14} /> Novo Lote Promocional
-                  </button>
+                  <a
+                    href={`/admin/eventos/${ev.id}/edit`}
+                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-white/10 text-zinc-400 hover:text-white hover:bg-white/5 transition cursor-pointer"
+                  >
+                    <Plus size={13} />
+                    Novo ingresso
+                  </a>
                 </div>
-                <table className="w-full text-sm border border-white/10 rounded overflow-hidden">
+
+                <table className="w-full text-sm border border-white/10 rounded-xl overflow-hidden">
                   <thead>
                     <tr className="bg-white/5 text-left text-xs text-zinc-400">
-                      <th className="py-2 px-3 font-medium"><Ticket size={14} className="inline mr-1" />Ingressos</th>
-                      <th className="py-2 px-3 font-medium text-right">Preço</th>
-                      <th className="py-2 px-3 font-medium text-right">Capacidade</th>
-                      <th className="py-2 px-3 font-medium text-right">Disponível</th>
-                      <th className="py-2 px-3 w-20"></th>
+                      <th className="py-2.5 px-3 font-medium"><Ticket size={14} className="inline mr-1 opacity-70" />Lote</th>
+                      <th className="py-2.5 px-3 font-medium text-right">Preço</th>
+                      <th className="py-2.5 px-3 font-medium text-right">Capacidade</th>
+                      <th className="py-2.5 px-3 font-medium text-right">Vendidos</th>
+                      <th className="py-2.5 px-3 font-medium text-right">Estoque</th>
+                      <th className="py-2.5 px-3 w-24"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {ev.lotes.map((l: any) => {
-                      const disponivel = l.totalQty - l.sold;
-                      const isLow = disponivel < 10;
+                      const vendidos = l.sold || 0;
+                      const estoque = Math.max(0, l.totalQty - vendidos);
+                      const esgotado = !l.ativo || estoque <= 0 || vendidos >= l.totalQty;
+                      const isLow = !esgotado && estoque < 10;
                       return (
-                        <tr key={l.id} className="border-t border-white/5 hover:bg-white/5">
-                          <td className="py-2 px-3">
-                            <div className="font-medium">{ev.title} - {l.nome}</div>
+                        <tr key={l.id} className={`border-t border-white/5 hover:bg-white/5 ${esgotado && !l.ativo ? 'opacity-65' : ''}`}>
+                          <td className="py-2.5 px-3">
+                            <div className="font-medium flex flex-wrap items-center gap-2">
+                              {l.nome}
+                              {l.ativo && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-medium">Ativo</span>
+                              )}
+                              {esgotado && !l.ativo && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/10 text-red-400 font-medium">Esgotado</span>
+                              )}
+                            </div>
                             <div className="text-xs text-zinc-500">{formatDate(ev.date)}</div>
                           </td>
-                          <td className="py-2 px-3 text-right font-mono">R$ {(l.precoCents / 100).toFixed(2)}</td>
-                          <td className="py-2 px-3 text-right">{l.totalQty}</td>
-                          <td className="py-2 px-3 text-right">
-                            <span className={`inline-flex items-center gap-1 ${isLow ? 'text-red-400' : 'text-emerald-400'}`}>
-                              {isLow && <span className="inline-flex items-center justify-center w-4 h-4 bg-red-500 text-white rounded-full text-[10px] mr-1">!</span>} {disponivel}
+                          <td className="py-2.5 px-3 text-right font-mono">{formatPrice(l.precoCents)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-zinc-300">{l.totalQty}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-zinc-400">{vendidos}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <span className={`inline-flex items-center gap-1 tabular-nums font-medium ${esgotado ? 'text-red-400' : isLow ? 'text-amber-400' : 'text-emerald-400'}`}>
+                              {estoque}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-right">
-                            <div className="flex gap-1 justify-end text-zinc-400">
-                              <button onClick={() => openEditLote(l, ev.id)} className="p-1 hover:text-white" title="Editar"><Edit size={14} /></button>
-                              <button className="p-1 hover:text-white" title="Duplicar"><Copy size={14} /></button>
-                              <button onClick={() => { if (confirm('Deletar lote?')) { /* implement delete if API exists */ } }} className="p-1 hover:text-red-400" title="Deletar"><Trash2 size={14} /></button>
+                          <td className="py-2.5 px-3 text-right">
+                            <div className="inline-flex items-center gap-0.5 rounded-lg border border-white/5 bg-zinc-950/40 p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => openEditLote(l, ev.id)}
+                                className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                                title="Editar lote"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="p-1.5 rounded-md text-zinc-500 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                                title="Duplicar"
+                              >
+                                <Copy size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!confirm('Remover este lote? Só é permitido se não houver pedidos/vendas.')) return;
+                                  try {
+                                    const res = await fetch('/api/admin/lotes/delete', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: l.id, type: 'lote' }),
+                                    });
+                                    const data = await res.json();
+                                    if (!res.ok) throw new Error(data.error || 'Falha');
+                                    toast.success(data.message || 'Lote removido');
+                                    load();
+                                  } catch (e: unknown) {
+                                    toast.error((e as Error).message || 'Erro ao remover');
+                                  }
+                                }}
+                                className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-950/40 transition cursor-pointer"
+                                title="Deletar"
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -243,19 +342,57 @@ export default function AdminEventos() {
                     })}
                   </tbody>
                 </table>
-                <div className="mt-2 flex justify-between text-xs text-zinc-400">
-                  <div>
-                    <a href={`/admin/pedidos?event=${ev.id}`} className="hover:text-white">Ver participantes</a> | <a href={`/admin/pedidos?event=${ev.id}`} className="hover:text-white">Ver pedidos</a>
+
+                <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-zinc-500">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <a href={`/admin/pedidos?event=${ev.id}`} className="inline-flex items-center gap-1 hover:text-zinc-200 transition">
+                      <ExternalLink size={12} /> Pedidos
+                    </a>
                   </div>
-                  <div className="flex items-center gap-2">
-                    Total Capacidade Evento: {ev.lotes.reduce((sum: number, l: any) => sum + l.totalQty, 0)}
-                    <button className="ml-2 text-xs px-2 py-0.5 border border-white/20 rounded hover:bg-white/5">Configurações</button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span>
+                      Capacidade:{' '}
+                      <strong className="text-zinc-300 font-medium">
+                        {ev.lotes.reduce((sum: number, l: any) => sum + l.totalQty, 0)}
+                      </strong>
+                    </span>
+                    <span>
+                      Vendidos:{' '}
+                      <strong className="text-zinc-300 font-medium">
+                        {ev.lotes.reduce((sum: number, l: any) => sum + (l.sold || 0), 0)}
+                      </strong>
+                    </span>
+                    <span>
+                      Estoque:{' '}
+                      <strong className="text-emerald-400/90 font-medium">
+                        {ev.lotes.reduce((sum: number, l: any) => sum + Math.max(0, l.totalQty - (l.sold || 0)), 0)}
+                      </strong>
+                    </span>
+                    <a
+                      href={`/admin/eventos/${ev.id}/edit`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-white/10 text-zinc-400 hover:text-white hover:bg-white/5 transition"
+                    >
+                      <Settings2 size={12} /> Configurar
+                    </a>
                   </div>
                 </div>
               </div>
             )}
+
+            {(!ev.lotes || ev.lotes.length === 0) && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => virarLote(ev.id)}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-emerald-500/30 text-emerald-400 hover:bg-emerald-950/30 transition cursor-pointer"
+                >
+                  <Plus size={13} /> Criar primeiro lote
+                </button>
+              </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Modals */}
@@ -297,7 +434,7 @@ export default function AdminEventos() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-zinc-400">Preço (R$)</label>
-                  <input className="input" type="number" step="0.01" placeholder="35.00" value={newEvent.price} onChange={e => setNewEvent({...newEvent, price: e.target.value})} />
+                  <input className="input" inputMode="decimal" placeholder="35,00" value={newEvent.price} onChange={e => setNewEvent({...newEvent, price: e.target.value})} />
                 </div>
                 <div>
                   <label className="block text-xs text-zinc-400">Quantidade Total</label>
@@ -312,6 +449,18 @@ export default function AdminEventos() {
                 <div>
                   <label className="block text-xs text-zinc-400">Taxa de Cancelamento (%)</label>
                   <input className="input" type="number" step="0.1" placeholder="10" value={newEvent.cancelFee} onChange={e => setNewEvent({...newEvent, cancelFee: e.target.value})} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-400">Aviso legal no final da descrição (opcional)</label>
+                <textarea
+                  className="input text-sm min-h-[72px]"
+                  placeholder={DEFAULT_EVENT_FOOTER_NOTICE}
+                  value={newEvent.footerNotice}
+                  onChange={e => setNewEvent({ ...newEvent, footerNotice: e.target.value })}
+                />
+                <div className="text-[10px] text-zinc-500 mt-1">
+                  Em branco = texto padrão: &quot;{DEFAULT_EVENT_FOOTER_NOTICE}&quot;
                 </div>
               </div>
             </div>
@@ -334,7 +483,7 @@ export default function AdminEventos() {
               </div>
               <div>
                 <label className="block text-xs text-zinc-400">Preço (R$)</label>
-                <input className="input" type="number" step="0.01" placeholder="30.00" value={loteForm.preco} onChange={e => setLoteForm({...loteForm, preco: e.target.value})} />
+                <input className="input" inputMode="decimal" placeholder="30,00" value={loteForm.preco} onChange={e => setLoteForm({...loteForm, preco: e.target.value})} />
               </div>
               <div>
                 <label className="block text-xs text-zinc-400">Quantidade Total</label>

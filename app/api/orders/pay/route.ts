@@ -7,16 +7,25 @@ import { signCode } from '@/lib/validate-ticket';
 import { getFeeForMethod, getAppSettings } from '@/lib/settings';
 import { isValidCpf, isValidPhone, cleanCpf, cleanPhone } from '@/lib/masks';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
 // Load keys preferring DB settings (configurable in admin) over .env
 async function getPaymentClients() {
   const s = await getAppSettings();
   const STRIPE_SECRET = s.payment.stripeSecretKey || process.env.STRIPE_SECRET_KEY || '';
+  const STRIPE_ACCOUNT_ID = s.payment.stripeAccountId || '';
+  const STRIPE_ACCESS_TOKEN = s.payment.stripeAccessToken || STRIPE_SECRET; // prefer OAuth token if present
+
   const MP_ACCESS_TOKEN = s.payment.mpAccessToken || process.env.MERCADOPAGO_ACCESS_TOKEN || '';
-  const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET) : null;
+  const STRIPE_CLIENT_ID = s.payment.stripeClientId || process.env.STRIPE_CLIENT_ID || '';
+
+  let stripe: Stripe | null = null;
+  if (STRIPE_ACCESS_TOKEN) {
+    stripe = new Stripe(STRIPE_ACCESS_TOKEN, {
+      // When using Connect OAuth, pass { stripeAccount: STRIPE_ACCOUNT_ID } in individual calls
+    });
+  }
+
   const mpClient = MP_ACCESS_TOKEN ? new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN }) : null;
-  return { stripe, mpClient, STRIPE_SECRET, MP_ACCESS_TOKEN };
+  return { stripe, mpClient, STRIPE_SECRET, MP_ACCESS_TOKEN, STRIPE_ACCOUNT_ID, STRIPE_CLIENT_ID };
 }
 
 export async function POST(req: NextRequest) {
@@ -24,8 +33,12 @@ export async function POST(req: NextRequest) {
     const { orderId, buyer, gateway, method } = await req.json();
 
     const s = await getAppSettings();
-    const { stripe, mpClient } = await getPaymentClients();
+    const { stripe, mpClient, STRIPE_ACCOUNT_ID, MP_ACCESS_TOKEN } = await getPaymentClients();
     const STRIPE_PUBLISHABLE = s.payment.stripePublishableKey || process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY || '';
+
+    // Prefer public URL configured in Admin (useful for ngrok / production)
+    const rawAppUrl = s.publicUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const APP_URL = rawAppUrl.replace(/\/$/, '');
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -42,17 +55,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
     }
 
+    let finalPhone: string | null = null;
     if (buyer?.phone) {
       const cleanedPhone = cleanPhone(buyer.phone);
       if (!isValidPhone(cleanedPhone)) {
         return NextResponse.json({ error: 'Telefone inválido' }, { status: 400 });
       }
+      finalPhone = cleanedPhone;
     }
 
     const accessCode = 'LN-' + Math.random().toString(36).slice(2, 8).toUpperCase();
 
     const finalCpf = cleanCpf(buyer.cpf || '');
-    const finalPhone = buyer.phone ? cleanPhone(buyer.phone) : null;
 
     await prisma.order.update({
       where: { id: orderId },
@@ -68,53 +82,137 @@ export async function POST(req: NextRequest) {
     // ============================================
     // MERCADO PAGO - PIX (recomendado no Brasil)
     // ============================================
-    if (gateway === 'mercadopago' && method === 'pix' && mpClient) {
+    if (gateway === 'mercadopago' && method === 'pix') {
+      if (!mpClient || !MP_ACCESS_TOKEN) {
+        return NextResponse.json({ error: 'Mercado Pago não configurado. Vá em Admin > Configurações > Gateways e adicione o "Access Token" do Mercado Pago (chave que começa com TEST- para testes ou APP_USR- para produção).' }, { status: 400 });
+      }
+
       const payment = new Payment(mpClient);
 
-      const result = await payment.create({
-        body: {
-          transaction_amount: order.totalCents / 100,
-          description: `Ingressos ${order.event.title} - Lorde Nelson`,
-          payment_method_id: 'pix',
-          payer: {
-            email: buyer.email,
-            first_name: buyer.name.split(' ')[0] || 'Cliente',
-            last_name: buyer.name.split(' ').slice(1).join(' ') || '',
-            identification: finalCpf ? { type: 'CPF', number: finalCpf } : undefined,
+      const amount = order.totalCents / 100;
+      const nameParts = (buyer.name || '').trim().split(' ');
+      const firstName = nameParts[0] || 'Cliente';
+      const lastName = nameParts.slice(1).join(' ') || ' ';
+
+      // MP requires https notification_url for production (live) tokens
+      const isLiveToken = MP_ACCESS_TOKEN && (
+        MP_ACCESS_TOKEN.startsWith('APP_USR-') || !MP_ACCESS_TOKEN.toUpperCase().includes('TEST')
+      );
+      const isHttp = APP_URL.startsWith('http://');
+
+      if (isLiveToken && isHttp) {
+        return NextResponse.json({
+          error: [
+            'Você está usando chaves de PRODUÇÃO do Mercado Pago.',
+            '',
+            'A URL de notificação (webhook) precisa ser HTTPS.',
+            `URL atual: ${APP_URL}`,
+            '',
+            '=== OPÇÃO MAIS FÁCIL (recomendada para desenvolvimento) ===',
+            '1. No Mercado Pago, use as CREDENCIAIS DE TESTE (sandbox)',
+            '2. No dashboard: https://www.mercadopago.com.br/developers/panel/credentials',
+            '3. Copie o "Access Token" que começa com TEST-',
+            '4. Cole em Admin > Configurações > Gateways (Mercado Pago)',
+            '',
+            '=== PARA TESTAR COM CHAVES REAIS ===',
+            '- Rode: npx ngrok http 3000',
+            '- Copie a URL https gerada (ex: https://abcd-1234.ngrok.io)',
+            '- Cole essa URL no campo "URL Pública do Site" em Admin > Configurações > Gateways',
+            '- Ou defina NEXT_PUBLIC_APP_URL no .env',
+          ].join('\n')
+        }, { status: 400 });
+      }
+
+      // Build phone correctly: MP requires { area_code, number }
+      let phoneObj: { area_code: string; number: string } | undefined;
+      if (finalPhone && finalPhone.length >= 10) {
+        phoneObj = {
+          area_code: finalPhone.slice(0, 2),
+          number: finalPhone.slice(2),
+        };
+      }
+
+      try {
+        const result: any = await payment.create({
+          body: {
+            transaction_amount: amount,
+            description: `Ingressos ${order.event.title} - Lorde Nelson`,
+            payment_method_id: 'pix',
+            payer: {
+              email: buyer.email,
+              first_name: firstName,
+              last_name: lastName || ' ',
+              ...(finalCpf ? { identification: { type: 'CPF', number: finalCpf } } : {}),
+              ...(phoneObj ? { phone: phoneObj } : {}),
+            },
+            notification_url: `${APP_URL}/api/webhook/mercadopago`,
+            external_reference: orderId,
           },
-          notification_url: `${APP_URL}/api/webhook/mercadopago`,
-          external_reference: orderId,
-        },
-      });
+        });
 
-      // Salvar payment id
-      await prisma.order.update({
-        where: { id: orderId },
-        data: { paymentGateway: 'mercadopago', paymentMethod: 'pix', paymentId: String(result.id) },
-      });
+        // MP SDK v3 can return error at root or result.body.error
+        const err = result?.error || result?.body?.error;
+        if (err) {
+          const msg = err.message || err.cause?.[0]?.description || JSON.stringify(err);
+          console.error('[MP] error from result:', err);
+          throw new Error(`Mercado Pago PIX: ${msg}`);
+        }
 
-      return NextResponse.json({
-        success: true,
-        type: 'pix',
-        qr_code: result.point_of_interaction?.transaction_data?.qr_code,
-        qr_code_base64: result.point_of_interaction?.transaction_data?.qr_code_base64,
-        paymentId: result.id,
-        accessCode,
-        message: 'Pague o PIX. Use o código de acesso para ver seus ingressos.',
-      });
+        // Data can be at root or under .body
+        const paymentData = result?.body || result;
+        const pixData = paymentData?.point_of_interaction?.transaction_data || {};
+        const paymentId = paymentData?.id;
+
+        if (!pixData.qr_code) {
+          console.error('[MP] no qr_code in response:', paymentData);
+          throw new Error('Não foi possível gerar o QR Code do PIX. Verifique: 1) Access Token correto (sandbox TEST- ou produção), 2) PIX habilitado na conta Mercado Pago (no dashboard), 3) Chave não expirada, 4) Para produção use URL HTTPS.');
+        }
+
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { paymentGateway: 'mercadopago', paymentMethod: 'pix', paymentId: String(paymentId) },
+        });
+
+        return NextResponse.json({
+          success: true,
+          type: 'pix',
+          qr_code: pixData.qr_code,
+          qr_code_base64: pixData.qr_code_base64,
+          paymentId,
+          accessCode,
+          message: 'Pague o PIX. Use o código de acesso para ver seus ingressos.',
+        });
+      } catch (mpErr: any) {
+        console.error('Mercado Pago PIX error completo:', mpErr);
+        const detail = mpErr?.message || mpErr?.cause?.[0]?.description || '';
+        throw new Error(`Erro ao gerar PIX no Mercado Pago. ${detail || 'Verifique as chaves em Configurações (Access Token), se a conta tem PIX liberado e se não está usando chave de produção em localhost sem https.'}`);
+      }
     }
 
     // ============================================
     // STRIPE - Cartão (Payment Intent + Elements)
+    // Supports both direct API keys AND Stripe Connect (OAuth login)
+    // When using Connect, we can later fetch available payment methods from the account.
     // ============================================
-    if (gateway === 'stripe' && method === 'card' && stripe) {
-      const paymentIntent = await stripe.paymentIntents.create({
+    if (gateway === 'stripe' && method === 'card') {
+      if (!stripe) {
+        return NextResponse.json({ error: 'Stripe não configurado. Adicione Publishable + Secret Key (ou use o botão Conectar Stripe OAuth) em Admin > Configurações > Gateways.' }, { status: 400 });
+      }
+      const createOptions: any = {
         amount: order.totalCents,
         currency: 'brl',
         automatic_payment_methods: { enabled: true },
         description: `Ingressos ${order.event.title}`,
         metadata: { orderId },
-      });
+      };
+
+      // If Stripe Connect (OAuth) is configured, pass the account id
+      const stripeAccount = STRIPE_ACCOUNT_ID || undefined;
+
+      const paymentIntent = await stripe.paymentIntents.create(
+        createOptions,
+        stripeAccount ? { stripeAccount } : undefined
+      );
 
       await prisma.order.update({
         where: { id: orderId },
@@ -130,6 +228,7 @@ export async function POST(req: NextRequest) {
         type: 'stripe',
         clientSecret: paymentIntent.client_secret,
         publishableKey: STRIPE_PUBLISHABLE,
+        stripeAccountId: stripeAccount,
         accessCode,
         message: 'Confirme o cartão. Guarde seu código de acesso.',
       });
@@ -174,7 +273,7 @@ export async function POST(req: NextRequest) {
 
     // Virada automática (Fase 2) - após venda paga
     if (order.loteId) {
-      const { performAutomaticVirada } = await import('@/app/api/admin/lotes/virar/route');
+      const { performAutomaticVirada } = await import('@/lib/lote-virada');
       await performAutomaticVirada(order.eventId);
     }
 

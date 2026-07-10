@@ -1,6 +1,13 @@
 # Configuração para Produção - Lorde Nelson Ingressos
 
-**Atenção:** Este projeto agora está configurado para MySQL (conforme solicitado). NUNCA commite chaves reais ou senhas. Use variáveis de ambiente no Vercel para produção.
+**Atenção:** NUNCA commite chaves reais ou senhas. Use variáveis de ambiente no host (Vercel / VPS).
+
+**Deploy em subdomínio:** veja o guia completo em [`docs/DEPLOY_SUBDOMAIN.md`](./docs/DEPLOY_SUBDOMAIN.md).  
+**Handoff da sessão:** [`docs/SESSION_HANDOFF.md`](./docs/SESSION_HANDOFF.md).  
+**Checklist go-live:** [`docs/GO_LIVE_CHECKLIST.md`](./docs/GO_LIVE_CHECKLIST.md).  
+**Template de env:** [`.env.example`](./.env.example).
+
+> Dev local usa SQLite (`provider = "sqlite"`). Em produção altere o Prisma para `mysql` ou `postgresql` e rode `prisma db push` no banco remoto.
 
 ## 1. Banco de Dados MySQL (já feito localmente)
 
@@ -164,12 +171,33 @@ MERCADOPAGO_CLIENT_SECRET=...
 NEXT_PUBLIC_APP_URL=https://...
 TICKET_SECRET=change-this-to-a-long-random-hmac-secret
 ADMIN_PASSWORD=change-this-strong-password-in-production
-RESEND_API_KEY=... (adicione se não tiver)
+RESEND_API_KEY=... (obrigatório para e-mail automático de ingressos)
 FROM_EMAIL=ingressos@lordenelson.com.br
+CRON_SECRET=long-random-secret-for-cron-cleanup
 
 # Taxas e configs agora são salvas no banco via painel Admin (mais seguro + não perdem)
 # pix_fee_percent, card_fee_percent, pix_fee_fixed_cents, etc. + from_email
 ```
+
+### Automação pós-pagamento e limpeza de estoque
+
+Após o webhook do Stripe (`payment_intent.succeeded`) ou Mercado Pago (status `approved`):
+1. Pedido vira `paid`
+2. QR Codes dos ingressos são gerados
+3. E-mail de confirmação é enviado (precisa de `RESEND_API_KEY`)
+4. Virada de lote é tentada se aplicável
+
+Limpeza de pedidos pending abandonados:
+- Endpoint: `GET /api/cron/cleanup-pending` (auth: `Authorization: Bearer CRON_SECRET`)
+- Vercel Cron: a cada 15 min (`vercel.json`)
+- TTL padrão: 30 min (ajustável em Admin → Configurações → Regras)
+
+Sincronização de pagamentos PIX + virada de lote:
+- Endpoint: `GET /api/cron/sync-payments` (mesmo `CRON_SECRET`)
+- Vercel Cron: a cada 5 min
+- Checkout PIX faz polling a cada 3s em `/api/orders/[id]/payment-status`
+- Virada automática ao esgotar lote; virada manual esgota o lote anterior
+
 
 ## Dicas Finais
 

@@ -4,13 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+    "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "admin:seed": "tsx prisma/seed.ts"
+    "admin:seed": "tsx prisma/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "prod:check": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
-import { sendOrderConfirmation } from '@/lib/email';
-import { signCode } from '@/lib/validate-ticket';
-import { getFeeForMethod, getAppSettings } from '@/lib/settings';
+import { getAppSettings } from '@/lib/settings';
+import { finalizePaidOrder } from '@/lib/finalize-paid-order';
 
 const getStripe = async () => {
   const s = await getAppSettings();
@@ -39,48 +38,15 @@ export async function POST(req: NextRequest) {
     const orderId = paymentIntent.metadata?.orderId;
 
     if (orderId) {
-      const order = await prisma.order.findUnique({
-        where: { id: orderId },
-        include: { tickets: true, event: true },
+      const result = await finalizePaidOrder(orderId, {
+        paymentId: paymentIntent.id,
+        paymentMethod: 'card',
+        paymentGateway: 'stripe',
       });
-
-      if (order && order.status === 'pending') {
-        // Não sobrescreve accessCode se já foi gerado no pay (evita inconsistência para o comprador)
-        const updateData: any = { status: 'paid', paymentId: paymentIntent.id, paidAt: new Date() };
-        if (!order.accessCode) {
-          updateData.accessCode = 'LN-' + Math.random().toString(36).slice(2, 8).toUpperCase();
-        }
-
-        // fee from DB Settings
-        const feeInfo = await getFeeForMethod('card');
-        const fee = Math.round(order.totalCents * feeInfo.percent / 100) + feeInfo.fixedCents;
-        updateData.grossCents = order.totalCents;
-        updateData.netCents = order.totalCents - fee;
-        updateData.feeCents = fee;
-        updateData.feeDetails = feeInfo.details;
-
-        await prisma.order.update({
-          where: { id: orderId },
-          data: updateData,
-        });
-
-        for (const t of order.tickets) {
-          await prisma.ticket.update({ where: { id: t.id }, data: { qrPayload: signCode(t.uniqueCode) } });
-        }
-
-        const fullOrder = await prisma.order.findUnique({
-          where: { id: orderId },
-          include: { tickets: { include: { ticketType: true } }, event: true },
-        });
-        if (fullOrder) await sendOrderConfirmation(fullOrder as unknown as import('@/lib/email').OrderWithDetails);
-
-        // Virada automática (Fase 2) - após venda paga
-        if (order.loteId) {
-          const { performAutomaticVirada } = await import('@/app/api/admin/lotes/virar/route');
-          await performAutomaticVirada(order.eventId);
-        }
-
-        console.log(`[STRIPE] paid ${orderId}`);
+      if (result.ok) {
+        console.log(`[STRIPE] paid ${orderId}${result.alreadyPaid ? ' (already)' : ''}`);
+      } else {
+        console.warn(`[STRIPE] finalize failed ${orderId}:`, result.error);
       }
     }
   }
@@ -90,12 +56,14 @@ export async function POST(req: NextRequest) {
     const obj: any = event.data.object;
     const pi = obj.payment_intent || (obj.charges?.data?.[0]?.payment_intent);
     if (pi) {
-      const order = await prisma.order.findFirst({ where: { paymentId: pi } });
+      const order = await prisma.order.findFirst({ where: { paymentId: String(pi) } });
       if (order && (order.status === 'paid' || order.status === 'pending')) {
         await prisma.order.update({ where: { id: order.id }, data: { status: 'refunded' } });
         await prisma.ticket.updateMany({ where: { orderId: order.id }, data: { status: 'cancelled' } });
 
-        const pending = await prisma.cancellationRequest.findFirst({ where: { orderId: order.id, status: 'pending' } });
+        const pending = await prisma.cancellationRequest.findFirst({
+          where: { orderId: order.id, status: 'pending' },
+        });
         if (pending) {
           await prisma.cancellationRequest.update({
             where: { id: pending.id },

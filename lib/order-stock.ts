@@ -1,0 +1,211 @@
+import { prisma } from '@/lib/prisma';
+import { generateUniqueCode } from '@/lib/utils';
+import { signCode } from '@/lib/validate-ticket';
+
+/**
+ * Devolve ingressos de um pedido ao estoque (TicketType + Lote) e cancela os tickets.
+ * Usado em limpeza de pendentes abandonados.
+ */
+export async function releaseOrderStock(orderId: string): Promise<{ ticketsReleased: number }> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { tickets: true },
+  });
+  if (!order) return { ticketsReleased: 0 };
+
+  // Contar por tipo de ingresso
+  const byType: Record<string, number> = {};
+  for (const t of order.tickets) {
+    // Só devolve se ainda não estiver cancelado
+    if (t.status === 'cancelled') continue;
+    byType[t.ticketTypeId] = (byType[t.ticketTypeId] || 0) + 1;
+  }
+
+  const total = Object.values(byType).reduce((s, n) => s + n, 0);
+  if (total === 0) {
+    // Ainda marca pedido se necessário
+    return { ticketsReleased: 0 };
+  }
+
+  for (const [ticketTypeId, qty] of Object.entries(byType)) {
+    const tt = await prisma.ticketType.findUnique({ where: { id: ticketTypeId } });
+    if (tt) {
+      await prisma.ticketType.update({
+        where: { id: ticketTypeId },
+        data: { sold: Math.max(0, tt.sold - qty) },
+      });
+    }
+  }
+
+  if (order.loteId) {
+    const lote = await prisma.lote.findUnique({ where: { id: order.loteId } });
+    if (lote) {
+      await prisma.lote.update({
+        where: { id: order.loteId },
+        data: { sold: Math.max(0, lote.sold - total) },
+      });
+    }
+  }
+
+  await prisma.ticket.updateMany({
+    where: { orderId, status: { not: 'cancelled' } },
+    data: { status: 'cancelled' },
+  });
+
+  return { ticketsReleased: total };
+}
+
+export type AdminOrderKind = 'courtesy' | 'manual';
+
+export type CreateAdminOrderInput = {
+  kind: AdminOrderKind;
+  eventId: string;
+  ticketTypeId: string;
+  quantity: number;
+  buyerName: string;
+  buyerEmail: string;
+  buyerCpf?: string;
+  buyerPhone?: string;
+  /** Preço unitário em centavos (manual). Cortesia ignora e usa 0. */
+  unitPriceCents?: number;
+  notes?: string;
+};
+
+/**
+ * Cria pedido pago (cortesia R$0 ou manual) com tickets e QR já gerados, e reserva estoque.
+ */
+export async function createAdminOrder(input: CreateAdminOrderInput) {
+  const qty = Math.max(1, Math.min(50, Math.floor(input.quantity || 1)));
+  if (!input.eventId || !input.ticketTypeId) {
+    throw new Error('Evento e tipo de ingresso são obrigatórios');
+  }
+  if (!input.buyerName?.trim()) {
+    throw new Error('Nome do comprador é obrigatório');
+  }
+  if (!input.buyerEmail?.trim()?.includes('@')) {
+    throw new Error('E-mail válido é obrigatório');
+  }
+
+  const event = await prisma.event.findUnique({
+    where: { id: input.eventId },
+    include: { ticketTypes: true, activeLote: true },
+  });
+  if (!event) throw new Error('Evento não encontrado');
+
+  const tt = event.ticketTypes.find((t) => t.id === input.ticketTypeId);
+  if (!tt) throw new Error('Tipo de ingresso inválido');
+
+  const avail = tt.totalQty - tt.sold;
+  if (qty > avail) {
+    throw new Error(`Estoque insuficiente para ${tt.name} (disponível: ${avail})`);
+  }
+
+  const isCourtesy = input.kind === 'courtesy';
+  const unit =
+    isCourtesy
+      ? 0
+      : (input.unitPriceCents != null
+          ? Math.max(0, Math.floor(input.unitPriceCents))
+          : (event.activeLote?.precoCents ?? tt.priceCents));
+  const totalCents = unit * qty;
+  const accessCode = 'LN-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+  const activeLoteId = event.activeLote?.id || null;
+
+  const ticketCreates = Array.from({ length: qty }).map(() => {
+    const code = generateUniqueCode();
+    return {
+      ticketTypeId: tt.id,
+      uniqueCode: code,
+      qrPayload: signCode(code),
+      status: 'valid',
+    };
+  });
+
+  const order = await prisma.order.create({
+    data: {
+      eventId: event.id,
+      buyerName: input.buyerName.trim(),
+      buyerEmail: input.buyerEmail.trim().toLowerCase(),
+      buyerCpf: input.buyerCpf?.replace(/\D/g, '') || null,
+      buyerPhone: input.buyerPhone?.replace(/\D/g, '') || null,
+      totalCents,
+      status: 'paid',
+      paymentGateway: 'manual',
+      paymentMethod: isCourtesy ? 'courtesy' : 'manual',
+      paymentId: isCourtesy ? `courtesy-${Date.now()}` : `manual-${Date.now()}`,
+      accessCode,
+      paidAt: new Date(),
+      loteId: activeLoteId,
+      grossCents: totalCents,
+      netCents: totalCents,
+      feeCents: 0,
+      feeDetails: isCourtesy
+        ? 'cortesia R$0'
+        : `manual ${input.notes ? input.notes.slice(0, 80) : 'admin'}`,
+      tickets: { create: ticketCreates },
+    },
+    include: {
+      tickets: { include: { ticketType: true } },
+      event: true,
+    },
+  });
+
+  await prisma.ticketType.update({
+    where: { id: tt.id },
+    data: { sold: { increment: qty } },
+  });
+
+  if (activeLoteId) {
+    await prisma.lote.update({
+      where: { id: activeLoteId },
+      data: { sold: { increment: qty } },
+    });
+  }
+
+  try {
+    const { performAutomaticVirada } = await import('@/lib/lote-virada');
+    await performAutomaticVirada(event.id);
+  } catch (e) {
+    console.error('[ADMIN ORDER] virada automática falhou', e);
+  }
+
+  return order;
+}
+
+/**
+ * Cancela pedidos pending mais antigos que `minutes` e devolve estoque.
+ */
+export async function cleanupPendingOrders(options: {
+  minutes: number;
+  eventId?: string | null;
+}): Promise<{ cleaned: number; ticketsReleased: number; orderIds: string[] }> {
+  const minutes = Math.max(5, Math.min(7 * 24 * 60, Math.floor(options.minutes || 30)));
+  const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+
+  const pending = await prisma.order.findMany({
+    where: {
+      status: 'pending',
+      createdAt: { lt: cutoff },
+      ...(options.eventId ? { eventId: options.eventId } : {}),
+    },
+    select: { id: true },
+  });
+
+  let ticketsReleased = 0;
+  const orderIds: string[] = [];
+
+  for (const { id } of pending) {
+    const result = await releaseOrderStock(id);
+    ticketsReleased += result.ticketsReleased;
+    await prisma.order.update({
+      where: { id },
+      data: {
+        status: 'cancelled',
+        feeDetails: `expirado após ${minutes}min (cleanup automático)`,
+      },
+    });
+    orderIds.push(id);
+  }
+
+  return { cleaned: orderIds.length, ticketsReleased, orderIds };
+}

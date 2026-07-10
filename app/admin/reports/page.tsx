@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPrice } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
+
+type RechartsModule = typeof import('recharts');
 
 interface LoteSales {
   name: string;
@@ -15,6 +18,12 @@ interface LoteSales {
 export default function Reports() {
   const [data, setData] = useState<LoteSales[]>([]);
   const [summary, setSummary] = useState({ gross: 0, net: 0, tickets: 0, refunds: 0 });
+  const [Recharts, setRecharts] = useState<RechartsModule | null>(null);
+
+  useEffect(() => {
+    // Lazy load Recharts only on client to reduce initial bundle size and RAM usage
+    import('recharts').then(setRecharts);
+  }, []);
 
   useEffect(() => {
     fetch('/api/admin/orders').then(r => r.json()).then((orders: Array<{
@@ -79,14 +88,18 @@ export default function Reports() {
         <div className="card p-7 lg:col-span-3">
           <div className="mb-3 font-medium text-sm">Bruto por Lote</div>
           <div className="h-80">
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={data}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="gross" fill="#22c55e" radius={4} />
-              </BarChart>
-            </ResponsiveContainer>
+            {Recharts ? (
+              <Recharts.ResponsiveContainer width="100%" height={320}>
+                <Recharts.BarChart data={data}>
+                  <Recharts.XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <Recharts.YAxis />
+                  <Recharts.Tooltip />
+                  <Recharts.Bar dataKey="gross" fill="#22c55e" radius={4} />
+                </Recharts.BarChart>
+              </Recharts.ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-sm text-zinc-500">Carregando gráfico...</div>
+            )}
           </div>
         </div>
 

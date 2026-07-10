@@ -2,11 +2,77 @@ export function cn(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
+/** Aviso legal padrão exibido ao final da descrição de todo evento (quando footerNotice estiver vazio). */
+export const DEFAULT_EVENT_FOOTER_NOTICE =
+  'Proibido para menores de 18 anos. Os ingressos são vendidos até a data limite ou enquanto durarem os estoques.';
+
+/** Retorna o aviso do evento ou o texto padrão do sistema. */
+export function getEventFooterNotice(custom?: string | null): string {
+  const t = (custom || '').trim();
+  return t || DEFAULT_EVENT_FOOTER_NOTICE;
+}
+
+/**
+ * Formata centavos no padrão brasileiro: R$ 1.234,56
+ * Use em toda a UI (site + admin) em vez de "R$ " + toFixed(2).
+ */
 export function formatPrice(cents: number): string {
+  const value = (Number(cents) || 0) / 100;
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-  }).format(cents / 100);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+/** Formata valor já em reais (number) → R$ 35,00 */
+export function formatBRL(reais: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(reais) || 0);
+}
+
+/**
+ * Centavos → string para input no padrão BR: "35,00" / "1.234,50"
+ */
+export function centsToInput(cents: number): string {
+  return ((Number(cents) || 0) / 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/**
+ * Converte digitação brasileira/americana em centavos.
+ * Aceita: "35", "35,00", "35.00", "1.234,56", "R$ 35,00"
+ */
+export function parseBRLToCents(value: string | number | null | undefined): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.round(value * 100) : 0;
+  }
+  let s = String(value ?? '')
+    .trim()
+    .replace(/[R$\s\u00a0]/gi, '');
+  if (!s) return 0;
+
+  // 1.234,56 (BR) → remove milhares, vírgula vira ponto
+  if (s.includes(',') && s.includes('.')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');
+  }
+
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
+
+/** Reais digitados → number (para cálculos). Aceita vírgula. */
+export function parseBRLToNumber(value: string | number | null | undefined): number {
+  return parseBRLToCents(value) / 100;
 }
 
 export function formatDate(date: Date | string): string {

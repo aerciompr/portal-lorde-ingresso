@@ -1,24 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
 
-export default function Header() {
+export default function Header({ initialBranding = {} }: { initialBranding?: { siteName?: string; logoUrl?: string } }) {
   const [open, setOpen] = useState(false);
-  const [branding, setBranding] = useState<{ siteName?: string; logoUrl?: string }>({});
-
-  useEffect(() => {
-    fetch('/api/admin/settings', { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : {})
-      .then((s: any) => {
-        setBranding({
-          siteName: s.site_name || s.SITE_NAME || 'Lorde Nelson',
-          logoUrl: s.logo_url || s.LOGO_URL || '',
-        });
-      })
-      .catch(() => {});
-  }, []);
+  // Use server-provided initial branding to avoid extra fetch/DB on public page loads (helps startup and perceived speed)
+  const [branding] = useState(initialBranding);
 
   const siteName = branding.siteName || 'Lorde Nelson';
   const logoUrl = branding.logoUrl;

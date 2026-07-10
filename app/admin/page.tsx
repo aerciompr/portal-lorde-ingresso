@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+
+export const dynamic = 'force-dynamic';
+
+type RechartsModule = typeof import('recharts');
 
 interface Event {
   id: string;
@@ -48,6 +51,12 @@ export default function AdminPortal() {
 
   const [newEvent, setNewEvent] = useState({ title: '', date: '', price: '3500', qty: '150', description: '', imageUrl: '', address: '', location: '', cancelHours: '24', cancelFee: '10' });
   const [loteForm, setLoteForm] = useState({ nome: '', preco: '3000', qty: '50' });
+  const [Recharts, setRecharts] = useState<RechartsModule | null>(null);
+
+  useEffect(() => {
+    // Lazy load Recharts to reduce initial RAM and startup time
+    import('recharts').then(setRecharts);
+  }, []);
 
   const load = useCallback(async () => {
     const [evRes, ordRes, setRes] = await Promise.all([
@@ -291,14 +300,18 @@ export default function AdminPortal() {
         <div className="card p-6 md:col-span-3">
           <div className="font-semibold mb-4">Vendas por Evento</div>
           <div className="h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="ingressos" fill="#10b981" radius={3} />
-              </BarChart>
-            </ResponsiveContainer>
+            {Recharts ? (
+              <Recharts.ResponsiveContainer width="100%" height="100%">
+                <Recharts.BarChart data={chartData}>
+                  <Recharts.XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <Recharts.YAxis />
+                  <Recharts.Tooltip />
+                  <Recharts.Bar dataKey="ingressos" fill="#10b981" radius={3} />
+                </Recharts.BarChart>
+              </Recharts.ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-sm text-zinc-500">Carregando gráfico...</div>
+            )}
           </div>
         </div>
 
@@ -306,15 +319,21 @@ export default function AdminPortal() {
           <div className="font-semibold mb-4">Status dos Pedidos</div>
           <div className="h-[260px] flex items-center justify-center">
             {statusData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}>
-                    {statusData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : <div className="text-zinc-500">Sem dados</div>}
+              Recharts ? (
+                <Recharts.ResponsiveContainer width="100%" height="100%">
+                  <Recharts.PieChart>
+                    <Recharts.Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}>
+                      {statusData.map((entry, index) => <Recharts.Cell key={index} fill={entry.color} />)}
+                    </Recharts.Pie>
+                    <Recharts.Tooltip />
+                  </Recharts.PieChart>
+                </Recharts.ResponsiveContainer>
+              ) : (
+                <div className="text-zinc-500">Sem dados</div>
+              )
+            ) : (
+              <div className="text-zinc-500">Sem dados</div>
+            )}
           </div>
         </div>
       </div>

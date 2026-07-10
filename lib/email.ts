@@ -1,7 +1,17 @@
 import { Resend } from 'resend';
+import { getAppSettings } from './settings';
+import { formatPrice } from './utils';
 
 const FROM = process.env.FROM_EMAIL || 'ingressos@lordenelson.com.br';
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+async function getAppUrl() {
+  try {
+    const s = await getAppSettings();
+    return (s.publicUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  } catch {
+    return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  }
+}
 
 export interface OrderWithDetails {
   id: string;
@@ -29,6 +39,7 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
   }
 
   const resend = new Resend(process.env.RESEND_API_KEY);
+  const APP_URL = await getAppUrl();
 
   const ticketLinks = order.tickets.map(t => 
     `<li><strong>${t.ticketType.name}</strong> — Código: <code>${t.uniqueCode}</code> — <a href="${APP_URL}/ingressos?email=${encodeURIComponent(order.buyerEmail)}">Baixar PDF</a></li>`
@@ -89,7 +100,9 @@ export async function sendCancellationApproved(order: OrderWithDetails, refundAm
 
   const resend = new Resend(process.env.RESEND_API_KEY);
 
-  const amount = refundAmountCents ? (refundAmountCents / 100).toFixed(2) : 'o valor integral';
+  const amount = refundAmountCents != null
+    ? formatPrice(refundAmountCents)
+    : 'o valor integral';
   
   const html = `
     <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #111; color: #eee;">
@@ -100,7 +113,7 @@ export async function sendCancellationApproved(order: OrderWithDetails, refundAm
       
       <p>Seu pedido <strong>${order.id}</strong> para o evento <strong>${order.event?.title}</strong> foi cancelado com sucesso.</p>
       
-      <p>O estorno de <strong>R$ ${amount}</strong> será processado em até 5-10 dias úteis no método de pagamento original (Pix ou Cartão).</p>
+      <p>O estorno de <strong>${amount}</strong> será processado em até 5-10 dias úteis no método de pagamento original (Pix ou Cartão).</p>
       
       <p>Se precisar de ajuda, entre em contato conosco.</p>
       

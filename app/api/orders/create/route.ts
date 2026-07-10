@@ -73,8 +73,16 @@ export async function POST(req: NextRequest) {
     if (activeLoteId) {
       await prisma.lote.update({
         where: { id: activeLoteId },
-        data: { sold: { increment: items.reduce((s, i) => s + i.quantity, 0) } },
+        data: { sold: { increment: items.reduce((s: number, i: { quantity: number }) => s + i.quantity, 0) } },
       });
+    }
+
+    // Se o lote encheu com esta reserva, vira automaticamente o próximo
+    try {
+      const { performAutomaticVirada } = await import('@/lib/lote-virada');
+      await performAutomaticVirada(eventId);
+    } catch (e) {
+      console.error('[CREATE ORDER] virada automática falhou', e);
     }
 
     return NextResponse.json({ orderId: order.id, totalCents });

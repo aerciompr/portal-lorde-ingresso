@@ -76,53 +76,188 @@ body.checkin-app main {
   @apply bg-zinc-900 border border-white/10 rounded-3xl p-8 font-mono text-sm;
 }
 
-/* TipTap Rich Text Editor styles */
-.ProseMirror {
-  min-height: 120px;
+/* ── TipTap (admin editor) ── */
+.ProseMirror,
+.tiptap-editor {
+  min-height: 200px;
   outline: none;
 }
 
-.ProseMirror p {
-  margin-bottom: 0.5em;
+.ProseMirror p,
+.tiptap-editor p {
+  margin: 0.4em 0;
 }
 
-.ProseMirror h2 {
+.ProseMirror h2,
+.tiptap-editor h2 {
   font-size: 1.25rem;
   font-weight: 600;
-  margin-top: 0.75em;
-  margin-bottom: 0.25em;
+  margin-top: 0.9em;
+  margin-bottom: 0.35em;
+  color: #f4f4f5;
 }
 
-.ProseMirror h3 {
-  font-size: 1.1rem;
+.ProseMirror h3,
+.tiptap-editor h3 {
+  font-size: 1.05rem;
   font-weight: 600;
-  margin-top: 0.5em;
-  margin-bottom: 0.25em;
+  margin-top: 0.7em;
+  margin-bottom: 0.3em;
+  color: #e4e4e7;
 }
 
+/* Listas: Tailwind preflight remove bullets — reativar */
 .ProseMirror ul,
-.ProseMirror ol {
-  padding-left: 1.25rem;
-  margin-bottom: 0.5em;
+.tiptap-editor ul {
+  list-style-type: disc !important;
+  list-style-position: outside;
+  padding-left: 1.5rem !important;
+  margin: 0.5em 0 0.75em !important;
 }
 
-.ProseMirror ul {
-  list-style-type: disc;
+.ProseMirror ol,
+.tiptap-editor ol {
+  list-style-type: decimal !important;
+  list-style-position: outside;
+  padding-left: 1.5rem !important;
+  margin: 0.5em 0 0.75em !important;
 }
 
-.ProseMirror ol {
-  list-style-type: decimal;
+.ProseMirror li,
+.tiptap-editor li {
+  margin: 0.25em 0;
+  display: list-item !important;
 }
 
-.ProseMirror blockquote {
+.ProseMirror li p,
+.tiptap-editor li p {
+  margin: 0;
+}
+
+.ProseMirror blockquote,
+.tiptap-editor blockquote {
   border-left: 3px solid #10b981;
   padding-left: 0.75rem;
-  margin-left: 0;
+  margin: 0.75em 0;
   font-style: italic;
   color: #a1a1aa;
 }
 
-.ProseMirror a {
-  color: #10b981;
+.ProseMirror a,
+.tiptap-editor a {
+  color: #34d399;
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ProseMirror strong,
+.tiptap-editor strong {
+  font-weight: 600;
+  color: #fafafa;
+}
+
+/* Placeholder vazio no editor */
+.ProseMirror p.is-editor-empty:first-child::before,
+.tiptap-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #71717a;
+  pointer-events: none;
+  height: 0;
+}
+
+/* ── HTML da descrição no site público (sem @tailwindcss/typography) ── */
+.event-description {
+  color: #d4d4d8;
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+
+.event-description > *:first-child {
+  margin-top: 0;
+}
+
+.event-description p {
+  margin: 0.5em 0 0.85em;
+}
+
+.event-description h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fafafa;
+  margin: 1.1em 0 0.4em;
+}
+
+.event-description h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #f4f4f5;
+  margin: 0.9em 0 0.35em;
+}
+
+.event-description ul {
+  list-style-type: disc !important;
+  list-style-position: outside;
+  padding-left: 1.35rem !important;
+  margin: 0.5em 0 1em !important;
+}
+
+.event-description ol {
+  list-style-type: decimal !important;
+  list-style-position: outside;
+  padding-left: 1.35rem !important;
+  margin: 0.5em 0 1em !important;
+}
+
+.event-description li {
+  display: list-item !important;
+  margin: 0.3em 0;
+  color: #d4d4d8;
+}
+
+.event-description li p {
+  margin: 0;
+}
+
+.event-description strong {
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.event-description a {
+  color: #34d399;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.event-description a:hover {
+  color: #6ee7b7;
+}
+
+.event-description blockquote {
+  border-left: 3px solid #10b981;
+  padding: 0.25rem 0 0.25rem 0.85rem;
+  margin: 0.85em 0;
+  color: #a1a1aa;
+  font-style: italic;
+}
+
+.event-description code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  background: rgb(24 24 27);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 0.35rem;
+  padding: 0.1em 0.35em;
+}
+
+.event-description pre {
+  background: rgb(9 9 11);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.85em 0;
+  font-size: 0.8rem;
 }

@@ -27,16 +27,23 @@ export async function POST(req: NextRequest) {
 
   const s = await getAppSettings();
   const STRIPE_SECRET = s.payment.stripeSecretKey || process.env.STRIPE_SECRET_KEY || '';
+  const STRIPE_ACCOUNT_ID = s.payment.stripeAccountId || '';
+  const STRIPE_ACCESS_TOKEN = s.payment.stripeAccessToken || STRIPE_SECRET;
   const MP_ACCESS_TOKEN = s.payment.mpAccessToken || process.env.MERCADOPAGO_ACCESS_TOKEN || '';
-  const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET) : null;
+
+  const stripe = STRIPE_ACCESS_TOKEN ? new Stripe(STRIPE_ACCESS_TOKEN) : null;
   const mpClient = MP_ACCESS_TOKEN ? new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN }) : null;
 
   try {
     if (order.paymentGateway === 'stripe' && order.paymentId && stripe) {
-      await stripe.refunds.create({
+      const refundParams: any = {
         payment_intent: order.paymentId,
         amount: refundCents,
-      });
+      };
+      await stripe.refunds.create(
+        refundParams,
+        STRIPE_ACCOUNT_ID ? { stripeAccount: STRIPE_ACCOUNT_ID } : undefined
+      );
     } else if (order.paymentGateway === 'mercadopago' && order.paymentId && mpClient) {
       const refundClient = new PaymentRefund(mpClient);
       await refundClient.create({
@@ -72,7 +79,7 @@ export async function POST(req: NextRequest) {
       data: {
         status: 'approved',
         processedAt: new Date(),
-        adminNotes: `Reembolsado R$ ${(refundCents / 100).toFixed(2)} (taxa ${feePercent}%)`,
+        adminNotes: `Reembolsado ${(refundCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (taxa ${feePercent}%)`,
       },
     });
   }

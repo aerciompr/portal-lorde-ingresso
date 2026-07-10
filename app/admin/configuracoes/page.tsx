@@ -54,9 +54,18 @@ export default function AdminConfiguracoes() {
     }
   }
 
-  // Helpers para exibir taxas fixas em Reais (mas salvar como centavos)
-  const toReais = (cents?: string) => ((parseInt(cents || '0') || 0) / 100).toFixed(2);
-  const fromReais = (reais: string) => String(Math.round(parseFloat(reais || '0') * 100));
+  // Helpers para exibir taxas fixas em Reais (mas salvar como centavos) — padrão BR
+  const toReais = (cents?: string) =>
+    ((parseInt(cents || '0') || 0) / 100).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  const fromReais = (reais: string) => {
+    let s = String(reais || '').trim().replace(/[R$\s]/gi, '');
+    if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else if (s.includes(',')) s = s.replace(',', '.');
+    return String(Math.round((parseFloat(s) || 0) * 100));
+  };
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'taxas', label: 'Taxas' },
@@ -200,7 +209,7 @@ export default function AdminConfiguracoes() {
               <div className="text-xs text-zinc-500">Configurações de e-mail, cancelamentos e comportamento do portal.</div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <div className="label">E-mail remetente</div>
                 <input className="input" placeholder="ingressos@lordenelson.com.br" value={settings.from_email || ''} onChange={e => setSettings({...settings, from_email: e.target.value})} />
@@ -219,9 +228,25 @@ export default function AdminConfiguracoes() {
                   <span className="text-xs text-zinc-500">%</span>
                 </div>
               </div>
+              <div>
+                <div className="label">Expirar pending (min)</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="input"
+                    type="number"
+                    min={5}
+                    value={settings.pending_order_ttl_minutes || '30'}
+                    onChange={e => setSettings({ ...settings, pending_order_ttl_minutes: e.target.value })}
+                  />
+                  <span className="text-xs text-zinc-500">min</span>
+                </div>
+              </div>
             </div>
 
-            <p className="text-[10px] text-zinc-500 mt-4">Cancelamentos são bloqueados após o prazo. A taxa é retida no valor do reembolso.</p>
+            <p className="text-[10px] text-zinc-500 mt-4">
+              Cancelamentos são bloqueados após o prazo. A taxa é retida no reembolso.
+              Pedidos pending (não pagos) são limpos automaticamente pelo cron a cada 15 min após o tempo acima (padrão 30 min), devolvendo o estoque.
+            </p>
           </section>
         )}
 
@@ -232,6 +257,20 @@ export default function AdminConfiguracoes() {
               <div className="font-semibold text-lg tracking-tight">Gateways de Pagamento</div>
               <div className="text-xs text-zinc-500 mt-1">
                 Chaves completas. <strong className="text-emerald-400">Configurações salvas aqui têm prioridade</strong> sobre .env.
+              </div>
+            </div>
+
+            {/* Public URL - importante para webhooks MP e links */}
+            <div className="mb-6 p-4 border border-emerald-900/40 bg-emerald-950/20 rounded-2xl">
+              <div className="label mb-1">URL Pública do Site (para PIX / Webhooks / Emails)</div>
+              <input 
+                className="input font-mono text-xs w-full" 
+                placeholder="https://seudominio.com   ou   https://abc123.ngrok.io" 
+                value={settings.public_url || ''} 
+                onChange={e => setSettings({...settings, public_url: e.target.value})} 
+              />
+              <div className="text-[10px] text-zinc-400 mt-1">
+                Use isso com ngrok para testar chaves de produção do Mercado Pago. Deixe em branco para usar localhost (só funciona com chaves TEST-).
               </div>
             </div>
 
@@ -253,6 +292,37 @@ export default function AdminConfiguracoes() {
                     <input className="input font-mono text-xs" type="password" placeholder="sk_live_..." value={settings.stripe_secret_key || ''} onChange={e => setSettings({...settings, stripe_secret_key: e.target.value})} />
                     <div className="text-[10px] text-zinc-500 mt-0.5">STRIPE_SECRET_KEY</div>
                   </div>
+
+                  {/* Stripe Connect (OAuth) */}
+                  <div className="pt-3 border-t border-white/10">
+                    <div className="label">Stripe Connect (Login OAuth - recomendado)</div>
+                    <div className="text-[10px] text-zinc-400 mb-2">
+                      Conecte via login na sua conta Stripe para descobrir meios de pagamento disponíveis (cartão, boleto etc) sem expor chaves secretas.
+                    </div>
+                    <input className="input font-mono text-xs mb-2" placeholder="ca_... (Client ID do Connect)" value={settings.stripe_client_id || ''} onChange={e => setSettings({...settings, stripe_client_id: e.target.value})} />
+                    
+                    {settings.stripe_account_id ? (
+                      <div className="text-emerald-400 text-xs">
+                        ✓ Conectado: {settings.stripe_account_id}
+                        <br />
+                        <span className="text-[10px] text-zinc-400">Meios de pagamento: configure no dashboard Stripe da conta (Payment methods). O checkout usará automatic_payment_methods.</span>
+                        <button 
+                          onClick={() => setSettings({...settings, stripe_account_id: '', stripe_access_token: '', stripe_refresh_token: ''})} 
+                          className="ml-2 text-red-400 hover:underline"
+                        >
+                          Desconectar
+                        </button>
+                      </div>
+                    ) : (
+                      <a 
+                        href="/api/stripe/connect/authorize" 
+                        className="btn btn-secondary text-xs px-4 py-1.5"
+                        target="_self"
+                      >
+                        Conectar conta Stripe (OAuth)
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -262,6 +332,7 @@ export default function AdminConfiguracoes() {
                   <div className="font-semibold">Mercado Pago</div>
                   <span className="text-[10px] uppercase tracking-widest px-2 py-px rounded bg-white/5 text-emerald-400">PIX recomendado</span>
                 </div>
+                <div className="text-[10px] text-amber-400 mb-3">Access Token é obrigatório para gerar QR Code PIX. Use TEST-... para localhost. Para chaves reais, configure a URL Pública acima + ngrok.</div>
                 <div className="space-y-4 text-sm">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -269,8 +340,8 @@ export default function AdminConfiguracoes() {
                       <input className="input font-mono text-xs" placeholder="APP_USR-..." value={settings.mercadopago_public_key || ''} onChange={e => setSettings({...settings, mercadopago_public_key: e.target.value})} />
                     </div>
                     <div>
-                      <div className="label">Access Token</div>
-                      <input className="input font-mono text-xs" type="password" placeholder="APP_USR-..." value={settings.mercadopago_access_token || ''} onChange={e => setSettings({...settings, mercadopago_access_token: e.target.value})} />
+                      <div className="label">Access Token (obrigatório para PIX)</div>
+                      <input className="input font-mono text-xs" type="password" placeholder="TEST-... ou APP_USR-..." value={settings.mercadopago_access_token || ''} onChange={e => setSettings({...settings, mercadopago_access_token: e.target.value})} />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

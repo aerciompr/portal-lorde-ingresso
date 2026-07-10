@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
       imageUrl: body.imageUrl || null,
       address: body.address || 'Rua Silvério Jorge, 241, Jaraguá, Maceió - AL, 57022-110',
       location: body.location || null,
+      footerNotice: body.footerNotice?.trim() || null,
       cancelHoursBefore: body.cancelHoursBefore || 24,
       cancelFeePercent: body.cancelFeePercent || 10,
       ticketTypes: {
@@ -82,6 +83,7 @@ export async function PUT(req: NextRequest) {
   if (body.address) data.address = body.address;
   if (body.location !== undefined) data.location = body.location || null;
   if (body.openTime !== undefined) data.openTime = body.openTime || null;
+  if (body.footerNotice !== undefined) data.footerNotice = (body.footerNotice || '').trim() || null;
   if (body.salesDeadline) data.salesDeadline = new Date(body.salesDeadline);
   if (body.allowCancel !== undefined) data.allowCancel = !!body.allowCancel;
   if (body.cancelHoursBefore) data.cancelHoursBefore = parseInt(body.cancelHoursBefore);

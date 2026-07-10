@@ -12,7 +12,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const match = document.cookie.match(/(?:^|; )admin_user=([^;]*)/);
     return match ? decodeURIComponent(match[1]) : '';
   };
-  const [adminUser, setAdminUser] = useState<string>(getAdminUser());
+
+  // Initialize to empty string so server-rendered HTML matches client initial render (avoids hydration mismatch).
+  // The actual value (from cookie) is set after hydration in useEffect.
+  const [adminUser, setAdminUser] = useState<string>('');
 
   useEffect(() => {
     const user = getAdminUser();
@@ -25,6 +28,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin', label: 'Dashboard', icon: '📊' },
     { href: '/admin/eventos', label: 'Eventos', icon: '🎟️' },
     { href: '/admin/pedidos', label: 'Pedidos', icon: '📋' },
+    { href: '/admin/ferramentas', label: 'Ferramentas', icon: '🛠️' },
+    { href: '/admin/ingresso-preview', label: 'Layout ingresso', icon: '🎫' },
     { href: '/admin/reports', label: 'Relatórios', icon: '📈' },
     { href: '/admin/configuracoes', label: 'Configurações', icon: '⚙️' },
     { href: '/checkin', label: 'Check-in (App Mobile Staff)', icon: '📱', external: true },

@@ -9,6 +9,31 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Headers de segurança básicos (subdomínio / produção)
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
+  },
+  // Optimize imports for heavy packages (bundle + RAM dev)
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'recharts',
+      '@tiptap/react',
+      '@tiptap/starter-kit',
+      'sonner',
+      'react-hook-form',
+    ],
+  },
 };
 
 export default nextConfig;

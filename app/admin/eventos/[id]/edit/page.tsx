@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { Plus, Ticket, Edit, Copy, Trash2 } from 'lucide-react';
 import RichTextEditor from '@/components/RichTextEditor';
+import { DEFAULT_EVENT_FOOTER_NOTICE, formatPrice, centsToInput, parseBRLToCents } from '@/lib/utils';
 
 interface EventData {
   id: string;
@@ -18,6 +19,7 @@ interface EventData {
   address: string;
   location: string | null;
   salesDeadline: string | null;
+  footerNotice: string | null;
   allowCancel: boolean;
   cancelHoursBefore: number;
   cancelFeePercent: number;
@@ -47,6 +49,7 @@ export default function EditEventPage() {
     address: '',
     location: '',
     salesDeadline: '',
+    footerNotice: '',
     allowCancel: true,
     cancelHoursBefore: 24,
     cancelFeePercent: 10,
@@ -56,7 +59,7 @@ export default function EditEventPage() {
 
   // Inline create/edit for ingressos/lotes (below image)
   const [showAddForm, setShowAddForm] = useState<'none' | 'ticket' | 'lote'>('none');
-  const [addForm, setAddForm] = useState({ nome: 'Ingresso Padrão', preco: '35.00', qty: '50' });
+  const [addForm, setAddForm] = useState({ nome: 'Ingresso Padrão', preco: '35,00', qty: '50' });
   const [editingLote, setEditingLote] = useState<any>(null);
   const [editLoteForm, setEditLoteForm] = useState<any>(null);
 
@@ -87,6 +90,7 @@ export default function EditEventPage() {
           address: found.address || '',
           location: found.location || '',
           salesDeadline: salesStr,
+          footerNotice: found.footerNotice || '',
           allowCancel: found.allowCancel ?? true,
           cancelHoursBefore: found.cancelHoursBefore ?? 24,
           cancelFeePercent: found.cancelFeePercent ?? 10,
@@ -177,7 +181,7 @@ export default function EditEventPage() {
   async function createIngressoOrLote(type: 'ticket' | 'lote') {
     if (!event) return;
     const nome = addForm.nome.trim() || (type === 'ticket' ? 'Ingresso Padrão' : 'Lote Promocional');
-    const priceCents = Math.round(parseFloat(addForm.preco) * 100);
+    const priceCents = parseBRLToCents(addForm.preco);
     const totalQty = parseInt(addForm.qty) || 50;
 
     try {
@@ -209,7 +213,7 @@ export default function EditEventPage() {
         toast.success('Novo tipo de ingresso criado');
       }
       setShowAddForm('none');
-      setAddForm({ nome: 'Ingresso Padrão', preco: '35.00', qty: '50' });
+      setAddForm({ nome: 'Ingresso Padrão', preco: '35,00', qty: '50' });
       await refreshEventData();
     } catch {
       toast.error('Erro ao criar ingresso/lote');
@@ -218,7 +222,7 @@ export default function EditEventPage() {
 
   async function updateLote(lote: any) {
     if (!lote?.id) return;
-    const priceCents = Math.round(parseFloat(editLoteForm?.preco || '0') * 100);
+    const priceCents = parseBRLToCents(editLoteForm?.preco || '0');
     const totalQty = parseInt(editLoteForm?.qty || '0');
     try {
       const res = await fetch('/api/admin/lotes/update', {
@@ -237,16 +241,31 @@ export default function EditEventPage() {
   }
 
   async function deleteLoteOrTicket(id: string, isLote: boolean) {
-    if (!confirm('Remover este item? (pode afetar pedidos)')) return;
-    // Note: no dedicated delete API; for now just hide warning - production would soft delete or archive
-    toast.error('Remoção de lotes/ingressos requer endpoint dedicado (não implementado para segurança)');
+    if (!confirm(isLote
+      ? 'Remover este lote? Só é permitido se não houver pedidos/vendas vinculadas.'
+      : 'Remover este tipo de ingresso? Só é permitido se não houver tickets emitidos.')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/lotes/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, type: isLote ? 'lote' : 'ticketType' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao remover');
+      toast.success(data.message || 'Removido');
+      await refreshEventData();
+    } catch (e: unknown) {
+      toast.error((e as Error).message || 'Erro ao remover');
+    }
   }
 
   function startEditLote(lote: any) {
     setEditingLote(lote);
     setEditLoteForm({
       nome: lote.nome || lote.name,
-      preco: ((lote.precoCents || lote.priceCents || 0) / 100).toFixed(2),
+      preco: centsToInput(lote.precoCents || lote.priceCents || 0),
       qty: (lote.totalQty || 0).toString(),
     });
   }
@@ -265,6 +284,7 @@ export default function EditEventPage() {
         address: form.address,
         location: form.location,
         salesDeadline: form.salesDeadline || null,
+        footerNotice: form.footerNotice.trim() || null,
         allowCancel: form.allowCancel,
         cancelHoursBefore: form.cancelHoursBefore,
         cancelFeePercent: form.cancelFeePercent,
@@ -368,22 +388,22 @@ export default function EditEventPage() {
               <div className="text-xs uppercase tracking-widest text-zinc-400">Ingressos / Lotes</div>
               {event.activeLote && (
                 <div className="text-xs text-emerald-400 mt-0.5">
-                  Ativo: {event.activeLote.nome} • R$ {(event.activeLote.precoCents / 100).toFixed(2)}
+                  Ativo: {event.activeLote.nome} • {formatPrice(event.activeLote.precoCents)}
                 </div>
               )}
             </div>
             <div className="flex gap-2">
               <button 
-                onClick={() => { setShowAddForm('ticket'); setAddForm({ nome: 'Ingresso Padrão', preco: '35.00', qty: String(event.loteDefaultQty || 50) }); }}
+                onClick={() => { setShowAddForm('ticket'); setAddForm({ nome: 'Ingresso Padrão', preco: '35,00', qty: String(event.loteDefaultQty || 50) }); }}
                 className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
               >
                 <Plus size={14} /> Novo ingresso
               </button>
               <button 
-                onClick={() => { setShowAddForm('lote'); setAddForm({ nome: 'Lote Promocional', preco: String(((event.activeLote?.precoCents || 3000) + form.loteAcrescimoCents) / 100), qty: String(event.loteDefaultQty || 50) }); }}
+                onClick={() => { setShowAddForm('lote'); setAddForm({ nome: 'Lote Promocional', preco: centsToInput((event.activeLote?.precoCents || 3000) + form.loteAcrescimoCents), qty: String(event.loteDefaultQty || 50) }); }}
                 className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-emerald-500/60 text-emerald-400 hover:bg-emerald-500/10"
               >
-                <Plus size={14} /> Virar Lote (+{(form.loteAcrescimoCents / 100).toFixed(2)})
+                <Plus size={14} /> Virar Lote (+{formatPrice(form.loteAcrescimoCents)})
               </button>
             </div>
           </div>
@@ -402,8 +422,8 @@ export default function EditEventPage() {
                 <div className="flex gap-2 sm:gap-3">
                   <input 
                     className="input py-1.5 text-sm w-28" 
-                    placeholder="Preço" 
-                    type="number" step="0.01" 
+                    placeholder="35,00" 
+                    inputMode="decimal"
                     value={addForm.preco} 
                     onChange={e => setAddForm({ ...addForm, preco: e.target.value })} 
                   />
@@ -426,7 +446,7 @@ export default function EditEventPage() {
             <div className="mb-4 p-3 bg-zinc-950 border border-emerald-500/30 rounded-lg">
               <div className="text-xs text-emerald-400 mb-2">Editando: {editingLote.nome || editingLote.name}</div>
               <div className="flex gap-2 text-xs">
-                <input className="input py-1.5 text-sm w-28" placeholder="Preço" type="number" step="0.01" value={editLoteForm.preco} onChange={e=>setEditLoteForm({...editLoteForm, preco:e.target.value})} />
+                <input className="input py-1.5 text-sm w-28" placeholder="35,00" inputMode="decimal" value={editLoteForm.preco} onChange={e=>setEditLoteForm({...editLoteForm, preco:e.target.value})} />
                 <input className="input py-1.5 text-sm w-24" placeholder="Qtd" type="number" value={editLoteForm.qty} onChange={e=>setEditLoteForm({...editLoteForm, qty:e.target.value})} />
                 <button onClick={() => updateLote(editingLote)} className="btn btn-primary text-xs px-5">Salvar</button>
                 <button onClick={() => { setEditingLote(null); setEditLoteForm(null); }} className="btn btn-secondary text-xs px-4">Fechar</button>
@@ -437,29 +457,31 @@ export default function EditEventPage() {
           <table className="w-full text-sm min-w-[720px]">
             <thead className="text-left text-zinc-400 border-b border-white/10">
               <tr>
-                <th className="p-3 font-medium"><Ticket size={14} className="inline mr-1" />Ingressos</th>
+                <th className="p-3 font-medium"><Ticket size={14} className="inline mr-1" />Ingressos / Lotes</th>
                 <th className="p-3 font-medium text-right">Preço</th>
                 <th className="p-3 font-medium text-right">Capacidade</th>
-                <th className="p-3 font-medium text-right">Disponível</th>
+                <th className="p-3 font-medium text-right">Vendidos</th>
+                <th className="p-3 font-medium text-right">Estoque</th>
                 <th className="p-3 w-16"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
                 {event.ticketTypes && event.ticketTypes.length > 0 && event.ticketTypes.map((t: any) => {
-                  const disp = t.totalQty - (t.sold || 0);
-                  const low = disp < 5;
+                  const vendidos = t.sold || 0;
+                  const estoque = Math.max(0, t.totalQty - vendidos);
+                  const low = estoque < 5;
                   return (
                     <tr key={t.id} className="hover:bg-white/5">
                       <td className="p-3">
                         <div className="font-medium">{event.title} - {t.name}</div>
                         <div className="text-[10px] text-zinc-500">{new Date(event.date).toLocaleDateString('pt-BR')}</div>
                       </td>
-                      <td className="p-3 text-right font-mono">R$ {(t.priceCents/100).toFixed(2)}</td>
-                      <td className="p-3 text-right">{t.totalQty}</td>
+                      <td className="p-3 text-right font-mono">{formatPrice(t.priceCents)}</td>
+                      <td className="p-3 text-right tabular-nums">{t.totalQty}</td>
+                      <td className="p-3 text-right tabular-nums text-zinc-400">{vendidos}</td>
                       <td className="p-3 text-right">
-                        <span className={`inline-flex items-center gap-1 ${low ? 'text-red-400' : 'text-emerald-400'}`}>
-                          {low && <span className="inline-flex items-center justify-center w-4 h-4 bg-red-500 text-white rounded-full text-[10px] mr-1">!</span>}
-                          {disp}
+                        <span className={`tabular-nums font-medium ${low ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {estoque}
                         </span>
                       </td>
                       <td className="p-3 text-right text-zinc-400">
@@ -473,20 +495,31 @@ export default function EditEventPage() {
                   );
                 })}
                 {event.lotes && event.lotes.length > 0 && event.lotes.map((l: any) => {
-                  const disp = l.totalQty - (l.sold || 0);
-                  const low = disp < 5;
+                  const vendidos = l.sold || 0;
+                  const estoque = Math.max(0, l.totalQty - vendidos);
+                  const esgotado = !l.ativo || vendidos >= l.totalQty;
+                  const low = !esgotado && estoque < 5;
                   return (
-                    <tr key={l.id} className="hover:bg-white/5">
+                    <tr key={l.id} className={`hover:bg-white/5 ${esgotado && !l.ativo ? 'opacity-70' : ''}`}>
                       <td className="p-3">
-                        <div className="font-medium">{event.title} - {l.nome}</div>
+                        <div className="font-medium">
+                          {l.nome}
+                          {l.ativo ? (
+                            <span className="ml-2 text-[10px] text-emerald-400 font-normal">ATIVO</span>
+                          ) : esgotado ? (
+                            <span className="ml-2 text-[10px] text-red-400 font-normal">ESGOTADO</span>
+                          ) : (
+                            <span className="ml-2 text-[10px] text-zinc-500 font-normal">INATIVO</span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-zinc-500">{new Date(event.date).toLocaleDateString('pt-BR')}</div>
                       </td>
-                      <td className="p-3 text-right font-mono">R$ {(l.precoCents/100).toFixed(2)}</td>
-                      <td className="p-3 text-right">{l.totalQty}</td>
+                      <td className="p-3 text-right font-mono">{formatPrice(l.precoCents)}</td>
+                      <td className="p-3 text-right tabular-nums">{l.totalQty}</td>
+                      <td className="p-3 text-right tabular-nums text-zinc-400">{vendidos}</td>
                       <td className="p-3 text-right">
-                        <span className={`inline-flex items-center gap-1 ${low ? 'text-red-400' : 'text-emerald-400'}`}>
-                          {low && <span className="inline-flex items-center justify-center w-4 h-4 bg-red-500 text-white rounded-full text-[10px] mr-1">!</span>}
-                          {disp}
+                        <span className={`tabular-nums font-medium ${esgotado ? 'text-red-400' : low ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {estoque}
                         </span>
                       </td>
                       <td className="p-3 text-right text-zinc-400">
@@ -500,7 +533,7 @@ export default function EditEventPage() {
                   );
                 })}
                 {(!event.ticketTypes || event.ticketTypes.length === 0) && (!event.lotes || event.lotes.length === 0) && (
-                  <tr><td colSpan={5} className="p-3 text-xs text-zinc-500 text-center">Nenhum ingresso</td></tr>
+                  <tr><td colSpan={6} className="p-3 text-xs text-zinc-500 text-center">Nenhum ingresso</td></tr>
                 )}
               </tbody>
             </table>
@@ -538,10 +571,27 @@ export default function EditEventPage() {
               <div className="text-xs text-zinc-500 mb-1">Local (nome no card)</div>
               <input className="input text-sm" value={form.location} onChange={e => updateForm('location', e.target.value)} />
             </div>
-            <div>
+            <div className="flex-1">
               <div className="text-xs text-zinc-500 mb-1">Endereço</div>
               <input className="input text-sm" value={form.address} onChange={e => updateForm('address', e.target.value)} />
             </div>
+          </div>
+
+          {/* Aviso legal (opcional) — aparece ao final da descrição no site */}
+          <div className="mt-6 pt-5 border-t border-white/10">
+            <div className="label mb-1">Aviso legal no final da descrição (opcional)</div>
+            <textarea
+              className="input text-sm min-h-[80px] w-full"
+              placeholder={DEFAULT_EVENT_FOOTER_NOTICE}
+              value={form.footerNotice}
+              onChange={e => updateForm('footerNotice', e.target.value)}
+            />
+            <div className="text-[10px] text-zinc-500 mt-1.5">
+              Se deixar em branco, o site exibe o texto padrão: &quot;{DEFAULT_EVENT_FOOTER_NOTICE}&quot;
+            </div>
+          </div>
+
+          <div className="mt-5 flex justify-end">
             <button onClick={handleSave} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-2 rounded-xl text-sm font-medium shadow-sm transition disabled:opacity-60">Salvar Alterações</button>
           </div>
         </div>

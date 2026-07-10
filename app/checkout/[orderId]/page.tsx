@@ -32,6 +32,8 @@ export default function CheckoutPage() {
     accessCode?: string;
   }
   const [pixData, setPixData] = useState<PixData | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'waiting' | 'paid' | 'failed'>('idle');
+  const [paymentStatusMsg, setPaymentStatusMsg] = useState('');
 
   // Stripe
   const [stripe, setStripe] = useState<Stripe | null>(null);
@@ -40,6 +42,20 @@ export default function CheckoutPage() {
 
   const orderId = params.orderId;
 
+  const cleanedCpf = cleanCpf(buyer.cpf);
+  const isPhoneValid = !buyer.phone || isValidPhone(cleanPhone(buyer.phone));
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid = emailRegex.test(buyer.email.trim());
+
+  const basicValid =
+    buyer.name.trim().length > 2 &&
+    isEmailValid &&
+    cleanedCpf.length === 11 &&
+    isValidCpf(cleanedCpf) &&
+    isPhoneValid;
+
+  const isFormValid = basicValid && selectedMethod;
+
   useEffect(() => {
     async function load() {
       try {
@@ -47,6 +63,12 @@ export default function CheckoutPage() {
         if (!res.ok) throw new Error('Pedido não encontrado');
         const data = await res.json();
         setOrder(data);
+        if (data.status === 'paid') {
+          router.replace(
+            `/ingressos?email=${encodeURIComponent(data.buyerEmail || '')}${data.accessCode ? `&code=${data.accessCode}` : ''}&success=1`
+          );
+          return;
+        }
         if (data.status !== 'pending') {
           router.replace(`/ingressos?email=${encodeURIComponent(data.buyerEmail || '')}`);
         }
@@ -60,8 +82,57 @@ export default function CheckoutPage() {
     if (orderId) load();
   }, [orderId, router]);
 
+  // Polling em tempo real do PIX (webhook + consulta MP)
+  useEffect(() => {
+    if (!pixData || !orderId || paymentStatus === 'paid') return;
+
+    setPaymentStatus('waiting');
+    setPaymentStatusMsg('Aguardando confirmação do PIX…');
+
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/payment-status`, { cache: 'no-store' });
+        if (!res.ok || stopped) return;
+        const data = await res.json();
+        if (data.status === 'paid') {
+          setPaymentStatus('paid');
+          setPaymentStatusMsg('Pagamento confirmado! Redirecionando…');
+          toast.success('PIX confirmado! Seus ingressos estão prontos.');
+          const email = buyer.email || data.buyerEmail || '';
+          const code = data.accessCode || pixData.accessCode || '';
+          setTimeout(() => {
+            router.push(
+              `/ingressos?email=${encodeURIComponent(email)}${code ? `&code=${code}` : ''}&success=1`
+            );
+          }, 800);
+          return;
+        }
+        if (data.mpStatus && ['rejected', 'cancelled', 'canceled', 'expired'].includes(data.mpStatus)) {
+          setPaymentStatus('failed');
+          setPaymentStatusMsg('Pagamento não aprovado. Gere um novo PIX ou escolha outro método.');
+          return;
+        }
+        setPaymentStatusMsg(data.message || 'Aguardando pagamento PIX…');
+      } catch {
+        /* rede — tenta de novo */
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, [pixData, orderId, paymentStatus, buyer.email, router]);
+
   // Load Stripe when card method selected
   async function selectCard() {
+    if (!basicValid) {
+      toast.error('Preencha nome, e-mail válido e CPF antes de escolher a forma de pagamento');
+      return;
+    }
     setSelectedMethod('card');
     setPixData(null);
 
@@ -81,27 +152,16 @@ export default function CheckoutPage() {
   }
 
   async function initiatePayment() {
-    if (!buyer.name.trim() || !buyer.email.trim()) {
-      toast.error('Preencha nome e e-mail');
-      return;
-    }
-
-    const cleanedCpf = cleanCpf(buyer.cpf);
-    if (!cleanedCpf || !isValidCpf(cleanedCpf)) {
-      toast.error('Informe um CPF válido');
-      return;
-    }
-
-    if (buyer.phone) {
-      const cleanedPhone = cleanPhone(buyer.phone);
-      if (!isValidPhone(cleanedPhone)) {
+    if (!isFormValid) {
+      if (!buyer.name.trim() || !isEmailValid) {
+        toast.error('Preencha nome completo e um e-mail válido');
+      } else if (!cleanedCpf || !isValidCpf(cleanedCpf)) {
+        toast.error('Informe um CPF válido (11 dígitos)');
+      } else if (buyer.phone && !isValidPhone(cleanPhone(buyer.phone))) {
         toast.error('Telefone inválido (use DDD + número)');
-        return;
+      } else if (!selectedMethod) {
+        toast.error('Escolha PIX ou Cartão');
       }
-    }
-
-    if (!selectedMethod) {
-      toast.error('Escolha PIX ou Cartão');
       return;
     }
 
@@ -130,12 +190,13 @@ export default function CheckoutPage() {
 
       if (data.type === 'pix' && data.qr_code) {
         setPixData(data);
+        setPaymentStatus('waiting');
         toast.success('QR gerado. Código de acesso: ' + (data.accessCode || ''));
       } else if (data.type === 'stripe' && data.clientSecret) {
         setClientSecret(data.clientSecret);
         toast.info('Cartão. Guarde código: ' + (data.accessCode || ''));
 
-        // Initialize Stripe Elements
+        // Initialize Stripe Elements (works for both direct keys and Connect account)
         if (stripe && data.clientSecret) {
           const el = stripe.elements({ clientSecret: data.clientSecret });
           setElements(el);
@@ -193,33 +254,63 @@ export default function CheckoutPage() {
 
       {/* Buyer form */}
       <div className="card p-6 mb-6">
-        <div className="label mb-2">Seus dados (obrigatório • CPF obrigatório para emissão)</div>
-        <input className="input mb-3" placeholder="Nome completo *" value={buyer.name} onChange={e => setBuyer({ ...buyer, name: e.target.value })} />
-        <input className="input mb-3" type="email" placeholder="E-mail *" value={buyer.email} onChange={e => setBuyer({ ...buyer, email: e.target.value })} />
+        <div className="label mb-2">Seus dados (obrigatório • CPF obrigatório para PIX e emissão)</div>
+        <input 
+          className={`input mb-1 ${!buyer.name.trim() ? 'border-red-500 focus:ring-red-500/30' : ''}`} 
+          placeholder="Nome completo *" 
+          value={buyer.name} 
+          onChange={e => setBuyer({ ...buyer, name: e.target.value })} 
+        />
+        {!buyer.name.trim() && <div className="text-[10px] text-red-400 mb-2">Nome completo é obrigatório.</div>}
+
+        <input 
+          className={`input mb-1 ${buyer.email.trim() && !isEmailValid ? 'border-red-500 focus:ring-red-500/30' : ''}`} 
+          type="email" 
+          placeholder="E-mail *" 
+          value={buyer.email} 
+          onChange={e => setBuyer({ ...buyer, email: e.target.value })} 
+        />
+        {buyer.email.trim() && !isEmailValid && <div className="text-[10px] text-red-400 mb-2">Informe um e-mail válido.</div>}
+
         <input
-          className="input mb-3"
-          placeholder="CPF *"
+          className={`input mb-1 ${cleanedCpf && !isValidCpf(cleanedCpf) ? 'border-red-500 focus:ring-red-500/30' : ''}`}
+          placeholder="CPF * (obrigatório)"
           value={buyer.cpf}
           onChange={e => setBuyer({ ...buyer, cpf: formatCpf(e.target.value) })}
           maxLength={14}
         />
+        {cleanedCpf && !isValidCpf(cleanedCpf) && <div className="text-[10px] text-red-400 mb-2">CPF inválido. Use os 11 dígitos.</div>}
+
         <input
-          className="input"
-          placeholder="Telefone (com DDD)"
+          className={`input ${buyer.phone && !isPhoneValid ? 'border-red-500 focus:ring-red-500/30' : ''}`}
+          placeholder="Telefone (com DDD) - opcional"
           value={buyer.phone}
           onChange={e => setBuyer({ ...buyer, phone: formatPhone(e.target.value) })}
           maxLength={15}
         />
+        {buyer.phone && !isPhoneValid && <div className="text-[10px] text-red-400 mt-1">Telefone deve ter 10 ou 11 dígitos (com DDD).</div>}
+        <div className="text-[10px] text-zinc-400 mt-2">* Campos obrigatórios. CPF é exigido para PIX e emissão do ingresso.</div>
       </div>
 
       {/* Payment methods */}
       <div className="mb-6">
         <div className="label mb-3">Forma de pagamento</div>
+        {!basicValid && (
+          <div className="mb-3 text-sm text-amber-400 bg-amber-950/40 border border-amber-900/50 rounded px-3 py-2">
+            Preencha nome completo, e-mail válido e CPF acima para habilitar as opções de pagamento.
+          </div>
+        )}
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <button
-            onClick={() => { setSelectedMethod('pix'); setPixData(null); setClientSecret(null); }}
-            className={`card p-5 text-left border ${selectedMethod === 'pix' ? 'border-emerald-500' : 'border-white/10'}`}
+            onClick={() => {
+              if (!basicValid) {
+                toast.error('Preencha nome, e-mail válido e CPF antes de escolher PIX');
+                return;
+              }
+              setSelectedMethod('pix'); setPixData(null); setClientSecret(null);
+            }}
+            className={`card p-5 text-left border ${selectedMethod === 'pix' ? 'border-emerald-500' : 'border-white/10'} ${!basicValid ? 'opacity-60' : ''}`}
           >
             <div className="font-semibold">PIX (Mercado Pago)</div>
             <div className="text-xs text-emerald-400 mt-1">Aprovação instantânea • Mais rápido</div>
@@ -227,19 +318,20 @@ export default function CheckoutPage() {
 
           <button
             onClick={selectCard}
-            className={`card p-5 text-left border ${selectedMethod === 'card' ? 'border-emerald-500' : 'border-white/10'}`}
+            className={`card p-5 text-left border ${selectedMethod === 'card' ? 'border-emerald-500' : 'border-white/10'} ${!basicValid ? 'opacity-60' : ''}`}
           >
-            <div className="font-semibold">Cartão de Crédito (Stripe)</div>
-            <div className="text-xs text-zinc-400 mt-1">Checkout transparente seguro</div>
+            <div className="font-semibold">Cartão / Boleto (Stripe)</div>
+            <div className="text-xs text-zinc-400 mt-1">Métodos disponíveis na conta Stripe (incluindo via Connect OAuth)</div>
           </button>
         </div>
 
         <button
           onClick={initiatePayment}
-          disabled={processing || !selectedMethod}
+          disabled={processing || !isFormValid}
+          title={!isFormValid ? 'Preencha todos os dados obrigatórios e escolha uma forma de pagamento' : undefined}
           className="btn btn-primary w-full text-base py-4 disabled:opacity-60"
         >
-          {processing ? 'Processando...' : selectedMethod === 'pix' ? 'Gerar QR Code Pix' : 'Carregar formulário de Cartão'}
+          {processing ? 'Processando...' : selectedMethod === 'pix' ? 'Gerar QR Code Pix' : selectedMethod === 'card' ? 'Carregar formulário de Cartão' : 'Preencha os dados e escolha o pagamento'}
         </button>
       </div>
 
@@ -263,7 +355,26 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          <p className="text-xs text-zinc-400">Após o pagamento, o status será atualizado automaticamente (webhook Mercado Pago).</p>
+          <div
+            className={`mt-4 p-3 rounded-xl text-sm border ${
+              paymentStatus === 'paid'
+                ? 'border-emerald-500/50 bg-emerald-950/40 text-emerald-300'
+                : paymentStatus === 'failed'
+                  ? 'border-red-500/40 bg-red-950/30 text-red-300'
+                  : 'border-white/10 bg-zinc-950/60 text-zinc-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {paymentStatus === 'waiting' && (
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              )}
+              {paymentStatus === 'paid' && <span className="text-emerald-400">✓</span>}
+              <span>{paymentStatusMsg || 'Aguardando confirmação do PIX…'}</span>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-1.5">
+              Confirmação automática via webhook + verificação a cada 3s no Mercado Pago. Não precisa fazer nada após pagar.
+            </p>
+          </div>
 
           {pixData.accessCode && (
             <div className="mt-3 p-3 bg-zinc-950 border border-emerald-900 rounded font-mono text-emerald-400 text-center text-lg tracking-widest">{pixData.accessCode}</div>
@@ -272,8 +383,9 @@ export default function CheckoutPage() {
           <button 
             onClick={() => router.push(`/ingressos?email=${encodeURIComponent(buyer.email)}&code=${pixData.accessCode || ''}`)} 
             className="btn btn-secondary w-full mt-4"
+            disabled={paymentStatus === 'waiting'}
           >
-            Ver ingressos com código
+            {paymentStatus === 'paid' ? 'Ver meus ingressos' : 'Ver ingressos com código (se já pagou)'}
           </button>
         </div>
       )}
@@ -299,6 +411,7 @@ export default function CheckoutPage() {
 
       <div className="text-xs text-center text-zinc-500 mt-8">
         Ambiente seguro. Webhooks garantem a atualização automática do status.
+        <br />PIX MP: use chaves TEST-... para localhost. Para produção configure "URL Pública" + ngrok em Admin &gt; Configurações &gt; Gateways.
       </div>
     </div>
   );

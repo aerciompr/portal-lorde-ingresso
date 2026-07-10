@@ -21,6 +21,8 @@ model Event {
   location          String?   // Nome do Pub / Local para exibição no card
   imageUrl          String?
   salesDeadline     DateTime?
+  // Aviso legal no final da descrição (se vazio, usa o texto padrão do sistema)
+  footerNotice      String?
   allowCancel       Boolean   @default(true)
   cancelHoursBefore Int       @default(24)
   cancelFeePercent  Float     @default(10.0) // e.g. 10%
