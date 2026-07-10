@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
+    "build:cpanel": "node scripts/postinstall-prisma.js || true && next build --webpack",
     "start": "NODE_ENV=production node server.js",
     "start:next": "next start",
     "lint": "eslint",

@@ -23,8 +23,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Optimize imports for heavy packages (bundle + RAM dev)
+  // Optimize imports + cPanel: 1 CPU (evita EAGAIN em spawn de workers)
   experimental: {
+    cpus: 1,
+    workerThreads: false,
     optimizePackageImports: [
       'lucide-react',
       'recharts',
