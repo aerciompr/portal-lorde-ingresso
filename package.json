@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/postinstall-prisma.js && next build",
+    "build": "node scripts/postinstall-prisma.js && next build --webpack",
     "start": "NODE_ENV=production node server.js",
     "start:next": "next start",
     "lint": "eslint",

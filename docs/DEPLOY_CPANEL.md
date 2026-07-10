@@ -46,7 +46,22 @@ Guia passo a passo para hospedagem compartilhada/VPS **com cPanel + Node.js**.
 mysql://USUARIO_MYSQL:SENHA@localhost:3306/NOME_DO_BANCO
 ```
 
+**Senha com caracteres especiais** (`@ # % : / ?` etc.) **tem que ser URL-encoded**:
+
+| Char | Encode |
+|------|--------|
+| `@` | `%40` |
+| `#` | `%23` |
+| `%` | `%25` |
+| `:` | `%3A` |
+| `/` | `%2F` |
+
+Exemplo: senha `Portal@123.Lorde` →  
+`mysql://lord9962_portal:Portal%40123.Lorde@localhost:3306/lord9962_portal`
+
 Em alguns hosts o host não é `localhost` — use o valor indicado no cPanel (às vezes `127.0.0.1`).
+
+**Build no cPanel:** use `npm run build` (já força Webpack; Turbopack quebra com symlink do `nodevenv`).
 
 ---
 
