@@ -69,8 +69,10 @@ mysql://portal:SENHA@mysql:3306/portal
 2. **Source:** GitHub  
    - Repo: `aerciompr/portal-lorde-ingresso`  
    - Branch: `main`  
-3. **Build:**  
-   - Se o repo tem `Dockerfile` → EasyPanel usa automaticamente  
+3. **Build (importante):**  
+   - Preferência: **Builder = Dockerfile** (arquivo na raiz do repo)  
+   - **Não** deixe só Nixpacks com Node 18 — o Next.js 16 exige **Node ≥ 20.9**  
+   - Se usar Nixpacks: o repo tem `nixpacks.toml` forçando **Node 22**  
    - Build path: `/` (raiz)  
 4. **Port:** `3000`  
 5. **Domains:**  
@@ -78,6 +80,16 @@ mysql://portal:SENHA@mysql:3306/portal
    - Porta do serviço: `3000`  
    - HTTPS / Let's Encrypt: **ligado**  
    - Marque como domínio principal (estrela), se houver  
+
+### Erro: `Node.js 18 ... Next.js requires >=20.9.0`
+
+O EasyPanel usou **Nixpacks com Node 18**. Corrija:
+
+1. No serviço App → **Build / Settings**  
+2. Selecione **Dockerfile** (não Nixpacks), **ou**  
+3. Redeploy após o `git pull` (com `nixpacks.toml` + `engines.node` no package.json)  
+4. Force redeploy / rebuild sem cache se a opção existir  
+
 
 ### Environment (aba Environment)
 
