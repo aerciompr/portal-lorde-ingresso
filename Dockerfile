@@ -35,8 +35,10 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOST=0.0.0.0
 ENV PORT=3000
-# Pasta de uploads (sobrescreva com volume EasyPanel se quiser persistir entre deploys)
-ENV UPLOADS_DIR=/app/public/uploads
+# Fora de public/ — evita volume EasyPanel root-only em public/uploads
+ENV UPLOADS_DIR=/app/data/uploads
+# Engine nativo Prisma no Docker (mais estável que adapter JS sob rede interna)
+ENV PRISMA_USE_ADAPTER=0
 
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
@@ -50,12 +52,13 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/next.config.ts ./next.config.ts
 
-# Upload de imagens no admin: user nextjs precisa gravar aqui (senão EACCES)
-RUN mkdir -p /app/public/uploads \
-  && chown -R nextjs:nodejs /app/public/uploads \
-  && chmod 775 /app/public/uploads
+RUN mkdir -p /app/data/uploads /app/public/uploads /tmp/lordenelson-uploads \
+  && chown -R nextjs:nodejs /app/data /app/public/uploads \
+  && chmod -R 775 /app/data /app/public/uploads \
+  && chmod +x /app/scripts/docker-entrypoint.sh
 
-USER nextjs
+# Entrypoint roda como root só para chown de volumes, depois dropa para nextjs
+USER root
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]

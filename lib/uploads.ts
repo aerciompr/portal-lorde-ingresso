@@ -1,33 +1,80 @@
 import path from 'path';
-import { mkdir, access, constants } from 'fs/promises';
+import { mkdir, access, writeFile, unlink, constants } from 'fs/promises';
 
 /**
- * Diretório de uploads no disco.
- * - Padrão: public/uploads (servido por app/uploads e /uploads estático se existir)
- * - Override: UPLOADS_DIR (caminho absoluto ou relativo a cwd) — útil com volume EasyPanel
+ * Candidatos a diretório de upload (primeiro gravável vence).
+ * EasyPanel às vezes monta volume root-only em public/uploads → EACCES.
  */
+function candidateDirs(): string[] {
+  const list: string[] = [];
+  const fromEnv = process.env.UPLOADS_DIR?.trim();
+  if (fromEnv) {
+    list.push(path.isAbsolute(fromEnv) ? fromEnv : path.join(process.cwd(), fromEnv));
+  }
+  list.push(
+    path.join(process.cwd(), 'data', 'uploads'),
+    '/app/data/uploads',
+    path.join(process.cwd(), 'public', 'uploads'),
+    '/tmp/lordenelson-uploads'
+  );
+  // unique
+  return [...new Set(list)];
+}
+
+let cachedWritableDir: string | null = null;
+
 export function getUploadsDir(): string {
+  if (cachedWritableDir) return cachedWritableDir;
   const fromEnv = process.env.UPLOADS_DIR?.trim();
   if (fromEnv) {
     return path.isAbsolute(fromEnv) ? fromEnv : path.join(process.cwd(), fromEnv);
   }
-  return path.join(process.cwd(), 'public', 'uploads');
+  return path.join(process.cwd(), 'data', 'uploads');
 }
 
+async function isWritableDir(dir: string): Promise<boolean> {
+  try {
+    await mkdir(dir, { recursive: true });
+    await access(dir, constants.W_OK);
+    const probe = path.join(dir, `.write-probe-${process.pid}`);
+    await writeFile(probe, 'ok');
+    await unlink(probe).catch(() => undefined);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Resolve e cacheia o primeiro diretório realmente gravável */
 export async function ensureUploadsDir(): Promise<string> {
-  const dir = getUploadsDir();
-  await mkdir(dir, { recursive: true });
-  // Verifica escrita (falha cedo com EACCES no Docker se permissão errada)
-  await access(dir, constants.W_OK);
-  return dir;
+  if (cachedWritableDir) {
+    await mkdir(cachedWritableDir, { recursive: true });
+    return cachedWritableDir;
+  }
+
+  const tried: string[] = [];
+  for (const dir of candidateDirs()) {
+    tried.push(dir);
+    if (await isWritableDir(dir)) {
+      cachedWritableDir = dir;
+      if (process.env.NODE_ENV === 'production') {
+        console.log('[uploads] using directory:', dir);
+      }
+      return dir;
+    }
+  }
+
+  const msg = `Nenhum diretório de upload gravável. Tentados: ${tried.join(', ')}`;
+  console.error('[uploads]', msg);
+  const err = new Error(msg) as NodeJS.ErrnoException;
+  err.code = 'EACCES';
+  throw err;
 }
 
 export function publicUrlForUpload(filename: string): string {
-  // Sempre exposto via /uploads/... (route handler ou estático)
   return `/uploads/${filename.replace(/^\/+/, '')}`;
 }
 
-/** Max bytes (default 8MB) */
 export function maxUploadBytes(): number {
   const n = Number(process.env.UPLOAD_MAX_BYTES || 8 * 1024 * 1024);
   return Number.isFinite(n) && n > 0 ? n : 8 * 1024 * 1024;

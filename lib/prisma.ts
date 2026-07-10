@@ -21,37 +21,66 @@ function mysqlConfigFromUrl(urlStr: string) {
   const database = u.pathname.replace(/^\//, '').split('?')[0];
   const user = decodeURIComponent(u.username || '');
   const password = decodeURIComponent(u.password || '');
+  const connectionLimit = Number(process.env.DB_POOL_SIZE || 10) || 10;
 
-  if (socket) {
-    return {
-      socketPath: socket,
-      user,
-      password,
-      database,
-      connectionLimit: 5,
-    };
-  }
-
-  return {
-    host: u.hostname || '127.0.0.1',
-    port: Number(u.port || 3306),
+  const base = {
     user,
     password,
     database,
-    connectionLimit: 5,
+    connectionLimit,
+    connectTimeout: 30_000,
+    acquireTimeout: 30_000,
+    // evita hang infinito se o host do serviço EasyPanel sumir
+    idleTimeout: 60_000,
   };
+
+  if (socket) {
+    return { ...base, socketPath: socket };
+  }
+
+  return {
+    ...base,
+    host: u.hostname || '127.0.0.1',
+    port: Number(u.port || 3306),
+  };
+}
+
+function logDbTarget(url: string) {
+  try {
+    const u = new URL(cleanEnvUrl(url));
+    console.log('[prisma] DATABASE target', {
+      host: u.hostname,
+      port: u.port || '3306',
+      database: u.pathname.replace(/^\//, '').split('?')[0],
+      user: decodeURIComponent(u.username || ''),
+      socket: u.searchParams.get('socket') || null,
+    });
+  } catch {
+    console.log('[prisma] DATABASE_URL presente mas inválida para parse');
+  }
 }
 
 function createPrismaClient(): PrismaClient {
   const url = cleanEnvUrl(process.env.DATABASE_URL || '');
-  // Em produção MySQL (cPanel) sempre usa adapter JS — engine Rust falha no CageFS
+  if (url) logDbTarget(url);
+
+  /**
+   * Adapter MariaDB (JS): só quando forçado ou socket cPanel.
+   * No EasyPanel/Docker o engine nativo Prisma+MySQL é mais estável
+   * (evita pool timeout active=0 do driver mariadb sob rede Docker).
+   *
+   * Forçar adapter: PRISMA_USE_ADAPTER=1
+   * Forçar nativo:  PRISMA_USE_ADAPTER=0 (default no Docker)
+   */
+  const forceAdapter = process.env.PRISMA_USE_ADAPTER === '1';
+  const forceNative = process.env.PRISMA_USE_ADAPTER === '0';
   const useAdapter =
-    process.env.PRISMA_USE_ADAPTER === '1' ||
-    url.includes('socket=') ||
-    (process.env.NODE_ENV === 'production' && url.startsWith('mysql'));
+    !forceNative &&
+    (forceAdapter || url.includes('socket='));
 
   if (useAdapter && url.startsWith('mysql')) {
     try {
+      console.log('[prisma] using MariaDB JS adapter');
       const adapter = new PrismaMariaDb(mysqlConfigFromUrl(url));
       return new PrismaClient({
         adapter,
@@ -63,7 +92,9 @@ function createPrismaClient(): PrismaClient {
     }
   }
 
+  console.log('[prisma] using native Prisma engine');
   return new PrismaClient({
+    datasources: url ? { db: { url } } : undefined,
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
 }
@@ -72,7 +103,8 @@ let prisma: PrismaClient;
 
 try {
   prisma = globalForPrisma.prisma ?? createPrismaClient();
-  if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+  // reutilizar em dev e prod (evita múltiplos pools no mesmo processo)
+  globalForPrisma.prisma = prisma;
 } catch (e) {
   console.error('Prisma init error:', e);
   prisma = {} as PrismaClient;

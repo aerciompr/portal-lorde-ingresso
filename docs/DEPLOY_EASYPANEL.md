@@ -121,9 +121,13 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 MERCADOPAGO_ACCESS_TOKEN=APP_USR-...
 MERCADOPAGO_PUBLIC_KEY=APP_USR-...
 
-# Força adapter JS (recomendado)
-PRISMA_USE_ADAPTER=1
+# Docker/EasyPanel: engine nativo (NÃO use 1 — causa pool timeout do adapter JS)
+PRISMA_USE_ADAPTER=0
+
+# Uploads (padrão da imagem: /app/data/uploads)
+UPLOADS_DIR=/app/data/uploads
 ```
+
 
 Gere secrets:
 
@@ -227,17 +231,16 @@ npx prisma db push --schema=./prisma/schema.prisma
 
 ## 9. Uploads de imagem (admin)
 
-O admin grava em `/app/public/uploads` (user `nextjs`). O Dockerfile cria a pasta com permissão de escrita.
+Pasta padrão: **`/app/data/uploads`** (não `public/uploads` — volumes EasyPanel em `public` costumam ser root-only → EACCES).
 
-- Sem volume: uploads **somem** no próximo rebuild do container.
-- **Persistir:** no EasyPanel, monte um volume em `/app/public/uploads` (ou defina `UPLOADS_DIR` para o path do volume).
-- Se a API retornar “Sem permissão para gravar uploads”: redeploy com o Dockerfile atualizado.
-
-Env opcionais:
+- A API tenta automaticamente: `UPLOADS_DIR` → `/app/data/uploads` → `public/uploads` → `/tmp/...`
+- **Persistir:** monte volume em **`/app/data/uploads`**
+- No Environment do EasyPanel: `PRISMA_USE_ADAPTER=0` (ou remova a var se estiver `1`)
 
 ```env
-UPLOADS_DIR=/app/public/uploads
+UPLOADS_DIR=/app/data/uploads
 UPLOAD_MAX_BYTES=8388608
+PRISMA_USE_ADAPTER=0
 ```
 
 ---
