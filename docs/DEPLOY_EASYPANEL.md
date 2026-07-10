@@ -220,12 +220,28 @@ https://portal.lordenelson.com.br
 
 No EasyPanel → App → **Deploy** (rebuild a partir do `main`).
 
+### Build mais rápido (Dockerfile otimizado)
+
+| Antes | Depois (aprox.) |
+|-------|------------------|
+| Copia `node_modules` inteiro (~2–3 min export) | **standalone** (só deps usadas) |
+| TypeScript check no VPS (~3 min) | **pulado** no Docker (`DOCKER_BUILD=1`) |
+| 1 CPU no webpack (legado cPanel) | multi-core no Docker |
+| `npm ci` sem cache | cache BuildKit em `/root/.npm` |
+
+**Primeiro** build após a mudança ainda demora (sem cache).  
+**Seguintes** (só mudança de código, sem `package-lock`): bem mais rápidos — `npm ci` e deps ficam em cache.
+
+Se só mudou env: use **Restart** do container, **não** Rebuild.
+
 Se mudou o schema Prisma:
 
 ```bash
 # terminal do container
 npx prisma db push --schema=./prisma/schema.prisma
 ```
+
+> Typecheck em produção Docker é propositadamente desligado. Rode local: `npm run typecheck` antes de push grande.
 
 ---
 

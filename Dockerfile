@@ -1,5 +1,8 @@
-# EasyPanel / Docker — Portal Lorde Nelson Ingressos
-# Build: GitHub → App service no EasyPanel
+# EasyPanel / Docker — build OTIMIZADO
+# - standalone (não copia node_modules inteiro → export bem mais rápido)
+# - DOCKER_BUILD=1: sem tsc no build (~3 min a menos)
+# - cache npm (BuildKit)
+# - deps só reconstroem se package-lock mudar
 
 FROM node:22-bookworm-slim AS base
 WORKDIR /app
@@ -7,57 +10,64 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# ---- deps ----
+# ---- deps (cache por package-lock) ----
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund
 
 # ---- build ----
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+COPY scripts ./scripts
+# resto do código (muda com frequência — depois das deps)
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-# Placeholders só para o build (valores reais vêm do EasyPanel em runtime)
+ENV DOCKER_BUILD=1
 ENV DATABASE_URL="mysql://build:build@127.0.0.1:3306/build"
 ENV TICKET_SECRET="build-placeholder-ticket-secret-min-32-chars"
 ENV NEXT_PUBLIC_APP_URL="https://portal.lordenelson.com.br"
 
-RUN npx prisma generate --schema=./prisma/schema.prisma
-RUN npm run build
+RUN npx prisma generate --schema=./prisma/schema.prisma \
+ && npm run build
 
-# ---- run ----
+# ---- run (imagem enxuta) ----
 FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOST=0.0.0.0
+ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
-# Fora de public/ — evita volume EasyPanel root-only em public/uploads
 ENV UPLOADS_DIR=/app/data/uploads
-# Engine nativo Prisma no Docker (mais estável que adapter JS sob rede interna)
 ENV PRISMA_USE_ADAPTER=0
 
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
 
+# Standalone: app + deps mínimas (sem copiar 500MB de node_modules)
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+# Prisma (client + engines + schema) — db push no shell do container
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/next.config.ts ./next.config.ts
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
+COPY --from=builder /app/scripts/postinstall-prisma.js ./scripts/postinstall-prisma.js
 
 RUN mkdir -p /app/data/uploads /app/public/uploads /tmp/lordenelson-uploads \
   && chown -R nextjs:nodejs /app/data /app/public/uploads \
   && chmod -R 775 /app/data /app/public/uploads \
   && chmod +x /app/scripts/docker-entrypoint.sh
 
-# Entrypoint roda como root só para chown de volumes, depois dropa para nextjs
 USER root
 EXPOSE 3000
 

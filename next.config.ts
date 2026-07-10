@@ -1,48 +1,84 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+/** Build no Docker/EasyPanel — imagem standalone + build mais rápido */
+const isDockerBuild = process.env.DOCKER_BUILD === "1";
+
 const nextConfig: NextConfig = {
   // cPanel/CloudLinux: node_modules é symlink para nodevenv
   outputFileTracingRoot: path.join(__dirname),
+
+  // Docker: só o necessário na imagem (export ~10x menor/mais rápido)
+  ...(isDockerBuild ? { output: "standalone" as const } : {}),
+
+  // Docker: typecheck roda no CI/local (`npm run typecheck`) — no VPS economiza ~3 min
+  ...(isDockerBuild
+    ? {
+        typescript: { ignoreBuildErrors: true },
+        eslint: { ignoreDuringBuilds: true },
+      }
+    : {}),
+
+  // Prisma engines no standalone (file tracing)
+  outputFileTracingIncludes: isDockerBuild
+    ? {
+        "/*": [
+          "./node_modules/.prisma/**/*",
+          "./node_modules/@prisma/client/**/*",
+        ],
+      }
+    : undefined,
+
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: '**',
+        protocol: "https",
+        hostname: "**",
       },
     ],
   },
   async headers() {
     return [
       {
-        source: '/:path*',
+        source: "/:path*",
         headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=(), geolocation=()",
+          },
         ],
       },
     ];
   },
-  // cPanel: sem worker separado (EAGAIN nproc) + 1 CPU
+
   experimental: {
-    cpus: 1,
-    workerThreads: false,
-    webpackBuildWorker: false,
+    // cPanel: 1 CPU (EAGAIN). Docker/VPS: deixa o Next usar os cores disponíveis
+    ...(isDockerBuild
+      ? {}
+      : {
+          cpus: 1,
+          workerThreads: false,
+          webpackBuildWorker: false,
+        }),
     optimizePackageImports: [
-      'lucide-react',
-      'recharts',
-      '@tiptap/react',
-      '@tiptap/starter-kit',
-      'sonner',
-      'react-hook-form',
+      "lucide-react",
+      "recharts",
+      "@tiptap/react",
+      "@tiptap/starter-kit",
+      "sonner",
+      "react-hook-form",
     ],
   },
-  webpack: (config) => {
-    config.parallelism = 1;
-    return config;
-  },
+
+  webpack: isDockerBuild
+    ? undefined
+    : (config) => {
+        config.parallelism = 1;
+        return config;
+      },
 };
 
 export default nextConfig;
