@@ -225,7 +225,24 @@ npx prisma db push --schema=./prisma/schema.prisma
 
 ---
 
-## 9. Problemas comuns
+## 9. Uploads de imagem (admin)
+
+O admin grava em `/app/public/uploads` (user `nextjs`). O Dockerfile cria a pasta com permissão de escrita.
+
+- Sem volume: uploads **somem** no próximo rebuild do container.
+- **Persistir:** no EasyPanel, monte um volume em `/app/public/uploads` (ou defina `UPLOADS_DIR` para o path do volume).
+- Se a API retornar “Sem permissão para gravar uploads”: redeploy com o Dockerfile atualizado.
+
+Env opcionais:
+
+```env
+UPLOADS_DIR=/app/public/uploads
+UPLOAD_MAX_BYTES=8388608
+```
+
+---
+
+## 10. Problemas comuns
 
 | Problema | Solução |
 |----------|---------|
@@ -234,10 +251,12 @@ npx prisma db push --schema=./prisma/schema.prisma
 | DB connection refused | Host da URL = nome do serviço MySQL (`mysql`), não `localhost` |
 | SSL não emite | DNS ainda não aponta para o VPS; espere propagar |
 | Incomplete response | Container crash — ver logs; env `DATABASE_URL` / `TICKET_SECRET` |
+| Upload imagem falha (EACCES) | Redeploy Dockerfile com `chown` em `public/uploads`; volume gravável |
+
 
 ---
 
-## 10. Diferença cPanel × EasyPanel
+## 11. Diferença cPanel × EasyPanel
 
 | | cPanel | EasyPanel |
 |--|--------|-----------|

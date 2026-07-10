@@ -39,9 +39,15 @@ async function loadImageForPdf(
       contentType = res.headers.get('content-type') || '';
       bytes = new Uint8Array(await res.arrayBuffer());
     } else {
-      // Path local: /uploads/foo.jpg → public/uploads/foo.jpg
+      // Path local: /uploads/foo.jpg → UPLOADS_DIR ou public/uploads
       const rel = raw.replace(/^\//, '').replace(/\.\./g, '');
-      const filePath = path.join(process.cwd(), 'public', rel);
+      let filePath: string;
+      if (rel.startsWith('uploads/')) {
+        const { getUploadsDir } = await import('@/lib/uploads');
+        filePath = path.join(getUploadsDir(), rel.slice('uploads/'.length));
+      } else {
+        filePath = path.join(process.cwd(), 'public', rel);
+      }
       bytes = new Uint8Array(await readFile(filePath));
       const ext = path.extname(filePath).toLowerCase();
       if (ext === '.png') contentType = 'image/png';

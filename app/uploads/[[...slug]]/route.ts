@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { getUploadsDir } from '@/lib/uploads';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ slug?: string[] }> }
 ) {
   const { slug } = await params;
@@ -12,14 +16,22 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // Build the file path inside public/uploads
-  const filePath = path.join(process.cwd(), 'public', 'uploads', ...slug);
+  // Bloqueia path traversal
+  if (slug.some((s) => s === '..' || s.includes('\0') || s.includes('/') || s.includes('\\'))) {
+    return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+  }
+
+  const filePath = path.join(getUploadsDir(), ...slug);
+  const resolved = path.resolve(filePath);
+  const root = path.resolve(getUploadsDir());
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+    return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+  }
 
   try {
-    const fileBuffer = await readFile(filePath);
+    const fileBuffer = await readFile(resolved);
 
-    // Determine content type based on extension
-    const ext = path.extname(filePath).toLowerCase();
+    const ext = path.extname(resolved).toLowerCase();
     let contentType = 'application/octet-stream';
     if (ext === '.png') contentType = 'image/png';
     else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
@@ -35,8 +47,7 @@ export async function GET(
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
-  } catch (error) {
-    // File not found or other error
+  } catch {
     return NextResponse.json({ error: 'Image not found' }, { status: 404 });
   }
 }

@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdmin } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile } from 'fs/promises';
 import path from 'path';
+import {
+  ensureUploadsDir,
+  maxUploadBytes,
+  publicUrlForUpload,
+} from '@/lib/uploads';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   if (!(await isAdmin())) {
@@ -16,30 +24,69 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nenhum arquivo enviado' }, { status: 400 });
     }
 
-    if (!file.type.startsWith('image/')) {
+    const mime = (file.type || '').toLowerCase();
+    if (!mime.startsWith('image/')) {
       return NextResponse.json({ error: 'Apenas imagens são permitidas' }, { status: 400 });
+    }
+
+    const max = maxUploadBytes();
+    if (typeof file.size === 'number' && file.size > max) {
+      return NextResponse.json(
+        { error: `Arquivo muito grande (máx. ${Math.round(max / 1024 / 1024)} MB)` },
+        { status: 400 }
+      );
     }
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    if (buffer.length > max) {
+      return NextResponse.json(
+        { error: `Arquivo muito grande (máx. ${Math.round(max / 1024 / 1024)} MB)` },
+        { status: 400 }
+      );
+    }
 
-    const uploadDir = path.join(process.cwd(), 'public/uploads');
-    await mkdir(uploadDir, { recursive: true });
+    const uploadDir = await ensureUploadsDir();
 
-    // Sanitize filename and add timestamp
-    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const safeName = (file.name || 'image')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .slice(0, 120);
     const filename = `${Date.now()}-${safeName}`;
     const filepath = path.join(uploadDir, filename);
 
     await writeFile(filepath, buffer);
 
-    return NextResponse.json({ 
-      success: true, 
-      url: `/uploads/${filename}`,
-      originalName: file.name 
+    return NextResponse.json({
+      success: true,
+      url: publicUrlForUpload(filename),
+      originalName: file.name,
     });
   } catch (error) {
-    console.error('Upload error:', error);
-    return NextResponse.json({ error: 'Falha no upload' }, { status: 500 });
+    const err = error as NodeJS.ErrnoException;
+    console.error('Upload error:', err?.code || err?.name, err?.message, err);
+
+    if (err?.code === 'EACCES' || err?.code === 'EPERM') {
+      return NextResponse.json(
+        {
+          error:
+            'Sem permissão para gravar uploads no servidor. Redeploy com Dockerfile atualizado ou monte volume gravável em /app/public/uploads.',
+          code: err.code,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (err?.code === 'ENOSPC') {
+      return NextResponse.json({ error: 'Disco cheio no servidor', code: err.code }, { status: 500 });
+    }
+
+    return NextResponse.json(
+      {
+        error: 'Falha no upload',
+        code: err?.code || 'UPLOAD_FAILED',
+        detail: process.env.NODE_ENV !== 'production' ? err?.message : undefined,
+      },
+      { status: 500 }
+    );
   }
 }

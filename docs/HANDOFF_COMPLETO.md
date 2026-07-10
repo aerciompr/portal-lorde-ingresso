@@ -70,6 +70,7 @@ Leia também: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`DEPLOY_EASYPANEL.md`](./
 | `EACCES unlink .prisma/client` após db push | User `nextjs` read-only em node_modules | Schema já sync; ignorar ou regenerar como root |
 | `tsx: not found` no seed | tsx não está nas deps da imagem prod | `npx --yes tsx ...` ou admin UI; seed apaga dados |
 | Site “não abre” no PC do dev | DNS local cache IP cPanel antigo | `ipconfig /flushdns`; DNS 8.8.8.8; HTTPS no IP novo OK |
+| Upload de imagem falha no admin | User `nextjs` sem write em `public/uploads` (EACCES) | Dockerfile com `chown` em `/app/public/uploads`; volume opcional |
 | `Incomplete response` cPanel | `HOSTNAME` do OS no bind | `server.js` usa `HOST=0.0.0.0` |
 | Password MySQL com `@` na URL | Parsing URL | Encode `%40` |
 | DATABASE_URL com aspas do cPanel | Painel grava quotes | `cleanEnvUrl` em `lib/prisma.ts` |

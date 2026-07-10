@@ -35,6 +35,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOST=0.0.0.0
 ENV PORT=3000
+# Pasta de uploads (sobrescreva com volume EasyPanel se quiser persistir entre deploys)
+ENV UPLOADS_DIR=/app/public/uploads
 
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
@@ -47,6 +49,11 @@ COPY --from=builder /app/server.js ./server.js
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/next.config.ts ./next.config.ts
+
+# Upload de imagens no admin: user nextjs precisa gravar aqui (senão EACCES)
+RUN mkdir -p /app/public/uploads \
+  && chown -R nextjs:nodejs /app/public/uploads \
+  && chmod 775 /app/public/uploads
 
 USER nextjs
 EXPOSE 3000
