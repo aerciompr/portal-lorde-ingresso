@@ -15,8 +15,23 @@ if (!fs.existsSync(schema)) {
 }
 
 console.log('[postinstall-prisma] schema:', schema);
-execSync(`npx prisma generate --schema="${schema}"`, {
-  stdio: 'inherit',
-  cwd: root,
-  env: process.env,
-});
+// Em cPanel compartilhado, spawn do engine pode falhar com EAGAIN — tenta 2x
+let lastErr;
+for (let i = 0; i < 2; i++) {
+  try {
+    execSync(`npx prisma generate --schema="${schema}"`, {
+      stdio: 'inherit',
+      cwd: root,
+      env: {
+        ...process.env,
+        // reduz spawn paralelo no host compartilhado
+        PRISMA_DISABLE_WARNINGS: '1',
+      },
+    });
+    return;
+  } catch (e) {
+    lastErr = e;
+    console.warn(`[postinstall-prisma] tentativa ${i + 1} falhou, retry...`);
+  }
+}
+throw lastErr;
