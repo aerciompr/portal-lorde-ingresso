@@ -5,13 +5,18 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+/** Remove aspas que o cPanel às vezes grava no valor da env */
+function cleanEnvUrl(raw: string): string {
+  return (raw || '').trim().replace(/^['"]+|['"]+$/g, '');
+}
+
 /**
- * Converte DATABASE_URL MySQL para config do driver mariadb/mysql2.
+ * Converte DATABASE_URL MySQL para config do driver mariadb.
  * Suporta socket do cPanel: ?socket=/tmp/mysql.sock
- * (O engine Rust do Prisma falha no CageFS; o adapter JS funciona.)
  */
 function mysqlConfigFromUrl(urlStr: string) {
-  const u = new URL(urlStr);
+  const cleaned = cleanEnvUrl(urlStr);
+  const u = new URL(cleaned);
   const socket = u.searchParams.get('socket') || undefined;
   const database = u.pathname.replace(/^\//, '').split('?')[0];
   const user = decodeURIComponent(u.username || '');
@@ -38,18 +43,24 @@ function mysqlConfigFromUrl(urlStr: string) {
 }
 
 function createPrismaClient(): PrismaClient {
-  const url = process.env.DATABASE_URL || '';
+  const url = cleanEnvUrl(process.env.DATABASE_URL || '');
+  // Em produção MySQL (cPanel) sempre usa adapter JS — engine Rust falha no CageFS
   const useAdapter =
     process.env.PRISMA_USE_ADAPTER === '1' ||
     url.includes('socket=') ||
-    process.env.NODE_ENV === 'production';
+    (process.env.NODE_ENV === 'production' && url.startsWith('mysql'));
 
   if (useAdapter && url.startsWith('mysql')) {
-    const adapter = new PrismaMariaDb(mysqlConfigFromUrl(url));
-    return new PrismaClient({
-      adapter,
-      log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-    });
+    try {
+      const adapter = new PrismaMariaDb(mysqlConfigFromUrl(url));
+      return new PrismaClient({
+        adapter,
+        log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+      });
+    } catch (e) {
+      console.error('[prisma] falha ao criar adapter MariaDB:', e);
+      throw e;
+    }
   }
 
   return new PrismaClient({

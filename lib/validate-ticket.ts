@@ -1,12 +1,17 @@
 import crypto from 'crypto';
 
-const TICKET_SECRET = process.env.TICKET_SECRET!;
-if (!TICKET_SECRET) {
-  throw new Error('TICKET_SECRET is required');
+function getTicketSecret(): string {
+  const s = process.env.TICKET_SECRET || '';
+  if (!s) {
+    // Não derruba o boot do Next no cPanel; falha só ao assinar/verificar
+    console.error('[validate-ticket] TICKET_SECRET não configurado');
+    return 'missing-ticket-secret-configure-env';
+  }
+  return s;
 }
 
 export function signCode(code: string): string {
-  const hmac = crypto.createHmac('sha256', TICKET_SECRET);
+  const hmac = crypto.createHmac('sha256', getTicketSecret());
   hmac.update(code);
   return `${code}.${hmac.digest('hex').slice(0, 12)}`;
 }
