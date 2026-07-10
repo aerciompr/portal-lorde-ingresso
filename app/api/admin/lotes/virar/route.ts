@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdmin } from '@/lib/auth';
-import { activateNewLote, performAutomaticVirada } from '@/lib/lote-virada';
+import { activateNewLote } from '@/lib/lote-virada';
 
 /**
  * Virada manual: cria novo lote, lote anterior fica esgotado + inativo.
+ * (virada automática: importar de @/lib/lote-virada — NÃO reexportar daqui)
  */
 export async function POST(req: NextRequest) {
   if (!(await isAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,6 +33,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 }
-
-/** Reexport para imports legados (finalize-paid-order etc.) */
-export { performAutomaticVirada };
