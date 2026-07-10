@@ -6,7 +6,8 @@ Substituição completa do site lento WordPress + WooCommerce (www.lordenelson.c
 
 | Documento | Conteúdo |
 |-----------|----------|
-| [`docs/DEPLOY_CPANEL.md`](./docs/DEPLOY_CPANEL.md) | **cPanel + `portal.lordenelson.com.br`** (passo a passo) |
+| [`docs/DEPLOY_EASYPANEL.md`](./docs/DEPLOY_EASYPANEL.md) | **EasyPanel no VPS** (recomendado: `portal.lordenelson.com.br`) |
+| [`docs/DEPLOY_CPANEL.md`](./docs/DEPLOY_CPANEL.md) | cPanel (legado / compartilhado) |
 | [`docs/DEPLOY_SUBDOMAIN.md`](./docs/DEPLOY_SUBDOMAIN.md) | Deploy HTTPS em subdomínio (Vercel ou VPS) |
 | [`docs/GO_LIVE_CHECKLIST.md`](./docs/GO_LIVE_CHECKLIST.md) | Checklist go-live |
 | [`docs/SESSION_HANDOFF.md`](./docs/SESSION_HANDOFF.md) | Resumo da sessão + arquitetura atual |
