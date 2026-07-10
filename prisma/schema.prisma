@@ -1,13 +1,11 @@
 // Lorde Nelson Ingressos - Modern Ticket Portal
-// Produção (cPanel): provider = "mysql"
-// Dev local: use "sqlite" e DATABASE_URL="file:./prisma/dev.db"
+// Banco: MySQL (cPanel / produção)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  // PRODUÇÃO cPanel: mysql | DEV local: sqlite
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
