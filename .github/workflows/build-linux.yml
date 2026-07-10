@@ -1,0 +1,45 @@
+# Build em Linux (Ubuntu) — use o artifact no cPanel se o build no host der EAGAIN
+name: Build production (Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate --schema=./prisma/schema.prisma
+        env:
+          # generate não precisa de DB real
+          DATABASE_URL: mysql://user:pass@127.0.0.1:3306/dummy
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NEXT_TELEMETRY_DISABLED: '1'
+          DATABASE_URL: mysql://user:pass@127.0.0.1:3306/dummy
+          NEXT_PUBLIC_APP_URL: https://portal.lordenelson.com.br
+          TICKET_SECRET: build-placeholder-ticket-secret-32chars
+
+      - name: Pack .next
+        run: tar -czf next-build.tgz .next
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: next-build.tgz
+          retention-days: 7

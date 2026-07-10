@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
+  // cPanel/CloudLinux: node_modules é symlink para nodevenv
+  outputFileTracingRoot: path.join(__dirname),
   images: {
     remotePatterns: [
       {
@@ -9,7 +12,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Headers de segurança básicos (subdomínio / produção)
   async headers() {
     return [
       {
@@ -23,10 +25,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Optimize imports + cPanel: 1 CPU (evita EAGAIN em spawn de workers)
+  // cPanel: sem worker separado (EAGAIN nproc) + 1 CPU
   experimental: {
     cpus: 1,
     workerThreads: false,
+    webpackBuildWorker: false,
     optimizePackageImports: [
       'lucide-react',
       'recharts',
@@ -35,6 +38,10 @@ const nextConfig: NextConfig = {
       'sonner',
       'react-hook-form',
     ],
+  },
+  webpack: (config) => {
+    config.parallelism = 1;
+    return config;
   },
 };
 
