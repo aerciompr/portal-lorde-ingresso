@@ -1,13 +1,18 @@
 # Configuração para Produção - Lorde Nelson Ingressos
 
-**Atenção:** NUNCA commite chaves reais ou senhas. Use variáveis de ambiente no host (Vercel / VPS).
+**Atenção:** NUNCA commite chaves reais ou senhas. Use variáveis de ambiente no host (EasyPanel / VPS).
 
-**Deploy em subdomínio:** veja o guia completo em [`docs/DEPLOY_SUBDOMAIN.md`](./docs/DEPLOY_SUBDOMAIN.md).  
-**Handoff da sessão:** [`docs/SESSION_HANDOFF.md`](./docs/SESSION_HANDOFF.md).  
-**Checklist go-live:** [`docs/GO_LIVE_CHECKLIST.md`](./docs/GO_LIVE_CHECKLIST.md).  
-**Template de env:** [`.env.example`](./.env.example).
+| Documento | Uso |
+|-----------|-----|
+| [`docs/HANDOFF_COMPLETO.md`](./docs/HANDOFF_COMPLETO.md) | **Estado real + continuidade IA/DEV** |
+| [`docs/DEPLOY_EASYPANEL.md`](./docs/DEPLOY_EASYPANEL.md) | **Deploy oficial** (VPS EasyPanel) |
+| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Arquitetura e fluxos |
+| [`docs/GO_LIVE_CHECKLIST.md`](./docs/GO_LIVE_CHECKLIST.md) | Checklist go-live |
+| [`docs/SESSION_HANDOFF.md`](./docs/SESSION_HANDOFF.md) | Handoff de features |
+| [`.env.example`](./.env.example) | Template de env |
 
-> Dev local usa SQLite (`provider = "sqlite"`). Em produção altere o Prisma para `mysql` ou `postgresql` e rode `prisma db push` no banco remoto.
+> **Banco atual:** Prisma `provider = "mysql"`. Em EasyPanel o host de `DATABASE_URL` é o **nome do serviço MySQL**, não `localhost`.  
+> Domínio produção: `https://portal.lordenelson.com.br` · IP VPS: `151.243.33.241`.
 
 ## 1. Banco de Dados MySQL (já feito localmente)
 

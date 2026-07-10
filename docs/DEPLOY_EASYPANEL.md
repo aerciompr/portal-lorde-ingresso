@@ -4,6 +4,8 @@ VPS: `151.243.33.241`
 Repo: https://github.com/aerciompr/portal-lorde-ingresso  
 Painel: EasyPanel (Docker)
 
+**Continuidade / handoff:** [`HANDOFF_COMPLETO.md`](./HANDOFF_COMPLETO.md) · índice [`README.md`](./README.md)
+
 ---
 
 ## Visão geral
@@ -155,6 +157,16 @@ node scripts/db-push-cpanel.js
 ```
 
 (com `DATABASE_URL` já no ambiente do container)
+
+Aviso `EACCES unlink .../.prisma/client` pode aparecer (user `nextjs` sem write nos files gerados no build). Se a mensagem foi **database is now in sync**, o schema está OK.
+
+**Seed (opcional):** a imagem não inclui `tsx`. Preferir criar eventos no **Admin**. Se precisar:
+
+```bash
+npx --yes tsx prisma/seed.ts
+```
+
+⚠️ O seed **apaga** tickets, orders e events.
 
 ---
 

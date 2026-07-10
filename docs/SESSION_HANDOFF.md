@@ -1,143 +1,119 @@
-# Handoff da sessão de desenvolvimento — Lorde Nelson Ingressos
+# Handoff da sessão de features — Lorde Nelson Ingressos
 
 **Projeto oficial:** `C:\Users\aerciompr\projects\lordenelson-ingressos`  
-**Data do handoff:** 2026-07-09  
-**Objetivo de deploy:** subdomínio HTTPS (ex.: `ingressos.lordenelson.com.br`)
+**Data original:** 2026-07-09  
+**Atualização deploy:** 2026-07-10  
 
-Este arquivo consolida o trabalho da sessão de desenvolvimento (contexto que estava em workspace/system32 + projeto local) para o repositório oficial.
+> **Para continuidade completa (IA/DEV + produção EasyPanel), use:**  
+> **[`HANDOFF_COMPLETO.md`](./HANDOFF_COMPLETO.md)** e **[`ARCHITECTURE.md`](./ARCHITECTURE.md)**.
+
+Este arquivo mantém o resumo da sessão de **features** (pagamentos, lotes, admin). O estado de **infra** está no handoff completo.
 
 ---
 
-## 1. O que o sistema faz hoje
+## 1. O que o sistema faz
 
 Portal Next.js 16 de venda de ingressos do Lorde Nelson Rest Pub:
 
 | Área | Rotas / recursos |
 |------|------------------|
 | Público | `/`, `/eventos`, `/evento/[slug]`, `/checkout/[orderId]`, `/ingressos` |
-| Admin | `/admin`, eventos, pedidos, **ferramentas**, **layout ingresso**, relatórios, configurações |
+| Admin | `/admin`, eventos, pedidos, ferramentas, layout ingresso, relatórios, configurações |
 | Check-in | `/checkin` (staff, cookie admin) |
 | Pagamentos | Stripe (cartão + Connect OAuth), Mercado Pago PIX |
-| Automação | Webhooks + polling PIX + crons de limpeza/sync + virada de lote |
+| Automação | Webhooks + polling PIX + crons limpeza/sync + virada de lote |
+
+**URL produção:** `https://portal.lordenelson.com.br`  
+**Repo:** https://github.com/aerciompr/portal-lorde-ingresso  
 
 ---
 
-## 2. Entregas principais desta sessão (resumo)
+## 2. Entregas principais (features)
 
 ### Pagamentos & automação
-- PIX MP com payload correto (`phone.area_code` / `number`), guards de chaves e HTTPS
-- URL pública configurável no admin (`public_url`) para webhooks/ngrok
-- `finalizePaidOrder`: paid → QR assinado → e-mail → virada de lote
-- Webhooks Stripe/MP reforçados; polling `/api/orders/[id]/payment-status` (3s no checkout)
-- Crons: `cleanup-pending` (15 min), `sync-payments` (5 min) em `vercel.json`
-- Virada automática de lote ao esgotar; virada manual marca lote anterior **ESGOTADO**
+- PIX MP com payload correto (`phone.area_code` / `number`), guards de chaves e HTTPS  
+- URL pública configurável no admin (`public_url`) para webhooks/ngrok  
+- `finalizePaidOrder`: paid → QR assinado → e-mail → virada de lote  
+- Webhooks Stripe/MP; polling `/api/orders/[id]/payment-status` (~3s no checkout)  
+- Crons: `cleanup-pending`, `sync-payments`  
+- Virada automática de lote ao esgotar; manual marca anterior **ESGOTADO**  
 
 ### Admin / ops
-- Ferramentas: cortesia, pedido manual, limpeza de pending
-- Layout do ingresso + download PDF de exemplo e PDF por pedido pago
-- Imagem do evento no PDF (PNG/JPG)
-- Delete seguro de lotes/tipos (`/api/admin/lotes/delete`) com bloqueio se houver vendas
-- UI Eventos: botões reorganizados; colunas Capacidade / Vendidos / Estoque
+- Ferramentas: cortesia, pedido manual, limpeza de pending  
+- Layout do ingresso + PDF preview  
+- Delete seguro de lotes (`/api/admin/lotes/delete`) se sem vendas  
+- UI eventos: capacidade / vendidos / estoque  
 
 ### UX público
-- Editor rich text (Tiptap) + CSS `.event-description` (listas no site)
-- Moeda BRL (`formatPrice`, `parseBRLToCents`)
-- Sem contagem de “disponíveis” no público
-- Compra por **nome de lote** + histórico esgotado (não “Ingresso Padrão”)
-- Aviso legal padrão no fim da descrição (+ campo opcional `footerNotice`)
+- Rich text (Tiptap) + `.event-description`  
+- BRL (`formatPrice`, `parseBRLToCents`)  
+- Compra por **nome de lote**  
+- Aviso legal (`footerNotice` / default)  
 
-### Infra / qualidade
-- Hydration admin layout corrigido
-- `export const dynamic = 'force-dynamic'` em páginas com Recharts
-- Cache de settings com bust no save admin
+### Infra (2026-07-10)
+- Schema Prisma **MySQL**  
+- Dockerfile Node 22 + EasyPanel  
+- cPanel abandonado (limites shared host)  
+- `server.js` bind `0.0.0.0` (sem `HOSTNAME` do OS)  
 
 ---
 
-## 3. Arquivos-chave novos / críticos
+## 3. Arquivos-chave
 
-```
+```text
 lib/finalize-paid-order.ts
 lib/lote-virada.ts
 lib/order-stock.ts
 lib/generate-ticket.ts
+lib/prisma.ts
 app/api/cron/cleanup-pending/route.ts
 app/api/cron/sync-payments/route.ts
 app/api/orders/[orderId]/payment-status/route.ts
 app/api/admin/orders/manual/route.ts
 app/api/admin/lotes/delete/route.ts
-app/api/admin/ticket-preview-pdf/route.ts
-app/admin/ferramentas/page.tsx
-app/admin/ingresso-preview/page.tsx
-vercel.json
-.env.example
-docs/DEPLOY_SUBDOMAIN.md
+Dockerfile
+server.js
+nixpacks.toml
+docs/HANDOFF_COMPLETO.md
+docs/DEPLOY_EASYPANEL.md
 ```
 
 ---
 
-## 4. Variáveis obrigatórias em produção
+## 4. Variáveis de produção
 
-Ver `.env.example` e `docs/DEPLOY_SUBDOMAIN.md`.
+Ver `.env.example` e `DEPLOY_EASYPANEL.md`.
 
-Mínimo:
-- `NEXT_PUBLIC_APP_URL` = HTTPS do subdomínio
-- `DATABASE_URL` = MySQL/Postgres de produção
-- `TICKET_SECRET`, `ADMIN_PASSWORD`, `CRON_SECRET`
-- `RESEND_API_KEY` (e-mail)
-- Chaves Stripe e/ou MP **live**
-- Webhooks apontando para o subdomínio
+Mínimo: `NEXT_PUBLIC_APP_URL`, `DATABASE_URL`, `TICKET_SECRET`, `ADMIN_*`, `CRON_SECRET`, Resend, Stripe e/ou MP live, webhooks no domínio do portal.
 
 ---
 
-## 5. Banco de dados
+## 5. Banco
 
-- **Dev local:** Prisma `provider = "sqlite"` + `file:./prisma/dev.db`
-- **Produção:** alterar `prisma/schema.prisma` para `provider = "mysql"` (ou postgres), apontar `DATABASE_URL`, rodar `npx prisma db push` ou migrate
-
-Campos relevantes recentes:
-- `Event.footerNotice`
-- Settings: `public_url`, `pending_order_ttl_minutes`
+- **Produção / schema atual:** `provider = "mysql"`  
+- Sync: `npx prisma db push --schema=./prisma/schema.prisma`  
+- Campos relevantes: `Event.footerNotice`, lotes, `Setting.public_url`, fees  
 
 ---
 
-## 6. Pós-deploy checklist (manual)
+## 6. Limitações / próximos
 
-1. [ ] DNS subdomínio → Vercel/host
-2. [ ] Env vars no painel do host
-3. [ ] `prisma generate` + `db push` no banco de prod
-4. [ ] Webhook MP: `https://SUB/api/webhook/mercadopago`
-5. [ ] Webhook Stripe: `https://SUB/api/webhook/stripe` + `STRIPE_WEBHOOK_SECRET`
-6. [ ] Admin → Gateways: chaves + URL pública = subdomínio
-7. [ ] Crons Vercel ativos (plano com Cron) ou agendador externo + `CRON_SECRET`
-8. [ ] Compra teste PIX + cartão valor mínimo
-9. [ ] E-mail Resend com domínio verificado
-10. [ ] Trocar senha admin padrão
+- Crons e webhooks live a validar em EasyPanel  
+- Seed precisa de `tsx` (não na imagem) — preferir admin  
+- WebP no PDF: preferir JPG/PNG  
+- Uploads locais no container são efêmeros multi-réplica  
+- OAuth multi-seller MP não implementado  
 
 ---
 
-## 7. Limitações conhecidas / próximos passos opcionais
-
-- OAuth “Conectar conta” Mercado Pago (multi-seller) **não** implementado — só chaves + webhook
-- WebP no PDF do ingresso pode falhar (preferir JPG/PNG)
-- Upload de imagens em serverless (Vercel): `/public/uploads` é efêmero — considerar S3/Blob em prod
-- README ainda menciona simulação antiga em partes — ver docs de deploy para fluxo real
-
----
-
-## 8. Comandos úteis
+## 7. Comandos
 
 ```bash
 cd C:\Users\aerciompr\projects\lordenelson-ingressos
 npm install
-npx prisma generate
-npx prisma db push
+npx prisma generate --schema=./prisma/schema.prisma
+npx prisma db push --schema=./prisma/schema.prisma
 npm run build
-npm run start
-# ou: npm run dev
-```
-
-Testar cron local:
-```bash
-curl "http://localhost:3000/api/cron/cleanup-pending"
-curl "http://localhost:3000/api/cron/sync-payments"
+npm start
+# dev: npm run dev
 ```

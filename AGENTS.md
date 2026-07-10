@@ -1,102 +1,85 @@
-# AGENTS.md
+# AGENTS.md — Lorde Nelson Ingressos
 
-# Projeto: Lorde Nelson Ingressos (portal de vendas)
+Instruções para **agentes de IA** e devs que trabalham neste repositório.
 
-**Caminho oficial:** `C:\Users\aerciompr\projects\lordenelson-ingressos`  
-**Deploy:** ver `docs/DEPLOY_SUBDOMAIN.md` e `docs/SESSION_HANDOFF.md`.
+## Identidade
 
-# Regras de Comportamento
-- O idioma principal de comunicação é o Português Brasileiro (pt-BR).
-- Responda sempre em português, mesmo que eu digite em inglês ou que as ferramentas internas retornem mensagens em inglês.
-- Se houver dúvidas, peça esclarecimentos em português.
-- Não commitar `.env`, bancos `*.db` nem segredos.
-- Em produção, `NEXT_PUBLIC_APP_URL` deve ser HTTPS do subdomínio; crons e webhooks usam essa base.
+| | |
+|--|--|
+| Projeto | Portal de ingressos Lorde Nelson |
+| Path oficial | `C:\Users\aerciompr\projects\lordenelson-ingressos` |
+| GitHub | `aerciompr/portal-lorde-ingresso` · branch `main` |
+| Produção | `https://portal.lordenelson.com.br` · EasyPanel · VPS `151.243.33.241` |
 
-## Mission
+Se o workspace do IDE abrir em `C:\Windows\System32` ou outro path, **sempre editar o path oficial acima**.
 
-This repository is a community starter kit and skill pack for xAI Grok Build. Optimize for practical utility, source accuracy, reusable `.grok/skills`, and clear setup for developers trying Grok Build.
+## Documentação obrigatória antes de mudanças grandes
 
-## Operating Principles
+1. [`docs/HANDOFF_COMPLETO.md`](./docs/HANDOFF_COMPLETO.md) — estado real e armadilhas  
+2. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — fluxos e modelos  
+3. [`docs/DEPLOY_EASYPANEL.md`](./docs/DEPLOY_EASYPANEL.md) — se tocar deploy  
+4. [`docs/README.md`](./docs/README.md) — índice  
 
-- Read the relevant docs before editing: `README.md`, `CONTRIBUTING.md`, and files under `docs/`.
-- Keep claims about Grok Build grounded in official xAI sources or clearly label them as community observations.
-- Prefer small, reviewable edits with clear diffs.
-- Preserve the repo's positioning: `awesome list + starter kit + skill library + community registry`.
-- Use concise English for public repo content unless a file is explicitly localized.
-- Do not add affiliate links, tracking links, or overstated claims.
-- Do not imply this project is official xAI software.
+## Idioma
 
-## Source Policy
+- Comunicação com o usuário: **português brasileiro (pt-BR)**  
+- Código e identificadores: inglês OK; UI e mensagens de API em pt-BR  
 
-For fast-moving Grok Build information:
+## Regras de segurança
 
-- Verify official facts against `https://x.ai/cli` or `https://docs.x.ai/build/`.
-- Community projects must be linked to their source repo or public demo.
-- If a feature is reported by users but not in official docs, mark it as "community reported" or "experimental".
-- Include dates when describing launch timing or beta availability.
+- **Não** commitar `.env`, chaves, tokens, `*.db`, dumps, `dist-cpanel/`  
+- Não logar secrets em docs ou commits  
+- Não expor `ADMIN_PASSWORD` / tokens em issues ou prints commitados  
 
-## File Conventions
+## Stack (não regredir)
 
-- `README.md` is the front page and should stay skimmable.
-- `docs/analysis.md` holds longer market and feature analysis.
-- `docs/best-practices.md` holds durable workflow advice.
-- `docs/comparison.md` holds deeper tool comparisons.
-- `.grok/skills/<name>/SKILL.md` files should be narrow, reusable, safe, and Grok-native.
-- `templates/` should contain copy-pasteable project files.
-- `examples/` should contain prompts and usage patterns.
+- Next.js 16 App Router + TypeScript  
+- Prisma **MySQL** (`provider = "mysql"`) — não voltar SQLite em prod sem decisão explícita  
+- Node **≥ 20.9** (Docker: 22)  
+- Entrada de processo: `server.js` com `HOST=0.0.0.0`  
+- Deploy preferido: **Dockerfile** no EasyPanel (evitar Nixpacks Node 18)  
 
-## Ready-to-Use Skills
+## Arquivos sensíveis (ler antes de editar)
 
-The repo currently ships these core skills:
+- `lib/finalize-paid-order.ts` — pagamento confirmado  
+- `lib/lote-virada.ts` — lotes  
+- `lib/prisma.ts` — conexão DB  
+- `lib/settings.ts` — env + DB settings  
+- `Dockerfile` / `server.js` — produção  
+- `prisma/schema.prisma` — exige `db push` em prod após mudança  
 
-| Skill | Purpose |
-| --- | --- |
-| `repo-health-check` | First-pass repo audit and smallest safe PR selection. |
-| `agentic-code-review` | Senior review of diffs and PRs. |
-| `python-expert` | Python, FastAPI/Django/Flask, pytest, typing, async, packaging. |
-| `refactor-master` | Behavior-preserving refactors with characterization tests. |
-| `git-github-flow` | Commits, PRs, review response, changelogs, merge readiness. |
-| `research-agent` | Web/X research and source-backed docs updates. |
-| `tdd-test-engineer` | Test-first fixes, regression tests, flaky test debugging. |
-| `architecture-review` | Modular/clean/hexagonal architecture and ADR planning. |
-| `security-audit` | Auth, secrets, injection, dependencies, hook safety. |
-| `performance-optimizer` | Latency, queries, frontend perf, profiling, caching. |
-| `frontend-ux-engineer` | Product UI, accessibility, responsive states, visual QA. |
-| `nextjs-fullstack` | Next.js App Router, RSC, server actions, caching, auth. |
-| `hooksmith` | Safe Grok Build hook design and review. |
+## Workflow preferido
 
-When editing skills, keep them portable. They should work when copied into another repo's `.grok/skills/` directory.
+1. Ler handoff + docs relevantes  
+2. Mudanças pequenas e verificáveis  
+3. `npm run typecheck` / `npm run build` quando o escopo afetar build  
+4. Commit claro; push `main` se o usuário pedir  
+5. Lembrar: EasyPanel precisa **Redeploy**; schema → `npx prisma db push --schema=./prisma/schema.prisma` no container  
 
-## Quality Bar
+## O que não reabrir sem pedido explícito
 
-Before finishing changes:
+- Deploy em **cPanel shared** (histórico de EAGAIN / CageFS)  
+- Reescrita completa da stack  
+- Trocar MySQL por outro DB sem migração planejada  
 
-- Check Markdown links you touched.
-- Make sure tables render correctly.
-- Keep headings stable unless there is a clear reason to rename them.
-- Remove dead links and stale claims.
-- Add a short note to PRs explaining whether sources are official, community, or inferred.
+## Skills Grok (se disponíveis em `.grok/skills/`)
 
-## Skill Authoring Rules
+| Skill | Quando |
+|-------|--------|
+| `nextjs-fullstack` | Rotas App Router, API, auth, cache |
+| `frontend-ux-engineer` | UI, formulários, a11y |
+| `security-audit` | Auth, secrets, webhooks |
+| `repo-health-check` | Auditoria antes de PRs grandes |
+| `git-github-flow` | Commits/PRs |
+| `performance-optimizer` | Latência / queries |
 
-When adding or editing skills:
+## Qualidade
 
-- Start each `SKILL.md` with YAML frontmatter: `name`, `description`, `version`, and `author`.
-- Keep the description trigger-specific.
-- Include Grok Build behavior: Plan Mode, subagents, Arena-style comparison where useful, human approval, verification, and git discipline.
-- Put long examples in a sibling `examples/` or `references/` directory.
-- Avoid hidden destructive behavior.
-- If a skill asks the agent to run commands, specify when to ask for user approval.
-- Prefer "discover commands from the repo" over hardcoding `npm`/`pytest` unless the skill is stack-specific.
+- Preços em **centavos** no backend  
+- BRL na UI via `lib/utils.ts`  
+- Preferir rotas dinâmicas quando usam Prisma em request  
+- Após deploy: validar home, admin login, e se possível um pagamento teste  
 
-## Safety
+## Atualizar o handoff
 
-- Never commit secrets, API keys, auth tokens, private logs, or `.env` files.
-- Treat hook examples as security-sensitive. Explain what events trigger them and what commands they run.
-- Do not add project hooks that mutate files silently.
-- Prefer read-only checks or formatters with obvious output.
-- Treat third-party skills as untrusted until reviewed.
-
-## Review Stance
-
-When asked to review changes, lead with bugs, broken links, incorrect claims, security risks, and missing tests. Keep style suggestions secondary.
+Se o estado de produção mudar de forma material (novo host, schema breaking, feature de pagamento), atualize `docs/HANDOFF_COMPLETO.md` na mesma PR/commit.
