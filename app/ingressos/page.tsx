@@ -37,6 +37,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from '@/lib/contact';
+import PurchaseSuccessModal from '@/components/PurchaseSuccessModal';
 
 interface TicketItem {
   id: string;
@@ -209,6 +210,7 @@ export default function MeusIngressos() {
   const [newPassword, setNewPassword] = useState('');
   const [showSetPassword, setShowSetPassword] = useState(false);
   const [justPaid, setJustPaid] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [loginTab, setLoginTab] = useState<LoginTab>(() => {
     if (typeof window === 'undefined') return 'codigo';
     try {
@@ -301,6 +303,20 @@ export default function MeusIngressos() {
       if (q.get('success') === '1') {
         setJustPaid(true);
         toast.success('Pagamento confirmado!');
+        try {
+          if (!sessionStorage.getItem('welcomeShown')) {
+            sessionStorage.setItem('welcomeShown', '1');
+            setWelcomeOpen(true);
+          }
+        } catch {
+          setWelcomeOpen(true);
+        }
+        // Evita reabrir o modal no F5 com a mesma URL
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('success');
+          window.history.replaceState({}, '', url.pathname + url.search);
+        } catch {}
       }
     }
     if (didAutoLookup.current) return;
@@ -1358,8 +1374,44 @@ export default function MeusIngressos() {
         </main>
       </div>
 
+      {/* Modal boas-vindas pós-compra */}
+      {loggedIn && (
+        <PurchaseSuccessModal
+          open={welcomeOpen && justPaid}
+          onClose={() => setWelcomeOpen(false)}
+          variant="welcome"
+          accessCode={
+            code ||
+            orders.find((o) => o.accessCode)?.accessCode ||
+            ''
+          }
+          email={email || orders[0]?.buyerEmail || ''}
+          eventTitle={upcoming[0]?.event.title || orders[0]?.event.title}
+          primaryLabel={primaryDoorTicket ? 'Mostrar QR agora' : 'Ver carteira'}
+          onPrimary={() => {
+            setWelcomeOpen(false);
+            if (primaryDoorTicket) {
+              setPreviewTicket({
+                code: primaryDoorTicket.ticket.uniqueCode,
+                payload: ticketQrValue(primaryDoorTicket.ticket),
+                name: primaryDoorTicket.order.buyerName,
+                event: primaryDoorTicket.order.event.title,
+                date: formatDate(primaryDoorTicket.order.event.date),
+              });
+            } else {
+              setNav('proximos');
+            }
+          }}
+          secondaryLabel="Fechar e ver carteira"
+          onSecondary={() => {
+            setWelcomeOpen(false);
+            setNav('proximos');
+          }}
+        />
+      )}
+
       {/* CTA fixo mobile — prioridade: mostrar QR na porta */}
-      {loggedIn && primaryDoorTicket && nav === 'proximos' && !previewTicket && (
+      {loggedIn && primaryDoorTicket && nav === 'proximos' && !previewTicket && !welcomeOpen && (
         <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none">
           <button
             type="button"

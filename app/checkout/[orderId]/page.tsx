@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
 import { loadStripe, Stripe, type StripeElements } from '@stripe/stripe-js';
 import { formatCpf, isValidCpf, formatPhone, isValidPhone, cleanCpf, cleanPhone } from '@/lib/masks';
+import PurchaseSuccessModal, {
+  type PurchaseModalVariant,
+} from '@/components/PurchaseSuccessModal';
 
 interface OrderData {
   id: string;
@@ -48,7 +51,24 @@ export default function CheckoutPage() {
   const [elements, setElements] = useState<StripeElements | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
 
+  // Modais de orientação pós-PIX / pós-pago
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalVariant, setModalVariant] = useState<PurchaseModalVariant>('pix-ready');
+  const [paidAccessCode, setPaidAccessCode] = useState('');
+  const [blockAutoRedirect, setBlockAutoRedirect] = useState(false);
+
   const orderId = params.orderId;
+
+  const goToIngressos = useCallback(
+    (email: string, code: string) => {
+      const q = new URLSearchParams();
+      if (email) q.set('email', email);
+      if (code) q.set('code', code);
+      q.set('success', '1');
+      router.push(`/ingressos?${q}`);
+    },
+    [router]
+  );
 
   const cleanedCpf = cleanCpf(buyer.cpf);
   const isPhoneValid = !buyer.phone || isValidPhone(cleanPhone(buyer.phone));
@@ -114,23 +134,17 @@ export default function CheckoutPage() {
             setPixData((prev) => (prev ? { ...prev, accessCode: data.accessCode } : prev));
           }
           setPaymentStatus('paid');
+          setPaidAccessCode(code);
           setPaymentStatusMsg(
             code
-              ? `Pagamento confirmado! Código ${code} — abrindo seus ingressos…`
-              : 'Pagamento confirmado! Abrindo seus ingressos…'
+              ? `Pagamento confirmado! Código ${code}`
+              : 'Pagamento confirmado!'
           );
-          toast.success(
-            code
-              ? `PIX confirmado! Seu código: ${code}`
-              : 'PIX confirmado! Abrindo seus ingressos…'
-          );
-          // Redireciona para Meus Ingressos com e-mail + código (sem cadastro)
-          setTimeout(() => {
-            if (stopped) return;
-            router.push(
-              `/ingressos?email=${encodeURIComponent(email)}${code ? `&code=${encodeURIComponent(code)}` : ''}&success=1`
-            );
-          }, 1800);
+          toast.success(code ? `PIX confirmado! Código: ${code}` : 'PIX confirmado!');
+          // Modal de sucesso (redirect via botão + countdown) — não some só com toast
+          setModalVariant('paid');
+          setModalOpen(true);
+          setBlockAutoRedirect(true);
           return;
         }
         if (data.mpStatus && ['rejected', 'cancelled', 'canceled', 'expired'].includes(data.mpStatus)) {
@@ -223,10 +237,28 @@ export default function CheckoutPage() {
       if (data.type === 'pix' && data.qr_code) {
         setPixData(data);
         setPaymentStatus('waiting');
-        toast.success('QR gerado. Código de acesso: ' + (data.accessCode || ''));
+        if (data.accessCode) setPaidAccessCode(data.accessCode);
+        toast.success('QR PIX gerado');
+        // Modal na 1ª vez por pedido
+        try {
+          const key = `pixTipShown-${orderId}`;
+          if (!sessionStorage.getItem(key)) {
+            sessionStorage.setItem(key, '1');
+            setModalVariant('pix-ready');
+            setModalOpen(true);
+          }
+        } catch {
+          setModalVariant('pix-ready');
+          setModalOpen(true);
+        }
       } else if (data.type === 'stripe' && data.clientSecret) {
         setClientSecret(data.clientSecret);
-        toast.info('Cartão. Guarde código: ' + (data.accessCode || ''));
+        if (data.accessCode) setPaidAccessCode(data.accessCode);
+        toast.info(
+          data.accessCode
+            ? `Cartão. Guarde o código: ${data.accessCode}`
+            : 'Preencha os dados do cartão'
+        );
 
         // Initialize Stripe Elements (works for both direct keys and Connect account)
         if (stripe && data.clientSecret) {
@@ -241,9 +273,11 @@ export default function CheckoutPage() {
           }, 100);
         }
       } else if (data.type === 'simulated') {
+        const code = data.accessCode || '';
+        setPaidAccessCode(code);
+        setModalVariant('paid');
+        setModalOpen(true);
         toast.success(data.message || 'Pagamento confirmado');
-        const q = data.accessCode ? `?email=${encodeURIComponent(buyer.email)}&code=${data.accessCode}` : `?email=${encodeURIComponent(buyer.email)}`;
-        router.push(`/ingressos${q}`);
       }
     } catch (e: unknown) {
       toast.error((e as Error).message || 'Falha no pagamento');
@@ -257,10 +291,13 @@ export default function CheckoutPage() {
 
     setProcessing(true);
 
+    const codeQ = paidAccessCode
+      ? `&code=${encodeURIComponent(paidAccessCode)}`
+      : '';
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/ingressos?email=${encodeURIComponent(buyer.email)}&success=1`,
+        return_url: `${window.location.origin}/ingressos?email=${encodeURIComponent(buyer.email)}${codeQ}&success=1`,
       },
       redirect: 'always',
     });
@@ -269,11 +306,10 @@ export default function CheckoutPage() {
       toast.error(error.message || 'Erro ao confirmar cartão');
       setProcessing(false);
     } else {
-      // Se não redirecionou, assumimos sucesso (webhook deve atualizar)
-      toast.success('Pagamento processado! Verifique seus ingressos.');
-      setTimeout(() => {
-        router.push(`/ingressos?email=${encodeURIComponent(buyer.email)}&success=1`);
-      }, 1200);
+      // Se não redirecionou, modal + ir para Meus Ingressos com código
+      setModalVariant('paid');
+      setModalOpen(true);
+      toast.success('Pagamento processado!');
     }
   }
 
@@ -419,7 +455,7 @@ export default function CheckoutPage() {
 
       {/* PIX Result */}
       {pixData && (
-        <div className="card p-6 mb-6 border-emerald-900/50">
+        <div id="pix-qr-area" className="card p-6 mb-6 border-emerald-900/50">
           <div className="text-emerald-400 text-sm mb-2">Pague com PIX</div>
           
           {pixData.qr_code_base64 && (
@@ -529,6 +565,60 @@ export default function CheckoutPage() {
         Ambiente seguro. Webhooks garantem a atualização automática do status.
         <br />PIX MP: use chaves TEST-... para localhost. Para produção configure "URL Pública" + ngrok em Admin &gt; Configurações &gt; Gateways.
       </div>
+
+      <PurchaseSuccessModal
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setBlockAutoRedirect(false);
+        }}
+        variant={modalVariant}
+        accessCode={paidAccessCode || pixData?.accessCode || ''}
+        email={buyer.email}
+        eventTitle={order?.event?.title}
+        autoRedirectSec={modalVariant === 'paid' ? 5 : 0}
+        primaryLabel={
+          modalVariant === 'pix-ready'
+            ? 'Copiar código e ver PIX'
+            : 'Ver meus ingressos'
+        }
+        onPrimary={() => {
+          if (modalVariant === 'pix-ready') {
+            const code = paidAccessCode || pixData?.accessCode || '';
+            if (code) {
+              navigator.clipboard?.writeText(code).then(
+                () => toast.success('Código copiado!'),
+                () => toast.message(code)
+              );
+            }
+            setModalOpen(false);
+            // foca área do QR se existir
+            document.getElementById('pix-qr-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+          }
+          const email = buyer.email || '';
+          const code = paidAccessCode || pixData?.accessCode || '';
+          setModalOpen(false);
+          goToIngressos(email, code);
+        }}
+        secondaryLabel={
+          modalVariant === 'pix-ready'
+            ? 'Entendi — ver QR PIX'
+            : modalVariant === 'paid'
+              ? 'Fechar'
+              : undefined
+        }
+        onSecondary={
+          modalVariant === 'pix-ready'
+            ? () => {
+                setModalOpen(false);
+                document.getElementById('pix-qr-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            : modalVariant === 'paid'
+              ? () => setModalOpen(false)
+              : undefined
+        }
+      />
     </div>
   );
 }
