@@ -29,10 +29,9 @@ function signAdminToken(email: string, exp: number): string {
 function verifyAdminToken(token: string | undefined | null): { ok: boolean; email?: string } {
   if (!token) return { ok: false };
 
-  // Compat: sessão antiga admin_session=1 — ainda aceita para não derrubar admin em produção no deploy
-  // (próximo login gera token assinado). Remova este branch depois de todos re-logarem.
+  // Cookie legado "1" só em desenvolvimento — em produção exija token assinado (re-login)
   if (token === '1') {
-    return { ok: true };
+    return { ok: process.env.NODE_ENV !== 'production' };
   }
 
   const parts = token.split('.');

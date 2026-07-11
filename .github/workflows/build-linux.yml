@@ -1,10 +1,9 @@
-# Build em Linux (Ubuntu) — use o artifact no cPanel se o build no host der EAGAIN
+# LEGADO cPanel — NÃO roda em todo push (evita ruído vermelho no Actions).
+# Só sob demanda se ainda precisar do artifact next-build.tgz.
 name: Build production (Linux)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
   build:
@@ -23,7 +22,6 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate --schema=./prisma/schema.prisma
         env:
-          # generate não precisa de DB real
           DATABASE_URL: mysql://user:pass@127.0.0.1:3306/dummy
 
       - name: Build

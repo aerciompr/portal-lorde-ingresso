@@ -60,13 +60,28 @@ function addOrder(
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   if (!(await isAdmin())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const [events, orders] = await Promise.all([
+    const url = new URL(req.url);
+    const fromStr = url.searchParams.get('from'); // YYYY-MM-DD
+    const toStr = url.searchParams.get('to');
+
+    let fromDate: Date | null = null;
+    let toDate: Date | null = null;
+    if (fromStr) {
+      fromDate = new Date(fromStr + 'T00:00:00');
+      if (Number.isNaN(fromDate.getTime())) fromDate = null;
+    }
+    if (toStr) {
+      toDate = new Date(toStr + 'T23:59:59.999');
+      if (Number.isNaN(toDate.getTime())) toDate = null;
+    }
+
+    const [events, ordersRaw] = await Promise.all([
       prisma.event.findMany({
         select: {
           id: true,
@@ -93,6 +108,8 @@ export async function GET() {
           paymentMethod: true,
           eventId: true,
           loteId: true,
+          createdAt: true,
+          paidAt: true,
           tickets: {
             select: {
               id: true,
@@ -106,6 +123,15 @@ export async function GET() {
         orderBy: { createdAt: 'desc' },
       }),
     ]);
+
+    // Filtro de período: pago usa paidAt; demais usam createdAt
+    const orders = ordersRaw.filter((o) => {
+      if (!fromDate && !toDate) return true;
+      const t = (o.paidAt || o.createdAt).getTime();
+      if (fromDate && t < fromDate.getTime()) return false;
+      if (toDate && t > toDate.getTime()) return false;
+      return true;
+    });
 
     const general = emptyBucket();
     const byMethod: Record<string, Bucket> = {};
@@ -223,6 +249,10 @@ export async function GET() {
 
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
+      period: {
+        from: fromStr || null,
+        to: toStr || null,
+      },
       general: {
         ...general,
         byMethod: Object.entries(byMethod).map(([method, b]) => ({ method, ...b })),

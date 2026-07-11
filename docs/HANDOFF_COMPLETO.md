@@ -1,6 +1,6 @@
 # Handoff completo — continuar o projeto (IA / DEV)
 
-**Atualizado:** 2026-07-11  
+**Atualizado:** 2026-07-11 (noite — GHCR, plano mestre A+B)  
 **Objetivo:** permitir que **outra pessoa ou outra IA** retome o trabalho e a operação sem perder contexto.
 
 Leia também: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md), [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md).
@@ -86,13 +86,48 @@ Leia também: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`DEPLOY_EASYPANEL.md`](./
 
 | Etapa | Status |
 |-------|--------|
-| GitHub `main` | Ativo (commits recentes: segurança, reports, resend e-mail, UX ingressos) |
-| Dockerfile Node 22 | Produção |
+| GitHub `main` | Ativo |
+| **Deploy oficial** | **GHCR** → EasyPanel **Imagem Docker** `ghcr.io/aerciompr/portal-lorde-ingresso:main` |
+| Workflow | `.github/workflows/docker-ghcr.yml` (push main) |
+| Workflow legado Linux | Só `workflow_dispatch` (não roda em todo push) |
 | MySQL EasyPanel + Prisma | Em uso |
-| Volume uploads | Preferir `UPLOAD_STORAGE=disk` + volume `/app/data/uploads` |
-| Resend + domínio | Configurado (validar FROM_EMAIL do domínio) |
-| PIX / webhooks / polling | Em uso; secret MP webhook opcional |
-| Crons HTTP | Confirmar no EasyPanel se ainda pendente |
+| Volume uploads | `UPLOAD_STORAGE=disk` + volume `/app/data/uploads` |
+| Resend + domínio | Configurado |
+| PIX / webhooks / polling | Em uso |
+| Crons HTTP | **Configurar** se pendente (ver §0.1) |
+
+### 0.1 Crons (EasyPanel / externo)
+
+Agendar a cada **10–15 min** (Authorization: `Bearer CRON_SECRET`):
+
+```text
+GET https://portal.lordenelson.com.br/api/cron/cleanup-pending
+GET https://portal.lordenelson.com.br/api/cron/sync-payments
+```
+
+- `cleanup-pending` — cancela pending &gt; ~30 min e devolve estoque  
+- `sync-payments` — reconcilia PIX/cartão pendentes  
+
+Admin também: dashboard **Limpar pendentes antigos**.
+
+### 0.2 Smoke pós-deploy
+
+1. Home + logo  
+2. PIX mínimo → modal código LN  
+3. Meus Ingressos + QR  
+4. PDF com `?code=`  
+5. Admin KPIs (período) + Relatórios  
+6. Reenvio e-mail em Pedidos  
+
+### 0.3 Deploy do dia a dia
+
+```text
+git push origin main
+→ Actions "Docker image (GHCR)" verde
+→ EasyPanel → Implantar (pull da imagem)
+```
+
+**Não** usar Source GitHub+Dockerfile no VPS (lento).
 
 ### Commits recentes de referência (main)
 

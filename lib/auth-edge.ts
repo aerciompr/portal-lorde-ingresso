@@ -41,9 +41,9 @@ export async function verifyAdminSessionCookie(
 ): Promise<boolean> {
   if (!token) return false;
 
-  // Compat: cookie legado admin_session=1 (até re-login pós-deploy)
+  // Cookie legado "1" só fora de produção
   if (token === '1') {
-    return true;
+    return process.env.NODE_ENV !== 'production';
   }
 
   const parts = token.split('.');
