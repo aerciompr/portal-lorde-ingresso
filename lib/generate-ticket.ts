@@ -258,3 +258,133 @@ export async function generateTicketPDF(params: TicketPDFParams) {
 
   return pdfDoc.save();
 }
+
+export type RefundReceiptParams = {
+  eventTitle: string;
+  eventDate: string;
+  buyerName: string;
+  buyerEmail: string;
+  orderId: string;
+  accessCode?: string | null;
+  totalCents: number;
+  refundCents?: number | null;
+  ticketCodes: string[];
+  feeDetails?: string | null;
+};
+
+/** Comprovante de estorno (sem QR de entrada) */
+export async function generateRefundReceiptPDF(params: RefundReceiptParams) {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([595, 420]);
+  const { width, height } = page.getSize();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.06, 0.06, 0.07) });
+  page.drawRectangle({ x: 0, y: height - 56, width, height: 56, color: rgb(0.55, 0.12, 0.12) });
+
+  page.drawText('LORDE NELSON • REST PUB', {
+    x: 32,
+    y: height - 34,
+    size: 13,
+    font: fontBold,
+    color: rgb(1, 1, 1),
+  });
+  page.drawText('COMPROVANTE DE ESTORNO', {
+    x: width - 210,
+    y: height - 34,
+    size: 11,
+    font: fontBold,
+    color: rgb(1, 0.85, 0.85),
+  });
+
+  page.drawText('Este ingresso NAO e valido para entrada.', {
+    x: 32,
+    y: height - 82,
+    size: 12,
+    font: fontBold,
+    color: rgb(0.95, 0.45, 0.45),
+  });
+
+  const lines: [string, string][] = [
+    ['Evento', truncate(params.eventTitle, 50)],
+    ['Data', truncate(params.eventDate, 40)],
+    ['Cliente', truncate(params.buyerName, 40)],
+    ['E-mail', truncate(params.buyerEmail, 45)],
+    ['Pedido', params.orderId.slice(0, 24)],
+    ['Codigo acesso', params.accessCode || '—'],
+    [
+      'Valor pago',
+      `R$ ${(params.totalCents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+    ],
+  ];
+
+  if (params.refundCents != null) {
+    lines.push([
+      'Valor estornado',
+      `R$ ${(params.refundCents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+    ]);
+  }
+
+  let y = height - 120;
+  for (const [label, value] of lines) {
+    page.drawText(label.toUpperCase(), {
+      x: 32,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+    page.drawText(value, {
+      x: 32,
+      y: y - 16,
+      size: 12,
+      font: fontBold,
+      color: rgb(0.92, 0.92, 0.92),
+    });
+    y -= 40;
+  }
+
+  if (params.ticketCodes.length) {
+    page.drawText('CODIGOS DOS INGRESSOS (CANCELADOS)', {
+      x: 32,
+      y: y + 8,
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+    y -= 12;
+    for (const c of params.ticketCodes.slice(0, 6)) {
+      page.drawText(c, {
+        x: 32,
+        y,
+        size: 11,
+        font: fontBold,
+        color: rgb(0.7, 0.7, 0.7),
+      });
+      y -= 16;
+    }
+  }
+
+  if (params.feeDetails) {
+    page.drawText(truncate(`Obs: ${params.feeDetails}`, 80), {
+      x: 32,
+      y: 36,
+      size: 8,
+      font,
+      color: rgb(0.45, 0.45, 0.45),
+    });
+  }
+
+  page.drawText('Documento informativo — sem valor para check-in.', {
+    x: 32,
+    y: 18,
+    size: 8,
+    font,
+    color: rgb(0.4, 0.4, 0.4),
+  });
+
+  page.drawRectangle({ x: 0, y: 0, width: 6, height, color: rgb(0.75, 0.2, 0.2) });
+
+  return pdfDoc.save();
+}

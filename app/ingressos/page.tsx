@@ -563,6 +563,12 @@ export default function MeusIngressos() {
         </div>
 
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-2.5 border-t border-white/5 pt-3">
+          {isRefunded(order) && (
+            <div className="rounded-xl border border-red-500/25 bg-red-950/25 px-3 py-2.5 text-xs text-red-200/90">
+              Este pedido foi <strong>estornado</strong>. O QR de entrada não é válido. Use o
+              comprovante de estorno em PDF.
+            </div>
+          )}
           {order.tickets.map((t) => (
             <div
               key={t.id}
@@ -570,36 +576,54 @@ export default function MeusIngressos() {
             >
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-zinc-100">{t.ticketType.name}</div>
-                <div className="font-mono text-emerald-400 text-sm tracking-wider mt-0.5">
+                <div
+                  className={`font-mono text-sm tracking-wider mt-0.5 ${
+                    isRefunded(order) ? 'text-zinc-500 line-through' : 'text-emerald-400'
+                  }`}
+                >
                   {t.uniqueCode}
                 </div>
-                {t.status !== 'valid' && (
-                  <div className="text-[10px] text-zinc-500 mt-1">{ticketStatusLabel(t.status)}</div>
+                {(t.status !== 'valid' || isRefunded(order)) && (
+                  <div className="text-[10px] text-zinc-500 mt-1">
+                    {isRefunded(order) ? 'Cancelado (estorno)' : ticketStatusLabel(t.status)}
+                  </div>
                 )}
               </div>
-              <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => downloadPDF(t.id)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 py-2.5 text-xs font-medium hover:bg-white/5 transition"
-                >
-                  <Download size={14} /> PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPreviewTicket({
-                      code: t.uniqueCode,
-                      payload: t.uniqueCode,
-                      name: order.buyerName,
-                      event: order.event.title,
-                      date: formatDate(order.event.date),
-                    })
-                  }
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2.5 text-xs font-medium text-white transition"
-                >
-                  <QrCode size={14} /> QR Code
-                </button>
+              <div className="grid grid-cols-1 sm:flex gap-2 w-full sm:w-auto">
+                {isRefunded(order) ? (
+                  <button
+                    type="button"
+                    onClick={() => downloadPDF(t.id)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600/90 hover:bg-red-500 px-3 py-2.5 text-xs font-medium text-white transition"
+                  >
+                    <Download size={14} /> Comprovante de estorno
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => downloadPDF(t.id)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 py-2.5 text-xs font-medium hover:bg-white/5 transition"
+                    >
+                      <Download size={14} /> PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPreviewTicket({
+                          code: t.uniqueCode,
+                          payload: t.uniqueCode,
+                          name: order.buyerName,
+                          event: order.event.title,
+                          date: formatDate(order.event.date),
+                        })
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2.5 text-xs font-medium text-white transition"
+                    >
+                      <QrCode size={14} /> QR Code
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}
