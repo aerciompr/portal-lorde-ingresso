@@ -32,10 +32,12 @@ export default function MeusIngressos() {
 
   const [previewTicket, setPreviewTicket] = useState<{ code: string; payload: string; name: string; event: string } | null>(null);
 
-  // Restore from localStorage in state initializer (avoids setState in effect)
+  // URL (pós-compra) tem prioridade; senão localStorage
   const [email, setEmail] = useState(() => {
     if (typeof window === 'undefined') return '';
     try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('email')) return q.get('email') || '';
       const saved = localStorage.getItem('clientSession');
       if (saved) {
         const { email: sEmail } = JSON.parse(saved);
@@ -47,6 +49,8 @@ export default function MeusIngressos() {
   const [code, setCode] = useState(() => {
     if (typeof window === 'undefined') return '';
     try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('code')) return (q.get('code') || '').toUpperCase();
       const saved = localStorage.getItem('clientSession');
       if (saved) {
         const { code: sCode } = JSON.parse(saved);
@@ -59,6 +63,9 @@ export default function MeusIngressos() {
   const [password, setPassword] = useState(() => {
     if (typeof window === 'undefined') return '';
     try {
+      const q = new URLSearchParams(window.location.search);
+      // pós-compra: não usa senha da session antiga
+      if (q.get('success') === '1' || q.get('code')) return '';
       const saved = localStorage.getItem('clientSession');
       if (saved) {
         const { password: sPass } = JSON.parse(saved);
@@ -69,8 +76,16 @@ export default function MeusIngressos() {
   });
   const [newPassword, setNewPassword] = useState('');
   const [showSetPassword, setShowSetPassword] = useState(false);
+  const [justPaid, setJustPaid] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'senha' | 'codigo'>('senha');
+  const [activeTab, setActiveTab] = useState<'senha' | 'codigo'>(() => {
+    if (typeof window === 'undefined') return 'senha';
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('code') || q.get('success') === '1') return 'codigo';
+    } catch {}
+    return 'senha';
+  });
 
   function lookupWith(e: string, c: string, p?: string) {
     setLoading(true);
@@ -100,12 +115,22 @@ export default function MeusIngressos() {
       .finally(() => setLoading(false));
   }
 
-  // Auto-trigger lookup once if restored from storage
+  // Auto-trigger lookup once if restored from storage / pós-compra
   const didAutoLookup = useRef(false);
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('success') === '1') {
+        setJustPaid(true);
+        toast.success('Pagamento confirmado! Seus ingressos estão abaixo.');
+      }
+    }
     if (!didAutoLookup.current && email && (code || password)) {
       didAutoLookup.current = true;
       lookupWith(email, code, password);
+    } else if (!didAutoLookup.current && code) {
+      didAutoLookup.current = true;
+      lookupWith(email, code);
     }
   }, [email, code, password]);
 
@@ -273,8 +298,25 @@ export default function MeusIngressos() {
           </div>
         </div>
 
+        {justPaid && (
+          <div className="mb-6 p-4 rounded-2xl border border-emerald-500/30 bg-emerald-950/30 text-sm text-emerald-100 max-w-lg mx-auto">
+            <p className="font-medium">Compra confirmada</p>
+            <p className="text-xs text-emerald-200/80 mt-1">
+              Não é obrigatório criar senha no checkout. Use o <strong>código de acesso</strong> (aba ao lado)
+              ou o e-mail + código. Depois de ver os ingressos, você pode <strong>criar uma senha</strong> na
+              caixa verde abaixo.
+            </p>
+            {code && (
+              <p className="mt-2 font-mono text-base tracking-wider text-white">
+                Seu código: <span className="text-emerald-400">{code}</span>
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="text-center text-xs text-zinc-500 max-w-xs mx-auto">
-          Primeira vez? Use o código para ver seus ingressos. Depois você pode criar uma senha para acessar só com e-mail/CPF.
+          Primeira vez? Use o <strong>código de acesso</strong> (aba Código). Depois você pode criar uma
+          senha para acessar só com e-mail/CPF. O e-mail automático depende do Resend (domínio verificado).
         </div>
 
         {orders.length > 0 && (

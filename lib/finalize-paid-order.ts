@@ -70,7 +70,12 @@ export async function finalizePaidOrder(
 
   if (fullOrder) {
     try {
-      await sendOrderConfirmation(fullOrder as unknown as import('@/lib/email').OrderWithDetails);
+      const mail = await sendOrderConfirmation(
+        fullOrder as unknown as import('@/lib/email').OrderWithDetails
+      );
+      if (!mail.ok) {
+        console.error('[FINALIZE] e-mail não enviado (pedido JÁ está pago):', mail.error || mail);
+      }
     } catch (e) {
       console.error('[FINALIZE] e-mail falhou (pedido já está pago):', e);
     }

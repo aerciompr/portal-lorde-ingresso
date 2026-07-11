@@ -2,12 +2,25 @@ import { Resend } from 'resend';
 import { getAppSettings } from './settings';
 import { formatPrice } from './utils';
 
-const FROM = process.env.FROM_EMAIL || 'ingressos@lordenelson.com.br';
+function cleanEnv(raw?: string | null): string {
+  return (raw || '').trim().replace(/^['"]+|['"]+$/g, '');
+}
+
+function getFromEmail(): string {
+  return cleanEnv(process.env.FROM_EMAIL) || 'onboarding@resend.dev';
+}
+
+function getResendKey(): string {
+  return cleanEnv(process.env.RESEND_API_KEY);
+}
 
 async function getAppUrl() {
   try {
     const s = await getAppSettings();
-    return (s.publicUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    return (s.publicUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(
+      /\/$/,
+      ''
+    );
   } catch {
     return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   }
@@ -18,12 +31,12 @@ export interface OrderWithDetails {
   buyerName: string;
   buyerEmail: string;
   totalCents: number;
-  accessCode?: string;
+  accessCode?: string | null;
   event: {
     title: string;
     date: Date | string;
     address: string;
-    openTime?: string;
+    openTime?: string | null;
   };
   tickets: Array<{
     id: string;
@@ -32,18 +45,32 @@ export interface OrderWithDetails {
   }>;
 }
 
+/**
+ * Envia confirmação. Retorna { ok, skipped?, error? }.
+ * Resend NÃO lança erro em falha de domínio — vem em result.error.
+ */
 export async function sendOrderConfirmation(order: OrderWithDetails) {
-  if (!process.env.RESEND_API_KEY) {
-    console.log('[EMAIL] RESEND_API_KEY not set - skipping real email. Order:', order.id);
-    return { skipped: true };
+  const apiKey = getResendKey();
+  if (!apiKey) {
+    console.log('[EMAIL] RESEND_API_KEY ausente — e-mail não enviado. Order:', order.id);
+    return { ok: false, skipped: true, error: 'RESEND_API_KEY não configurada' };
   }
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
-  const APP_URL = await getAppUrl();
+  if (!order.buyerEmail?.includes('@')) {
+    console.warn('[EMAIL] buyerEmail inválido', order.buyerEmail);
+    return { ok: false, error: 'E-mail do comprador inválido' };
+  }
 
-  const ticketLinks = order.tickets.map(t => 
-    `<li><strong>${t.ticketType.name}</strong> — Código: <code>${t.uniqueCode}</code> — <a href="${APP_URL}/ingressos?email=${encodeURIComponent(order.buyerEmail)}">Baixar PDF</a></li>`
-  ).join('');
+  const resend = new Resend(apiKey);
+  const APP_URL = await getAppUrl();
+  const from = getFromEmail();
+
+  const ticketLinks = order.tickets
+    .map(
+      (t) =>
+        `<li><strong>${t.ticketType.name}</strong> — Código: <code>${t.uniqueCode}</code> — <a href="${APP_URL}/ingressos?email=${encodeURIComponent(order.buyerEmail)}">Baixar PDF</a></li>`
+    )
+    .join('');
 
   const html = `
     <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #111; color: #eee;">
@@ -57,7 +84,7 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
       <p><strong>Data:</strong> ${new Date(order.event.date).toLocaleDateString('pt-BR')} às ${order.event.openTime || '20:00'}<br>
       <strong>Local:</strong> ${order.event.address}</p>
 
-      ${order.accessCode ? `<p><strong>Código de acesso:</strong> <code>${order.accessCode}</code> (guarde para acessar seus ingressos)</p>` : ''}
+      ${order.accessCode ? `<p><strong>Código de acesso:</strong> <code style="font-size:18px;background:#222;padding:4px 8px;border-radius:6px;">${order.accessCode}</code><br><span style="font-size:13px;color:#aaa;">Use em Meus Ingressos se ainda não tiver senha.</span></p>` : ''}
       
       <h3 style="margin-top:24px;">Seus ingressos:</h3>
       <ul style="line-height: 1.8;">
@@ -79,31 +106,54 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
 
   try {
     const result = await resend.emails.send({
-      from: FROM,
+      from: from.includes('<') ? from : `Lorde Nelson <${from}>`,
       to: order.buyerEmail,
       subject: `Ingressos confirmados - ${order.event.title}`,
       html,
     });
-    console.log('[EMAIL] Confirmation sent to', order.buyerEmail, result);
-    return result;
+
+    // SDK Resend devolve { data, error } sem throw
+    if (result.error) {
+      console.error('[EMAIL] Resend recusou o envio:', result.error, {
+        from,
+        to: order.buyerEmail,
+        orderId: order.id,
+      });
+      return {
+        ok: false,
+        error: result.error.message || JSON.stringify(result.error),
+      };
+    }
+
+    console.log('[EMAIL] Confirmation sent', {
+      to: order.buyerEmail,
+      from,
+      id: result.data?.id,
+      orderId: order.id,
+    });
+    return { ok: true, id: result.data?.id };
   } catch (err) {
     console.error('[EMAIL] Error sending confirmation', err);
     throw err;
   }
 }
 
-export async function sendCancellationApproved(order: OrderWithDetails, refundAmountCents?: number) {
-  if (!process.env.RESEND_API_KEY) {
+export async function sendCancellationApproved(
+  order: OrderWithDetails,
+  refundAmountCents?: number
+) {
+  const apiKey = getResendKey();
+  if (!apiKey) {
     console.log('[EMAIL] Skipped cancellation email (no key)');
-    return;
+    return { ok: false, skipped: true };
   }
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  const resend = new Resend(apiKey);
+  const from = getFromEmail();
 
-  const amount = refundAmountCents != null
-    ? formatPrice(refundAmountCents)
-    : 'o valor integral';
-  
+  const amount =
+    refundAmountCents != null ? formatPrice(refundAmountCents) : 'o valor integral';
+
   const html = `
     <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #111; color: #eee;">
       <h1>Lorde Nelson Rest Pub</h1>
@@ -121,10 +171,16 @@ export async function sendCancellationApproved(order: OrderWithDetails, refundAm
     </div>
   `;
 
-  await resend.emails.send({
-    from: FROM,
+  const result = await resend.emails.send({
+    from: from.includes('<') ? from : `Lorde Nelson <${from}>`,
     to: order.buyerEmail,
     subject: `Cancelamento aprovado - ${order.event?.title || 'Lorde Nelson'}`,
     html,
   });
+
+  if (result.error) {
+    console.error('[EMAIL] cancellation Resend error', result.error);
+    return { ok: false, error: result.error.message };
+  }
+  return { ok: true };
 }
