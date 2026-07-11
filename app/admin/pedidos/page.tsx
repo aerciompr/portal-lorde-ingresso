@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { formatPrice, orderStatusLabel, ticketStatusLabel } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, Mail, KeyRound, Loader2 } from 'lucide-react';
 
 interface TicketRow {
   id: string;
@@ -18,6 +18,7 @@ interface Order {
   buyerEmail: string;
   totalCents: number;
   status: string;
+  accessCode?: string | null;
   paymentMethod?: string;
   paymentGateway?: string;
   grossCents?: number;
@@ -28,12 +29,15 @@ interface Order {
   tickets?: TicketRow[];
 }
 
+type ResendMode = 'confirmation' | 'access_code' | 'both';
+
 export default function AdminPedidos() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'refunded' | 'pending' | 'cancelled'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch('/api/admin/orders');
@@ -105,6 +109,48 @@ export default function AdminPedidos() {
     }
   }
 
+  async function resendEmail(order: Order, mode: ResendMode) {
+    if (!order.buyerEmail?.includes('@')) {
+      toast.error('Pedido sem e-mail válido');
+      return;
+    }
+    const labels: Record<ResendMode, string> = {
+      confirmation: 'confirmação com PDF dos ingressos',
+      access_code: 'código de acesso LN',
+      both: 'confirmação + código LN',
+    };
+    if (
+      !confirm(
+        `Reenviar e-mail de ${labels[mode]} para\n${order.buyerEmail}\n\nPedido: ${order.event.title}`
+      )
+    ) {
+      return;
+    }
+    setResendingId(`${order.id}:${mode}`);
+    try {
+      const res = await fetch('/api/admin/orders/resend-email', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, mode }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Falha ao reenviar');
+        return;
+      }
+      if (data.partial) {
+        toast.warning(data.message || 'Reenvio parcial — confira logs');
+      } else {
+        toast.success(data.message || `E-mail enviado para ${order.buyerEmail}`);
+      }
+    } catch {
+      toast.error('Erro de rede ao reenviar e-mail');
+    } finally {
+      setResendingId(null);
+    }
+  }
+
   const StatusBadge = ({ status }: { status: string }) => {
     const colors: Record<string, string> = {
       paid: 'bg-emerald-500/20 text-emerald-400',
@@ -124,7 +170,7 @@ export default function AdminPedidos() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Pedidos</h1>
         <p className="text-sm text-zinc-400">
-          Busque, baixe PDFs de ingressos e realize estornos via gateways.
+          Busque, reenvie e-mails, baixe PDFs e faça estornos. Reenvio usa Resend (mesmo da confirmação).
         </p>
       </div>
 
@@ -204,7 +250,37 @@ export default function AdminPedidos() {
                             >
                               <Download size={12} /> PDF
                             </button>
+                            <button
+                              type="button"
+                              disabled={resendingId?.startsWith(o.id)}
+                              onClick={() => resendEmail(o, 'confirmation')}
+                              title="Reenviar e-mail de confirmação com PDFs"
+                              className="text-xs px-2.5 py-1 rounded bg-sky-600/80 hover:bg-sky-600 disabled:opacity-40 cursor-pointer inline-flex items-center gap-1"
+                            >
+                              {resendingId === `${o.id}:confirmation` ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Mail size={12} />
+                              )}
+                              E-mail
+                            </button>
                           </>
+                        )}
+                        {o.accessCode && o.status !== 'pending' && (
+                          <button
+                            type="button"
+                            disabled={resendingId?.startsWith(o.id)}
+                            onClick={() => resendEmail(o, 'access_code')}
+                            title="Reenviar só o código LN"
+                            className="text-xs px-2.5 py-1 rounded bg-violet-600/70 hover:bg-violet-600 disabled:opacity-40 cursor-pointer inline-flex items-center gap-1"
+                          >
+                            {resendingId === `${o.id}:access_code` ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <KeyRound size={12} />
+                            )}
+                            Código
+                          </button>
                         )}
                         {o.status === 'paid' && (
                           <button
