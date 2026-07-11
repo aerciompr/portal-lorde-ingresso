@@ -15,15 +15,17 @@ Aplicação **Next.js 16** de venda de ingressos do Lorde Nelson Rest Pub (Macei
 
 | Doc | Conteúdo |
 |-----|----------|
-| **[`docs/HANDOFF_COMPLETO.md`](./docs/HANDOFF_COMPLETO.md)** | **Handoff para outra IA/DEV** — estado real, armadilhas, próximos passos |
+| **[`docs/HANDOFF_COMPLETO.md`](./docs/HANDOFF_COMPLETO.md)** | **Handoff 2026-07-11** — estado real, segurança, checklist **novo DEV ~1h** |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Arquitetura, Prisma, fluxos de pagamento, mapa de pastas |
-| [`docs/DEPLOY_RAPIDO.md`](./docs/DEPLOY_RAPIDO.md) | **Deploy rápido** (imagem GHCR, sem build no VPS) |
 | [`docs/DEPLOY_EASYPANEL.md`](./docs/DEPLOY_EASYPANEL.md) | Deploy EasyPanel (oficial) |
+| [`docs/UPLOADS_PERSISTENTES.md`](./docs/UPLOADS_PERSISTENTES.md) | Volume de imagens em produção |
 | [`docs/GO_LIVE_CHECKLIST.md`](./docs/GO_LIVE_CHECKLIST.md) | Checklist go-live |
 | [`docs/README.md`](./docs/README.md) | Índice de toda a pasta `docs/` |
 | [`PRODUCTION_SETUP.md`](./PRODUCTION_SETUP.md) | Gateways, webhooks, crons |
 | [`.env.example`](./.env.example) | Variáveis de ambiente |
 | [`AGENTS.md`](./AGENTS.md) | Regras para agentes de IA |
+
+> **Outra pessoa dar conta:** código + docs no Git; **senhas/tokens só no EasyPanel / password manager** (não no repo).
 
 ---
 
@@ -42,11 +44,12 @@ Aplicação **Next.js 16** de venda de ingressos do Lorde Nelson Rest Pub (Macei
 
 ## Funcionalidades
 
-- Portal público: home, programação, evento com **lotes**, checkout, meus ingressos, PDF  
-- Admin: eventos, lotes (virada auto/manual), pedidos, estorno, ferramentas, layout de ingresso, relatórios, configurações  
+- Portal público: home, programação, evento com **lotes**, checkout, Meus Ingressos (carteira + estornos), PDF/QR, WhatsApp  
+- Admin: eventos, lotes, pedidos (**reenvio e-mail**), estorno, ferramentas, layout ingresso, relatórios **Geral / Por evento**, configurações  
 - Check-in com câmera + código manual  
 - Webhooks + polling PIX + crons (sync / cleanup pending)  
-- Virada de lote ao esgotar; finalize paid → QR + e-mail  
+- Virada de lote; finalize paid → QR + e-mail  
+- Segurança: settings públicos sem secrets; PDF com código LN; sessão admin assinada
 
 Detalhes de fluxo: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
