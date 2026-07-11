@@ -7,6 +7,7 @@ import {
   maxUploadBytes,
   publicUrlForMediaId,
   publicUrlForUpload,
+  saveBufferToS3,
   uploadStorageMode,
 } from '@/lib/uploads';
 import { requireAdminMutation } from '@/lib/request-security';
@@ -27,7 +28,7 @@ async function saveToDatabase(
     data: {
       name: safeName,
       mime: mime || 'image/jpeg',
-      data: buffer,
+      data: new Uint8Array(buffer),
       size: buffer.length,
     },
   });
@@ -95,6 +96,13 @@ export async function POST(req: NextRequest) {
 
     if (mode === 'db') {
       result = await saveToDatabase(buffer, mime, file.name || 'image');
+    } else if (mode === 's3') {
+      const safeName = (file.name || 'image')
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .slice(0, 120);
+      const filename = `${Date.now()}-${safeName}`;
+      const s3 = await saveBufferToS3(buffer, filename, mime);
+      result = { url: s3.url, storage: 's3', filename: s3.key };
     } else if (mode === 'disk') {
       result = await saveToDisk(buffer, file.name || 'image');
     } else {

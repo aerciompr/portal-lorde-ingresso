@@ -4,28 +4,26 @@
 
 | Prioridade | Documento | Para quê |
 |------------|-----------|----------|
-| **1** | [`HANDOFF_COMPLETO.md`](./HANDOFF_COMPLETO.md) | **Estado real (2026-07-11)**: produção, segurança, checklist novo DEV ~1h, armadilhas |
+| **1** | [`HANDOFF_COMPLETO.md`](./HANDOFF_COMPLETO.md) | **Estado real**: produção, GHCR, segurança, fases A–D, checklist DEV |
 | **2** | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Stack, modelos Prisma, fluxos de pagamento, mapa de pastas/APIs |
 | **3** | [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md) | Imagens que não somem no deploy (volume EasyPanel) |
 | **4** | [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md) | Deploy EasyPanel (oficial) |
 | **5** | [`DEPLOY_RAPIDO.md`](./DEPLOY_RAPIDO.md) | Deploy rápido (imagem GHCR, opcional) |
 | **6** | [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md) | Checklist go-live operacional |
+| **6b** | [`CRONS_EASYPANEL.md`](./CRONS_EASYPANEL.md) | Agendar cleanup + sync-payments |
 | **7** | [`../PRODUCTION_SETUP.md`](../PRODUCTION_SETUP.md) | Gateways, webhooks, crons, segredos |
+| — | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Fluxo de dev + testes |
 | — | [`.env.example`](../.env.example) | Template de variáveis (nunca commitar `.env`) |
 | — | [`SESSION_HANDOFF.md`](./SESSION_HANDOFF.md) | Handoff técnico antigo (pré-VPS) |
 | — | [`DEPLOY_SUBDOMAIN.md`](./DEPLOY_SUBDOMAIN.md) | Deploy genérico subdomínio |
 | — | [`DEPLOY_CPANEL.md`](./DEPLOY_CPANEL.md) | cPanel (**legado** — não usar se EasyPanel funciona) |
 | — | [`BUILD_CPANEL_EAGAIN.md`](./BUILD_CPANEL_EAGAIN.md) | Histórico EAGAIN shared host |
 
-## Planos e benchmarks (histórico — não são o estado atual)
+## Planos e benchmarks (histórico)
 
-| Documento | Conteúdo |
-|-----------|----------|
-| `PLANO_*.md` | Planos antigos de implementação |
-| `COMPETITOR_BENCHMARK_AND_IMPROVEMENTS.md` | Benchmark Sympla / ingresso.com |
-| `SYMPA_INGRESSO_COM_BENCHMARK.md` | Notas de UX concorrentes |
+Movidos para [`archive/`](./archive/) — **não** são o estado atual.
 
-> Para operar ou continuar o código, use **HANDOFF_COMPLETO** + **ARCHITECTURE**. Os `PLANO_*` são arquivo histórico.
+> Use **HANDOFF_COMPLETO** + **ARCHITECTURE**.
 
 ## Regras rápidas para IA / DEV
 

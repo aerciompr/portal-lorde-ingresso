@@ -3,17 +3,58 @@ import { mkdir, access, writeFile, unlink, constants } from 'fs/promises';
 
 /**
  * Onde gravar uploads:
- * - db   (padrão produção): MySQL MediaFile — NÃO some no deploy (só env + banco)
- * - disk: pasta no container — precisa volume EasyPanel em UPLOADS_DIR
- * - auto: tenta disk; se falhar, usa db
+ * - db   : MySQL MediaFile
+ * - disk : pasta no container (volume EasyPanel)
+ * - s3   : S3/R2 compatível (env S3_*)
+ * - auto : tenta disk; se falhar, db
  *
- * Env: UPLOAD_STORAGE=db|disk|auto
+ * Env: UPLOAD_STORAGE=db|disk|s3|auto
  */
-export function uploadStorageMode(): 'db' | 'disk' | 'auto' {
-  // Padrão: disk + volume EasyPanel (docs/UPLOADS_PERSISTENTES.md)
+export function uploadStorageMode(): 'db' | 'disk' | 'auto' | 's3' {
   const m = (process.env.UPLOAD_STORAGE || 'disk').toLowerCase().trim();
-  if (m === 'disk' || m === 'auto' || m === 'db') return m;
+  if (m === 'disk' || m === 'auto' || m === 'db' || m === 's3') return m;
   return 'disk';
+}
+
+/** Upload S3/R2 opcional — requer @aws-sdk/client-s3 e env */
+export async function saveBufferToS3(
+  buffer: Buffer,
+  filename: string,
+  mime: string
+): Promise<{ url: string; key: string }> {
+  const bucket = process.env.S3_BUCKET?.trim();
+  const region = process.env.S3_REGION?.trim() || 'auto';
+  const endpoint = process.env.S3_ENDPOINT?.trim();
+  const publicBase = (process.env.S3_PUBLIC_URL || '').replace(/\/$/, '');
+  if (!bucket || !process.env.S3_ACCESS_KEY_ID || !process.env.S3_SECRET_ACCESS_KEY) {
+    throw new Error('S3 não configurado (S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY)');
+  }
+  // dynamic import — só carrega se usar s3
+  const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+  const client = new S3Client({
+    region,
+    ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY_ID,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+    },
+  });
+  const key = `uploads/${filename.replace(/^\/+/, '')}`;
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: mime || 'application/octet-stream',
+      ACL: 'public-read',
+    })
+  );
+  const url = publicBase
+    ? `${publicBase}/${key}`
+    : endpoint
+      ? `${endpoint.replace(/\/$/, '')}/${bucket}/${key}`
+      : `https://${bucket}.s3.amazonaws.com/${key}`;
+  return { url, key };
 }
 
 function candidateDirs(): string[] {

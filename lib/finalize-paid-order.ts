@@ -83,6 +83,23 @@ export async function finalizePaidOrder(
     } catch (e) {
       console.error('[FINALIZE] e-mail falhou (pedido já está pago):', e);
     }
+
+    try {
+      const { notifyWhatsAppPaid } = await import('@/lib/whatsapp-notify');
+      const wa = await notifyWhatsAppPaid({
+        orderId,
+        phone: fullOrder.buyerPhone,
+        buyerName: fullOrder.buyerName,
+        email: fullOrder.buyerEmail,
+        accessCode: fullOrder.accessCode,
+        eventTitle: fullOrder.event?.title,
+      });
+      if (!wa.ok && !wa.skipped) {
+        console.error('[FINALIZE] whatsapp notify falhou:', wa.error);
+      }
+    } catch (e) {
+      console.error('[FINALIZE] whatsapp notify exception:', e);
+    }
   }
 
   try {

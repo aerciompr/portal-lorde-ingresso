@@ -83,7 +83,7 @@ export default function Header({
   const logoSrc = candidates[Math.min(candidateIndex, candidates.length - 1)] || STATIC_FALLBACK_LOGO;
 
   // Sem link “ADMIN” no site público (acesso só por /admin/login)
-  const links = [
+  const links: { href: string; label: string; className?: string }[] = [
     { href: '/eventos', label: 'Programação' },
     { href: '/ingressos', label: 'Meus Ingressos' },
   ];

@@ -38,6 +38,7 @@ interface Props {
 
 export default function TicketSelector({ event }: Props) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [promoCode, setPromoCode] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -104,11 +105,24 @@ export default function TicketSelector({ event }: Props) {
       const res = await fetch('/api/orders/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: event.id, items }),
+        body: JSON.stringify({
+          eventId: event.id,
+          items,
+          ...(promoCode.trim() ? { promoCode: promoCode.trim() } : {}),
+        }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao criar pedido');
+
+      if (data.promoApplied) {
+        toast.success(
+          `Cupom ${data.promoApplied} aplicado` +
+            (data.discountCents
+              ? ` (−${formatPrice(data.discountCents)})`
+              : '')
+        );
+      }
 
       router.push(`/checkout/${data.orderId}`);
     } catch (e: unknown) {
@@ -208,6 +222,16 @@ export default function TicketSelector({ event }: Props) {
           </div>
         </div>
 
+        <div className="mb-3">
+          <label className="text-[11px] text-zinc-500 block mb-1">Cupom (opcional)</label>
+          <input
+            className="input w-full uppercase"
+            placeholder="Código promocional"
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+          />
+        </div>
+
         <button
           type="button"
           onClick={handleBuy}
@@ -273,6 +297,16 @@ export default function TicketSelector({ event }: Props) {
         <div className="text-3xl font-semibold tabular-nums tracking-tighter">
           {formatPrice(total)}
         </div>
+      </div>
+
+      <div className="mb-3">
+        <label className="text-[11px] text-zinc-500 block mb-1">Cupom (opcional)</label>
+        <input
+          className="input w-full uppercase"
+          placeholder="Código promocional"
+          value={promoCode}
+          onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+        />
       </div>
 
       <button

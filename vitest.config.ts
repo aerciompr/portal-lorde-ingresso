@@ -5,6 +5,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['lib/**/*.test.ts'],
+    // forks evita timeout do vitest-worker em Windows (threads/fetch SSR)
+    pool: 'forks',
+    poolOptions: { forks: { singleFork: true } },
+    fileParallelism: false,
   },
   resolve: {
     alias: {

@@ -10,8 +10,22 @@
 | **A** | Crons doc, CI legado off, rate-limit admin, cookie assinado, smoke | Código ok · **cron no EasyPanel = você agenda** |
 | **B** | Reports por período, dashboard pagos, Meus Ingressos UX, modais pós-compra, pedidos badge | **Feito** |
 | **C** | Vitest + CI (`ci.yml`), dashboard limpo, `PeriodFilter`/`StatusBadge`, `lib/order-metrics` | **Feito** |
-| **D** | Paginação pedidos, componentes design leves, CONTRIBUTING | **Parcial** (PWA/S3/cupom ainda backlog) |
-| **Hardening** | 6 lacunas: cancel ownership, check-in cookie assinado, GET order, validação admin, CSRF origin, testes | **Feito** |
+| **D** | Paginação, cupom, PWA check-in, S3 opcional, WhatsApp webhook, CONTRIBUTING | **Feito** (i18n multi-idioma ainda não) |
+| **Hardening** | 6 lacunas de validação | **Feito** |
+| **Engenharia extra** | typecheck limpo, vitest + CI hard, helpers Meus Ingressos, archive docs | **Feito** |
+
+### Cupom (Settings no admin ou banco)
+
+Chaves `Setting`: `promo_code`, `promo_percent`, `promo_active` (`1`/`true`).  
+Campo “Cupom” no seletor de ingressos do evento.
+
+### WhatsApp automático
+
+`WHATSAPP_NOTIFY_WEBHOOK` + opcional `WHATSAPP_NOTIFY_TOKEN` — POST JSON após pagamento.
+
+### S3/R2
+
+`UPLOAD_STORAGE=s3` + `S3_BUCKET`, keys, `S3_ENDPOINT`, `S3_PUBLIC_URL`. Requer `@aws-sdk/client-s3` instalado.
 
 Leia também: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md), [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md).
 

@@ -23,11 +23,14 @@ export default function Checkin() {
   // Initialize to empty to match SSR (prevents hydration mismatch on adminUser display)
   const [adminUser, setAdminUser] = useState<string>('');
 
-  // Make it feel like a standalone mobile app: hide public header/footer
+  // Make it feel like a standalone mobile app: hide public header/footer + PWA SW
   useEffect(() => {
     document.body.classList.add('checkin-app');
     const user = getAdminUser();
     if (user) setAdminUser(user);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw-checkin.js').catch(() => undefined);
+    }
     return () => document.body.classList.remove('checkin-app');
   }, []);
 

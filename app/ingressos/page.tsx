@@ -38,6 +38,15 @@ import {
 } from 'lucide-react';
 import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from '@/lib/contact';
 import PurchaseSuccessModal from '@/components/PurchaseSuccessModal';
+import {
+  eventDate,
+  isUpcoming,
+  isRefunded,
+  isActiveUpcoming,
+  relativeEventLabel,
+  formatDateShort,
+  partitionOrders,
+} from '@/lib/meus-ingressos';
 
 interface TicketItem {
   id: string;
@@ -71,27 +80,6 @@ interface Order {
 type LoginTab = 'codigo' | 'senha';
 type NavId = 'proximos' | 'passados' | 'estornos' | 'conta';
 
-function eventDate(d: string | Date) {
-  return new Date(d);
-}
-
-function isUpcoming(d: string | Date) {
-  const limit = new Date(d);
-  limit.setHours(23, 59, 59, 999);
-  return limit.getTime() >= Date.now();
-}
-
-function isRefunded(o: { status: string }) {
-  return (o.status || '').toLowerCase() === 'refunded';
-}
-
-/** Evento ainda por vir e pedido válido (não estornado / cancelado) */
-function isActiveUpcoming(o: Order) {
-  const s = (o.status || '').toLowerCase();
-  if (s === 'refunded' || s === 'cancelled' || s === 'canceled') return false;
-  return isUpcoming(o.event.date);
-}
-
 function statusBadge(status: string) {
   const text = orderStatusLabel(status);
   const s = (status || '').toLowerCase();
@@ -100,37 +88,6 @@ function statusBadge(status: string) {
   if (s === 'cancelled' || s === 'canceled')
     return { text, cls: 'bg-zinc-500/20 text-zinc-400 ring-zinc-500/20' };
   return { text, cls: 'bg-amber-500/15 text-amber-400 ring-amber-500/20' };
-}
-
-/** “Hoje”, “Amanhã”, “Em 5 dias”, “Foi em 12/03” */
-function relativeEventLabel(d: string | Date, refunded = false): string {
-  if (refunded) return 'Estornado';
-  const event = eventDate(d);
-  const startToday = new Date();
-  startToday.setHours(0, 0, 0, 0);
-  const startEvent = new Date(event);
-  startEvent.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((startEvent.getTime() - startToday.getTime()) / 86400000);
-  if (diffDays === 0) return 'Hoje';
-  if (diffDays === 1) return 'Amanhã';
-  if (diffDays > 1 && diffDays <= 60) return `Em ${diffDays} dias`;
-  if (diffDays < 0) {
-    const n = Math.abs(diffDays);
-    if (n === 1) return 'Ontem';
-    if (n <= 60) return `Há ${n} dias`;
-    return 'Encerrado';
-  }
-  return 'Por vir';
-}
-
-function formatDateShort(d: string | Date) {
-  return eventDate(d).toLocaleDateString('pt-BR', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 async function copyText(text: string) {
@@ -452,40 +409,21 @@ export default function MeusIngressos() {
   };
 
   const { upcoming, past, refunded, counts } = useMemo(() => {
-    const up: Order[] = [];
-    const pa: Order[] = [];
-    const ref: Order[] = [];
-    for (const o of orders) {
-      if (isRefunded(o)) {
-        ref.push(o);
-        continue;
-      }
-      // Estornado nunca entra em “próximos”, mesmo com data futura
-      if (isActiveUpcoming(o)) up.push(o);
-      else pa.push(o);
-    }
-    up.sort((a, b) => eventDate(a.event.date).getTime() - eventDate(b.event.date).getTime());
-    pa.sort((a, b) => eventDate(b.event.date).getTime() - eventDate(a.event.date).getTime());
-    ref.sort((a, b) => eventDate(b.event.date).getTime() - eventDate(a.event.date).getTime());
-    const ticketCount = (list: Order[]) =>
-      list.reduce((s, o) => s + (o.tickets?.length || 0), 0);
-
+    const p = partitionOrders(orders);
     return {
-      upcoming: up,
-      past: pa,
-      refunded: ref,
+      upcoming: p.upcoming,
+      past: p.past,
+      refunded: p.refunded,
       counts: {
-        // pedidos
-        proximos: up.length,
-        passados: pa.length,
-        estornos: ref.length,
-        validos: up.length + pa.length, // não estornados
+        proximos: p.upcoming.length,
+        passados: p.past.length,
+        estornos: p.refunded.length,
+        validos: p.upcoming.length + p.past.length,
         todos: orders.length,
-        // ingressos (unidade) — estorno NUNCA entra em válidos / próximos / passados
-        ticketsValidos: ticketCount(up) + ticketCount(pa),
-        ticketsProximos: ticketCount(up),
-        ticketsPassados: ticketCount(pa),
-        ticketsEstornos: ticketCount(ref),
+        ticketsValidos: p.counts.ticketsValidos,
+        ticketsProximos: p.counts.ticketsProximos,
+        ticketsPassados: p.counts.ticketsPassados,
+        ticketsEstornos: p.counts.ticketsEstornos,
       },
     };
   }, [orders]);

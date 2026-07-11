@@ -1,0 +1,19 @@
+{
+  "name": "Lorde Nelson Check-in",
+  "short_name": "LN Check-in",
+  "description": "Check-in de ingressos — staff Lorde Nelson",
+  "start_url": "/checkin",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#10b981",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/logo-lordenelson.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

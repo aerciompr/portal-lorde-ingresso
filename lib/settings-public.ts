@@ -63,12 +63,14 @@ export function filterPublicSettings(raw: Record<string, string>): Record<string
 }
 
 /** Remove hash de senha e campos sensíveis de pedidos na API do cliente */
-export function sanitizeOrderForClient<T extends Record<string, unknown>>(order: T): T {
+export function sanitizeOrderForClient<T extends Record<string, unknown>>(
+  order: T
+): T & { hasPassword: boolean } {
   const { buyerPasswordHash: _h, ...rest } = order as T & { buyerPasswordHash?: unknown };
   return {
     ...rest,
     hasPassword: Boolean(_h),
-  } as T;
+  } as T & { hasPassword: boolean };
 }
 
 export function sanitizeOrdersForClient<T extends Record<string, unknown>>(orders: T[]): T[] {

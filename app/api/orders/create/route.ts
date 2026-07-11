@@ -4,7 +4,7 @@ import { generateUniqueCode } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
   try {
-    const { eventId, items } = await req.json(); // items: [{ticketTypeId, quantity}]
+    const { eventId, items, promoCode } = await req.json(); // items: [{ticketTypeId, quantity}]
 
     if (!eventId || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 });
@@ -39,6 +39,11 @@ export async function POST(req: NextRequest) {
 
     const activeLoteId = event.activeLote?.id;
 
+    // Cupom opcional (Settings: promo_code, promo_percent, promo_active)
+    const { applyPromoCode } = await import('@/lib/promo');
+    const promo = await applyPromoCode(totalCents, promoCode);
+    totalCents = promo.totalCents;
+
     // Create pending order + tickets (will be finalized on payment success)
     // Placeholder evita "pedido fantasma" sem rótulo no admin
     const order = await prisma.order.create({
@@ -48,6 +53,9 @@ export async function POST(req: NextRequest) {
         buyerEmail: '',
         totalCents,
         status: 'pending',
+        feeDetails: promo.applied
+          ? `cupom ${promo.applied} (-${promo.discountCents} centavos)`
+          : undefined,
         loteId: activeLoteId,
         tickets: {
           create: orderItems.flatMap(item =>
@@ -86,7 +94,12 @@ export async function POST(req: NextRequest) {
       console.error('[CREATE ORDER] virada automática falhou', e);
     }
 
-    return NextResponse.json({ orderId: order.id, totalCents });
+    return NextResponse.json({
+      orderId: order.id,
+      totalCents,
+      promoApplied: promo.applied,
+      discountCents: promo.discountCents,
+    });
   } catch (e: unknown) {
     console.error(e);
     const msg = e instanceof Error ? e.message : 'Erro interno';
