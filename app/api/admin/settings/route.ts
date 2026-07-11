@@ -24,8 +24,10 @@ export async function GET() {
       favicon_url: '',
       banner_title: 'LORDE NELSON',
       banner_subtitle: 'Rest Pub • Shows, forró e grandes jogos. Compre seu ingresso agora.',
-      footer_left: 'Lorde Nelson Rest Pub • Rua Silvério Jorge, 241, Jaraguá — Maceió/AL\nQui a Sáb • 20h às 02h • WhatsApp (82) 99647-1998',
-      footer_right: '© {year} Lorde Nelson. Portal moderno de ingressos.\nPagamentos via Stripe e Mercado Pago • Check-in no local',
+      footer_left:
+        'Lorde Nelson Rest Pub\nRua Silvério Jorge, 241\nJaraguá — Maceió/AL\n\nQui a Sáb\n20h às 02h',
+      footer_right:
+        '© {year} Lorde Nelson\nPortal moderno de ingressos.\n\nPagamentos via Stripe e Mercado Pago\nCheck-in no local',
     };
     for (const [k, v] of Object.entries(defaults)) {
       await prisma.setting.upsert({ where: { key: k }, update: { value: v }, create: { key: k, value: v } });

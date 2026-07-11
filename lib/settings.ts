@@ -74,8 +74,10 @@ const DEFAULTS: AppSettings = {
     bannerImageUrl: '',
     bannerTitle: 'LORDE NELSON',
     bannerSubtitle: 'Rest Pub • Shows, forró e grandes jogos. Compre seu ingresso agora.',
-    footerLeft: 'Lorde Nelson Rest Pub • Rua Silvério Jorge, 241, Jaraguá — Maceió/AL\nQui a Sáb • 20h às 02h • WhatsApp (82) 99647-1998',
-    footerRight: '© {year} Lorde Nelson. Portal moderno de ingressos.\nPagamentos via Stripe e Mercado Pago • Check-in no local',
+    footerLeft:
+      'Lorde Nelson Rest Pub\nRua Silvério Jorge, 241\nJaraguá — Maceió/AL\n\nQui a Sáb\n20h às 02h',
+    footerRight:
+      '© {year} Lorde Nelson\nPortal moderno de ingressos.\n\nPagamentos via Stripe e Mercado Pago\nCheck-in no local',
   },
 };
 
