@@ -57,9 +57,19 @@ export async function POST(req: NextRequest) {
     const pi = obj.payment_intent || (obj.charges?.data?.[0]?.payment_intent);
     if (pi) {
       const order = await prisma.order.findFirst({ where: { paymentId: String(pi) } });
-      if (order && (order.status === 'paid' || order.status === 'pending')) {
-        await prisma.order.update({ where: { id: order.id }, data: { status: 'refunded' } });
-        await prisma.ticket.updateMany({ where: { orderId: order.id }, data: { status: 'cancelled' } });
+      if (order && order.status === 'paid') {
+        const { restoreStockOnRefund } = await import('@/lib/order-stock');
+        const stock = await restoreStockOnRefund(order.id);
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: 'refunded',
+            feeDetails: [order.feeDetails, `estorno stripe: ${stock.reason}`]
+              .filter(Boolean)
+              .join(' | ')
+              .slice(0, 250),
+          },
+        });
 
         const pending = await prisma.cancellationRequest.findFirst({
           where: { orderId: order.id, status: 'pending' },
@@ -67,10 +77,21 @@ export async function POST(req: NextRequest) {
         if (pending) {
           await prisma.cancellationRequest.update({
             where: { id: pending.id },
-            data: { status: 'approved', processedAt: new Date(), adminNotes: 'Reembolso via webhook Stripe' },
+            data: {
+              status: 'approved',
+              processedAt: new Date(),
+              adminNotes: `Reembolso via webhook Stripe. ${stock.reason}`,
+            },
           });
         }
-        console.log(`[STRIPE] refund processed for ${order.id}`);
+        console.log(`[STRIPE] refund processed for ${order.id}`, stock);
+      } else if (order && order.status === 'pending') {
+        const { releaseOrderStock } = await import('@/lib/order-stock');
+        await releaseOrderStock(order.id);
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'refunded' },
+        });
       }
     }
   }

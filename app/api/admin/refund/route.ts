@@ -5,6 +5,7 @@ import Stripe from 'stripe';
 import { MercadoPagoConfig, PaymentRefund } from 'mercadopago';
 import { sendCancellationApproved } from '@/lib/email';
 import { getAppSettings } from '@/lib/settings';
+import { restoreStockOnRefund } from '@/lib/order-stock';
 
 export async function POST(req: NextRequest) {
   if (!(await isAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { event: true, cancellationRequests: true },
+    include: { event: true, cancellationRequests: true, tickets: true },
   });
 
   if (!order || order.status !== 'paid') {
@@ -61,25 +62,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Falha ao solicitar reembolso no gateway: ' + (err.message || '') }, { status: 500 });
   }
 
-  // Update order and tickets
+  // Estoque: devolve só se o lote da venda ainda estiver ATIVO
+  const stock = await restoreStockOnRefund(orderId);
+
   await prisma.order.update({
     where: { id: orderId },
-    data: { status: 'refunded' },
-  });
-  await prisma.ticket.updateMany({
-    where: { orderId },
-    data: { status: 'cancelled' },
+    data: {
+      status: 'refunded',
+      feeDetails: [
+        order.feeDetails,
+        `estorno: ${stock.reason}`,
+      ]
+        .filter(Boolean)
+        .join(' | ')
+        .slice(0, 250),
+    },
   });
 
   // Mark any pending cancellation request as approved
-  const pending = order.cancellationRequests.find((cr: any) => cr.status === 'pending');
+  const pending = order.cancellationRequests.find((cr: { status: string }) => cr.status === 'pending');
   if (pending) {
     await prisma.cancellationRequest.update({
       where: { id: pending.id },
       data: {
         status: 'approved',
         processedAt: new Date(),
-        adminNotes: `Reembolsado ${(refundCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (taxa ${feePercent}%)`,
+        adminNotes: `Reembolsado ${(refundCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (taxa ${feePercent}%). ${stock.reason}`,
       },
     });
   }
@@ -94,8 +102,16 @@ export async function POST(req: NextRequest) {
   });
 
   if (fullOrder) {
-    await sendCancellationApproved(fullOrder as any, refundCents);
+    try {
+      await sendCancellationApproved(fullOrder as any, refundCents);
+    } catch (e) {
+      console.error('[REFUND] e-mail falhou', e);
+    }
   }
 
-  return NextResponse.json({ success: true, refundCents });
+  return NextResponse.json({
+    success: true,
+    refundCents,
+    stock,
+  });
 }

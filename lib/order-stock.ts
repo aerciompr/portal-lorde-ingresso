@@ -55,6 +55,121 @@ export async function releaseOrderStock(orderId: string): Promise<{ ticketsRelea
   return { ticketsReleased: total };
 }
 
+/**
+ * Estorno de pedido **pago**:
+ * - Se o lote da venda ainda está **ativo** → devolve sold no lote e no TicketType
+ *   (alguém pode comprar de novo naquele lote).
+ * - Se o lote já foi virado / **inativo** (encerrado) → **não** devolve ao lote
+ *   (histórico do lote fechado permanece; não reabre vaga em lote esgotado).
+ *
+ * Idempotente: tickets já cancelled não contam de novo.
+ */
+export async function restoreStockOnRefund(orderId: string): Promise<{
+  ticketsRestored: number;
+  loteRestored: boolean;
+  loteId: string | null;
+  reason: string;
+}> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { tickets: true },
+  });
+  if (!order) {
+    return { ticketsRestored: 0, loteRestored: false, loteId: null, reason: 'pedido não encontrado' };
+  }
+
+  // Conta tickets que ainda contavam como vendidos (não cancelados)
+  const activeTickets = order.tickets.filter((t) => t.status !== 'cancelled');
+  if (activeTickets.length === 0) {
+    return {
+      ticketsRestored: 0,
+      loteRestored: false,
+      loteId: order.loteId,
+      reason: 'nenhum ticket ativo para devolver',
+    };
+  }
+
+  const byType: Record<string, number> = {};
+  for (const t of activeTickets) {
+    byType[t.ticketTypeId] = (byType[t.ticketTypeId] || 0) + 1;
+  }
+  const total = activeTickets.length;
+
+  // Cancela tickets (sempre no estorno)
+  await prisma.ticket.updateMany({
+    where: { orderId, status: { not: 'cancelled' } },
+    data: { status: 'cancelled' },
+  });
+
+  if (!order.loteId) {
+    // Pedido sem lote: devolve só TicketType
+    for (const [ticketTypeId, qty] of Object.entries(byType)) {
+      const tt = await prisma.ticketType.findUnique({ where: { id: ticketTypeId } });
+      if (tt) {
+        await prisma.ticketType.update({
+          where: { id: ticketTypeId },
+          data: { sold: Math.max(0, tt.sold - qty) },
+        });
+      }
+    }
+    return {
+      ticketsRestored: total,
+      loteRestored: false,
+      loteId: null,
+      reason: 'sem lote no pedido — devolveu TicketType',
+    };
+  }
+
+  const lote = await prisma.lote.findUnique({ where: { id: order.loteId } });
+  if (!lote) {
+    return {
+      ticketsRestored: 0,
+      loteRestored: false,
+      loteId: order.loteId,
+      reason: 'lote não encontrado',
+    };
+  }
+
+  if (!lote.ativo) {
+    // Lote já virado / esgotado / inativo — não reabre vaga nesse lote
+    console.log(
+      `[STOCK] estorno ${orderId}: lote ${lote.nome} inativo — NÃO devolve sold (tickets cancelados)`
+    );
+    return {
+      ticketsRestored: 0,
+      loteRestored: false,
+      loteId: lote.id,
+      reason: `lote "${lote.nome}" inativo/encerrado — estoque do lote não alterado`,
+    };
+  }
+
+  // Lote ainda ativo → devolve
+  await prisma.lote.update({
+    where: { id: lote.id },
+    data: { sold: Math.max(0, lote.sold - total) },
+  });
+
+  for (const [ticketTypeId, qty] of Object.entries(byType)) {
+    const tt = await prisma.ticketType.findUnique({ where: { id: ticketTypeId } });
+    if (tt) {
+      await prisma.ticketType.update({
+        where: { id: ticketTypeId },
+        data: { sold: Math.max(0, tt.sold - qty) },
+      });
+    }
+  }
+
+  console.log(
+    `[STOCK] estorno ${orderId}: devolveu ${total} ao lote ativo "${lote.nome}"`
+  );
+  return {
+    ticketsRestored: total,
+    loteRestored: true,
+    loteId: lote.id,
+    reason: `devolvido ao lote ativo "${lote.nome}"`,
+  };
+}
+
 export type AdminOrderKind = 'courtesy' | 'manual';
 
 export type CreateAdminOrderInput = {

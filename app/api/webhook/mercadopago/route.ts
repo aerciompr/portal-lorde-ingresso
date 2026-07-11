@@ -130,17 +130,31 @@ export async function POST(req: NextRequest) {
       });
       console.log(`[MP] pending order ${order.id} closed (${status}), stock released`);
     } else if (status === 'refunded' && order.status === 'paid') {
-      await prisma.order.update({ where: { id: order.id }, data: { status: 'refunded' } });
-      await prisma.ticket.updateMany({ where: { orderId: order.id }, data: { status: 'cancelled' } });
+      const { restoreStockOnRefund } = await import('@/lib/order-stock');
+      const stock = await restoreStockOnRefund(order.id);
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: 'refunded',
+          feeDetails: [order.feeDetails, `estorno mp: ${stock.reason}`]
+            .filter(Boolean)
+            .join(' | ')
+            .slice(0, 250),
+        },
+      });
 
       const pending = order.cancellationRequests?.find((cr: { status: string }) => cr.status === 'pending');
       if (pending) {
         await prisma.cancellationRequest.update({
           where: { id: pending.id },
-          data: { status: 'approved', processedAt: new Date(), adminNotes: 'Reembolso processado via webhook MP' },
+          data: {
+            status: 'approved',
+            processedAt: new Date(),
+            adminNotes: `Reembolso processado via webhook MP. ${stock.reason}`,
+          },
         });
       }
-      console.log(`[MP] refund processed for ${order.id}`);
+      console.log(`[MP] refund processed for ${order.id}`, stock);
     }
   }
 
