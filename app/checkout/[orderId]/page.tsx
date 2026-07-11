@@ -96,14 +96,29 @@ export default function CheckoutPage() {
         if (!res.ok || stopped) return;
         const data = await res.json();
         if (data.status === 'paid') {
-          setPaymentStatus('paid');
-          setPaymentStatusMsg('Pagamento confirmado! Guarde o código abaixo.');
-          toast.success('PIX confirmado! Guarde seu código de acesso.');
-          // Atualiza código se o servidor gerou/confirmou outro
+          const email = buyer.email || data.buyerEmail || '';
+          const code = data.accessCode || pixData.accessCode || '';
           if (data.accessCode) {
             setPixData((prev) => (prev ? { ...prev, accessCode: data.accessCode } : prev));
           }
-          // NÃO redireciona sozinho — o cliente precisa ver o código (não há “cadastro” obrigatório)
+          setPaymentStatus('paid');
+          setPaymentStatusMsg(
+            code
+              ? `Pagamento confirmado! Código ${code} — abrindo seus ingressos…`
+              : 'Pagamento confirmado! Abrindo seus ingressos…'
+          );
+          toast.success(
+            code
+              ? `PIX confirmado! Seu código: ${code}`
+              : 'PIX confirmado! Abrindo seus ingressos…'
+          );
+          // Redireciona para Meus Ingressos com e-mail + código (sem cadastro)
+          setTimeout(() => {
+            if (stopped) return;
+            router.push(
+              `/ingressos?email=${encodeURIComponent(email)}${code ? `&code=${encodeURIComponent(code)}` : ''}&success=1`
+            );
+          }, 1800);
           return;
         }
         if (data.mpStatus && ['rejected', 'cancelled', 'canceled', 'expired'].includes(data.mpStatus)) {
@@ -383,9 +398,9 @@ export default function CheckoutPage() {
               {pixData.accessCode || '—'}
             </div>
             <p className="text-[11px] text-zinc-400 text-center mt-2 leading-relaxed">
-              Não precisa criar conta. Guarde este código + o e-mail da compra.
-              Em <strong className="text-zinc-300">Meus Ingressos</strong> use a opção
-              &quot;Código de acesso&quot;.
+              Não precisa criar conta. Após o pagamento você é levado a{' '}
+              <strong className="text-zinc-300">Meus Ingressos</strong> com este código.
+              Anote-o se fechar a página.
             </p>
             {pixData.accessCode && (
               <button
