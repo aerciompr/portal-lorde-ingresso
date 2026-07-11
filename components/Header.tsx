@@ -1,21 +1,70 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
+
+/** Logo empacotada no app — sempre existe no deploy */
+const STATIC_FALLBACK_LOGO = '/logo-lordenelson.jpg';
+
+function uniqueUrls(...candidates: (string | undefined | null)[]) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const c of candidates) {
+    const u = (c || '').trim();
+    if (!u || seen.has(u)) continue;
+    seen.add(u);
+    out.push(u);
+  }
+  return out;
+}
 
 export default function Header({
   initialBranding = {},
 }: {
-  initialBranding?: { siteName?: string; logoUrl?: string };
+  initialBranding?: { siteName?: string; logoUrl?: string; faviconUrl?: string };
 }) {
   const [open, setOpen] = useState(false);
-  const [logoFailed, setLogoFailed] = useState(false);
+  const [siteName, setSiteName] = useState(initialBranding.siteName || 'Lorde Nelson');
+  const [remoteLogo, setRemoteLogo] = useState((initialBranding.logoUrl || '').trim());
+  const [remoteFavicon, setRemoteFavicon] = useState((initialBranding.faviconUrl || '').trim());
+  const [candidateIndex, setCandidateIndex] = useState(0);
 
-  const siteName = initialBranding.siteName || 'Lorde Nelson';
-  // Só a logo enviada no admin — sem imagem padrão / sem “LN” junto com a logo
-  const logoUrl = (initialBranding.logoUrl || '').trim();
-  const showLogo = Boolean(logoUrl) && !logoFailed;
+  // Se o SSR veio sem logo (cache / falha de DB), busca nas configs públicas
+  useEffect(() => {
+    let cancelled = false;
+    const needFetch = !(initialBranding.logoUrl || '').trim();
+    if (!needFetch) return;
+
+    fetch('/api/admin/settings')
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled || !data) return;
+        if (data.site_name) setSiteName(String(data.site_name));
+        if (data.logo_url) {
+          setRemoteLogo(String(data.logo_url).trim());
+          setCandidateIndex(0);
+        }
+        if (data.favicon_url) setRemoteFavicon(String(data.favicon_url).trim());
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialBranding.logoUrl]);
+
+  const candidates = useMemo(
+    () =>
+      uniqueUrls(
+        remoteLogo || initialBranding.logoUrl,
+        remoteFavicon || initialBranding.faviconUrl,
+        STATIC_FALLBACK_LOGO
+      ),
+    [remoteLogo, remoteFavicon, initialBranding.logoUrl, initialBranding.faviconUrl]
+  );
+
+  const logoSrc = candidates[Math.min(candidateIndex, candidates.length - 1)] || STATIC_FALLBACK_LOGO;
 
   const links = [
     { href: '/eventos', label: 'Programação' },
@@ -35,17 +84,22 @@ export default function Header({
           href="/"
           className="flex items-center gap-2.5 font-semibold tracking-tight text-xl hover:opacity-90 transition min-w-0"
         >
-          {showLogo ? (
-            // eslint-disable-next-line @next/next/no-img-element
+          {/* Fundo claro leve: logos pretas/circulares não “somem” no header escuro */}
+          <span className="inline-flex items-center justify-center shrink-0 h-11 max-w-[min(220px,58vw)] rounded-xl bg-white/95 px-2 py-1 shadow-sm ring-1 ring-white/20">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={logoUrl}
+              key={logoSrc}
+              src={logoSrc}
               alt={siteName}
-              className="h-10 w-auto max-w-[min(200px,55vw)] object-contain"
-              onError={() => setLogoFailed(true)}
+              className="h-9 w-auto max-w-full object-contain"
+              onError={() => {
+                setCandidateIndex((i) => {
+                  if (i + 1 < candidates.length) return i + 1;
+                  return i;
+                });
+              }}
             />
-          ) : (
-            <span className="truncate text-white">{siteName}</span>
-          )}
+          </span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-8 text-[13px] font-semibold uppercase tracking-[2.5px] font-[family-name:var(--font-space-grotesk)]">

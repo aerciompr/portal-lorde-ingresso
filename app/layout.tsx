@@ -6,6 +6,10 @@ import Header from "@/components/Header";
 import { getAppSettings } from "@/lib/settings";
 import { absoluteMediaUrl, mimeFromUrl } from "@/lib/media-url";
 
+/** Branding (logo) vem do banco — não cachear layout vazio sem logo */
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -31,27 +35,27 @@ export async function generateMetadata(): Promise<Metadata> {
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://portal.lordenelson.com.br";
 
-  // Só favicon/logo configurados no admin — sem imagem “padrão” extra
-  const faviconRaw = (s.branding.faviconUrl || s.branding.logoUrl || "").trim();
-  const favicon = faviconRaw ? absoluteMediaUrl(faviconRaw, base) : undefined;
-  const mime = faviconRaw ? mimeFromUrl(faviconRaw) : undefined;
+  // Preferência: favicon admin → logo admin → logo estática do app
+  const faviconRaw = (
+    s.branding.faviconUrl ||
+    s.branding.logoUrl ||
+    "/logo-lordenelson.jpg"
+  ).trim();
+  const favicon = absoluteMediaUrl(faviconRaw, base);
+  const mime = mimeFromUrl(faviconRaw);
 
   return {
     title: `${siteName} | Ingressos`,
     description:
       "Compre ingressos para eventos no Lorde Nelson Rest Pub - Maceió. Programação, shows, forró e jogos.",
-    ...(favicon
-      ? {
-          icons: {
-            icon: [
-              { url: favicon, type: mime, sizes: "32x32" },
-              { url: favicon, type: mime, sizes: "16x16" },
-            ],
-            shortcut: favicon,
-            apple: favicon,
-          },
-        }
-      : {}),
+    icons: {
+      icon: [
+        { url: favicon, type: mime, sizes: "32x32" },
+        { url: favicon, type: mime, sizes: "16x16" },
+      ],
+      shortcut: favicon,
+      apple: favicon,
+    },
   };
 }
 
@@ -75,7 +79,9 @@ export default async function RootLayout({
 
   const initialBranding = {
     siteName: b.siteName,
-    logoUrl: b.logoUrl || "",
+    // Sempre envia algo: admin → fallback estático (nunca some o topo)
+    logoUrl: (b.logoUrl || "").trim() || "/logo-lordenelson.jpg",
+    faviconUrl: (b.faviconUrl || "").trim(),
   };
 
   return (

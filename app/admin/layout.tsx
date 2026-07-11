@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [logoUrl, setLogoUrl] = useState('');
+  const [logoUrl, setLogoUrl] = useState('/logo-lordenelson.jpg');
   const [siteName, setSiteName] = useState('Lorde Nelson');
   const [logoFailed, setLogoFailed] = useState(false);
 
@@ -29,10 +29,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     fetch('/api/admin/settings')
       .then((r) => r.json())
       .then((data) => {
-        if (data.logo_url) setLogoUrl(String(data.logo_url));
+        const next = (data.logo_url || data.favicon_url || '/logo-lordenelson.jpg').toString().trim();
+        setLogoUrl(next);
+        setLogoFailed(false);
         if (data.site_name) setSiteName(String(data.site_name));
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setLogoUrl('/logo-lordenelson.jpg');
+        setLogoFailed(false);
+      });
   }, [pathname]);
 
   const isLoginPage = pathname === '/admin/login' || pathname?.endsWith('/login');
@@ -64,19 +69,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         <div className="p-6 border-b border-white/10">
           <Link href="/admin" className="flex items-center gap-3 min-w-0">
-            {logoUrl && !logoFailed ? (
-              // eslint-disable-next-line @next/next/no-img-element
+            <span className="inline-flex items-center justify-center rounded-xl bg-white/95 px-2 py-1 ring-1 ring-white/15">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={logoUrl}
+                src={logoFailed ? '/logo-lordenelson.jpg' : logoUrl}
                 alt={siteName}
-                className="h-10 w-auto max-w-[160px] object-contain"
+                className="h-9 w-auto max-w-[150px] object-contain"
                 onError={() => setLogoFailed(true)}
               />
-            ) : (
-              <div className="min-w-0">
-                <div className="font-semibold truncate">{siteName}</div>
-              </div>
-            )}
+            </span>
           </Link>
           <div className="text-[10px] text-zinc-500 mt-2">Portal Admin</div>
         </div>

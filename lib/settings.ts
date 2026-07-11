@@ -67,7 +67,8 @@ const DEFAULTS: AppSettings = {
     mpClientSecret: '',
   },
   branding: {
-    logoUrl: '',
+    // Fallback se o admin ainda não configurou logo (arquivo em /public)
+    logoUrl: '/logo-lordenelson.jpg',
     faviconUrl: '',
     siteName: 'Lorde Nelson',
     bannerImageUrl: '',
