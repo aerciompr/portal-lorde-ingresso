@@ -824,12 +824,15 @@ export default function MeusIngressos() {
                   <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
                     {nav === 'proximos' && 'Próximos eventos'}
                     {nav === 'passados' && 'Eventos passados'}
+                    {nav === 'estornos' && 'Estornos'}
                     {nav === 'todos' && 'Todos os ingressos'}
                   </h1>
                   <p className="text-sm text-zinc-500 mt-1">
                     {visibleOrders.length === 0
                       ? 'Nada por aqui'
-                      : `${visibleOrders.length} pedido(s) nesta lista`}
+                      : nav === 'estornos'
+                        ? `${visibleOrders.length} pedido(s) estornado(s)`
+                        : `${visibleOrders.length} pedido(s) nesta lista`}
                   </p>
                 </div>
                 {/* Chips mobile quick filter */}
