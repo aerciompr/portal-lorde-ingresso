@@ -1,7 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { formatPrice, formatDate } from '@/lib/utils';
+import {
+  formatPrice,
+  formatDate,
+  orderStatusLabel,
+  ticketStatusLabel,
+  cancellationStatusLabel,
+} from '@/lib/utils';
 import { toast } from 'sonner';
 import QRCode from 'react-qr-code';
 import { formatCpf, cleanDigits } from '@/lib/masks';
@@ -56,11 +62,14 @@ function isUpcoming(d: string | Date) {
   return limit.getTime() >= Date.now();
 }
 
-function statusLabel(status: string) {
-  if (status === 'paid') return { text: 'Pago', cls: 'bg-emerald-500/15 text-emerald-400' };
-  if (status === 'refunded') return { text: 'Estornado', cls: 'bg-red-500/15 text-red-400' };
-  if (status === 'cancelled') return { text: 'Cancelado', cls: 'bg-zinc-500/20 text-zinc-400' };
-  return { text: status, cls: 'bg-amber-500/15 text-amber-400' };
+function statusBadge(status: string) {
+  const text = orderStatusLabel(status);
+  const s = (status || '').toLowerCase();
+  if (s === 'paid') return { text, cls: 'bg-emerald-500/15 text-emerald-400' };
+  if (s === 'refunded') return { text, cls: 'bg-red-500/15 text-red-400' };
+  if (s === 'cancelled' || s === 'canceled') return { text, cls: 'bg-zinc-500/20 text-zinc-400' };
+  if (s === 'pending') return { text, cls: 'bg-amber-500/15 text-amber-400' };
+  return { text, cls: 'bg-amber-500/15 text-amber-400' };
 }
 
 export default function MeusIngressos() {
@@ -403,9 +412,63 @@ export default function MeusIngressos() {
                   </button>
                 </>
               )}
-              <p className="text-[11px] text-zinc-500 text-center pt-1">
-                Perdeu o código? WhatsApp do Lorde com o e-mail/CPF da compra.
-              </p>
+              <div className="pt-2 border-t border-white/10 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResend((v) => !v);
+                    if (!resendEmail && email) setResendEmail(email);
+                  }}
+                  className="text-xs text-emerald-400/90 hover:text-emerald-300 w-full text-center py-2"
+                >
+                  {showResend ? 'Fechar reenvio' : 'Esqueci / quero reenviar o código por e-mail'}
+                </button>
+                {showResend && (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-[11px] text-zinc-500 text-center">
+                      Enviamos o(s) código(s) LN-… para o e-mail usado na compra.
+                    </p>
+                    <input
+                      type="text"
+                      className="input text-sm"
+                      placeholder="E-mail ou CPF da compra"
+                      value={resendEmail}
+                      onChange={(e) => setResendEmail(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      disabled={resending || !resendEmail.trim()}
+                      className="btn btn-secondary w-full py-2.5 text-sm"
+                      onClick={async () => {
+                        setResending(true);
+                        try {
+                          const raw = resendEmail.trim();
+                          const dig = cleanDigits(raw);
+                          const body =
+                            dig.length === 11 && /^[\d.\-\s]+$/.test(raw)
+                              ? { cpf: dig }
+                              : { email: raw.toLowerCase() };
+                          const res = await fetch('/api/orders/resend-code', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error || 'Falha no envio');
+                          toast.success(data.message || 'Se houver pedidos, enviamos o e-mail.');
+                          setShowResend(false);
+                        } catch (err: unknown) {
+                          toast.error((err as Error).message || 'Não foi possível reenviar');
+                        } finally {
+                          setResending(false);
+                        }
+                      }}
+                    >
+                      {resending ? 'Enviando…' : 'Reenviar código'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -546,7 +609,7 @@ export default function MeusIngressos() {
 
             <div className="space-y-3">
               {visibleOrders.map((order) => {
-                const st = statusLabel(order.status);
+                const st = statusBadge(order.status);
                 const up = isUpcoming(order.event.date);
                 const open = expandedOrder === order.id;
                 return (
@@ -618,8 +681,8 @@ export default function MeusIngressos() {
                                   {t.uniqueCode}
                                 </div>
                                 {t.status !== 'valid' && (
-                                  <div className="text-[10px] text-zinc-500 mt-1 uppercase">
-                                    {t.status}
+                                  <div className="text-[10px] text-zinc-500 mt-1">
+                                    {ticketStatusLabel(t.status)}
                                   </div>
                                 )}
                               </div>
@@ -663,7 +726,10 @@ export default function MeusIngressos() {
 
                         {order.cancellationRequests.length > 0 && (
                           <div className="text-xs rounded-xl px-3 py-2 bg-amber-950/40 text-amber-200/90 border border-amber-500/20">
-                            Cancelamento: <strong>{order.cancellationRequests[0].status}</strong>
+                            Cancelamento:{' '}
+                            <strong>
+                              {cancellationStatusLabel(order.cancellationRequests[0].status)}
+                            </strong>
                             {order.cancellationRequests[0].reason
                               ? ` — ${order.cancellationRequests[0].reason}`
                               : ''}

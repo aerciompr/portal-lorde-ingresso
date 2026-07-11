@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDate, orderStatusLabel } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export const dynamic = 'force-dynamic';
@@ -244,8 +244,13 @@ export default function AdminPortal() {
       paid: 'bg-emerald-500/20 text-emerald-400',
       refunded: 'bg-red-500/20 text-red-400',
       pending: 'bg-yellow-500/20 text-yellow-400',
+      cancelled: 'bg-zinc-600/40 text-zinc-400',
     };
-    return <span className={`px-2 py-0.5 rounded text-xs ${colors[status] || 'bg-zinc-700'}`}>{status}</span>;
+    return (
+      <span className={`px-2 py-0.5 rounded text-xs ${colors[status] || 'bg-zinc-700'}`}>
+        {orderStatusLabel(status)}
+      </span>
+    );
   };
 
   return (

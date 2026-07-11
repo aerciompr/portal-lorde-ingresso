@@ -2,6 +2,56 @@ export function cn(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
+/** Status de pedido (banco em inglês → UI em português) */
+export function orderStatusLabel(status: string | null | undefined): string {
+  const s = (status || '').toLowerCase();
+  const map: Record<string, string> = {
+    paid: 'Pago',
+    pending: 'Pendente',
+    refunded: 'Estornado',
+    cancelled: 'Cancelado',
+    canceled: 'Cancelado',
+  };
+  return map[s] || status || '—';
+}
+
+/** Status de ingresso */
+export function ticketStatusLabel(status: string | null | undefined): string {
+  const s = (status || '').toLowerCase();
+  const map: Record<string, string> = {
+    valid: 'Válido',
+    used: 'Utilizado',
+    cancelled: 'Cancelado',
+    canceled: 'Cancelado',
+  };
+  return map[s] || status || '—';
+}
+
+/** Status de solicitação de cancelamento */
+export function cancellationStatusLabel(status: string | null | undefined): string {
+  const s = (status || '').toLowerCase();
+  const map: Record<string, string> = {
+    pending: 'Pendente',
+    approved: 'Aprovado',
+    rejected: 'Recusado',
+  };
+  return map[s] || status || '—';
+}
+
+/** Método de pagamento (exibição) */
+export function paymentMethodLabel(method: string | null | undefined): string {
+  const s = (method || '').toLowerCase();
+  const map: Record<string, string> = {
+    pix: 'PIX',
+    card: 'Cartão',
+    credit_card: 'Cartão',
+    boleto: 'Boleto',
+    manual: 'Manual',
+    courtesy: 'Cortesia',
+  };
+  return map[s] || method || '—';
+}
+
 /** Aviso legal padrão exibido ao final da descrição de todo evento (quando footerNotice estiver vazio). */
 export const DEFAULT_EVENT_FOOTER_NOTICE =
   'Proibido para menores de 18 anos. Os ingressos são vendidos até a data limite ou enquanto durarem os estoques.';

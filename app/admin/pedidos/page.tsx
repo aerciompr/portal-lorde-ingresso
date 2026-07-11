@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, orderStatusLabel, ticketStatusLabel } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Download, FileText } from 'lucide-react';
 
@@ -113,7 +113,9 @@ export default function AdminPedidos() {
       cancelled: 'bg-zinc-600/40 text-zinc-400',
     };
     return (
-      <span className={`px-2 py-0.5 rounded text-xs ${colors[status] || 'bg-zinc-700'}`}>{status}</span>
+      <span className={`px-2 py-0.5 rounded text-xs ${colors[status] || 'bg-zinc-700'}`}>
+        {orderStatusLabel(status)}
+      </span>
     );
   };
 
@@ -230,7 +232,7 @@ export default function AdminPedidos() {
                                 <span className="text-zinc-300">{t.ticketType?.name || 'Ingresso'}</span>
                                 {' · '}
                                 <code className="font-mono text-emerald-400/90">{t.uniqueCode}</code>
-                                <span className="text-zinc-600 ml-2">({t.status})</span>
+                                <span className="text-zinc-600 ml-2">({ticketStatusLabel(t.status)})</span>
                               </span>
                               <button
                                 type="button"
