@@ -247,21 +247,19 @@ npx prisma db push --schema=./prisma/schema.prisma
 
 ---
 
-## 9. Uploads de imagem (admin)
+## 9. Uploads de imagem (admin) — **volume (recomendado)**
 
-**Pelo env (recomendado — sem volume):**
+Passo a passo completo: [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md).
 
 ```env
-UPLOAD_STORAGE=db
+UPLOAD_STORAGE=disk
+UPLOADS_DIR=/app/data/uploads
 PRISMA_USE_ADAPTER=0
 ```
 
-Imagens no **MySQL** (tabela `MediaFile`) → **não somem** no deploy.  
-Após deploy: `npx prisma db push --schema=./prisma/schema.prisma`  
+EasyPanel → App → **Mounts/Volumes** → montar volume em **`/app/data/uploads`** → Restart/Deploy.
 
-Detalhes: [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md).
-
-**Opcional (disco + volume):** `UPLOAD_STORAGE=disk` + mount em `/app/data/uploads`.
+Alternativa sem volume: `UPLOAD_STORAGE=db` (MySQL MediaFile).
 
 ---
 

@@ -10,9 +10,10 @@ import { mkdir, access, writeFile, unlink, constants } from 'fs/promises';
  * Env: UPLOAD_STORAGE=db|disk|auto
  */
 export function uploadStorageMode(): 'db' | 'disk' | 'auto' {
-  const m = (process.env.UPLOAD_STORAGE || 'db').toLowerCase().trim();
+  // Padrão: disk + volume EasyPanel (docs/UPLOADS_PERSISTENTES.md)
+  const m = (process.env.UPLOAD_STORAGE || 'disk').toLowerCase().trim();
   if (m === 'disk' || m === 'auto' || m === 'db') return m;
-  return 'db';
+  return 'disk';
 }
 
 function candidateDirs(): string[] {

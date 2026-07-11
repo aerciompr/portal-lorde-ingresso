@@ -45,8 +45,9 @@ ENV HOST=0.0.0.0
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV UPLOADS_DIR=/app/data/uploads
-# db = imagens no MySQL (não somem no deploy; só precisa env + db push)
-ENV UPLOAD_STORAGE=db
+# disk = pasta no container (monte VOLUME EasyPanel em /app/data/uploads)
+# db = MySQL MediaFile (alternativa sem volume)
+ENV UPLOAD_STORAGE=disk
 ENV PRISMA_USE_ADAPTER=0
 
 RUN groupadd --system --gid 1001 nodejs \

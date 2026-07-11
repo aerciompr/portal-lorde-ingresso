@@ -1,72 +1,158 @@
-# Imagens que **não somem** no deploy
+# Passo a passo: imagens em **volume** (EasyPanel)
 
-## Resposta curta
-
-**Sim — pelo Environment (env), sem montar volume:**
-
-```env
-UPLOAD_STORAGE=db
-```
-
-As imagens vão para a tabela **`MediaFile` no MySQL**.  
-O MySQL **já é persistente** no EasyPanel → deploy **não apaga** as fotos.
-
-URL pública: `/uploads/m/{id}`
+Assim as fotos **não somem** quando você clica em **Implantar**.
 
 ---
 
-## Opções (`UPLOAD_STORAGE`)
+## Ideia
 
-| Valor | Onde grava | Some no deploy? | Precisa volume? |
-|-------|------------|-----------------|-----------------|
-| **`db`** (padrão no Docker) | MySQL | **Não** | Não |
-| `disk` | Pasta `/app/data/uploads` | **Sim**, sem volume | Sim, se quiser manter |
-| `auto` | Disco se der; senão MySQL | Depende | Opcional |
-
-No EasyPanel → Environment do app:
-
-```env
-UPLOAD_STORAGE=db
+```text
+Container do app (pode ser recriado)
+        │
+        │  monta
+        ▼
+Volume "portal_uploads"  ←── fica no disco da VPS (permanente)
+caminho: /app/data/uploads
 ```
 
-(O Dockerfile já define isso; confira se não sobrescreveu com outra coisa.)
+Código grava em: `/app/data/uploads`  
+Env: `UPLOAD_STORAGE=disk`
 
 ---
 
-## Depois do deploy (obrigatório uma vez)
+## Passo 1 — Environment do app
 
-Criar a tabela no banco — **Console** do container:
+1. EasyPanel → projeto → serviço **portal_lorde_next** (App, não o MySQL)  
+2. Aba **Environment** / **Env**  
+3. Confira ou adicione (sem aspas):
+
+```env
+UPLOAD_STORAGE=disk
+UPLOADS_DIR=/app/data/uploads
+```
+
+4. **Salve**
+
+---
+
+## Passo 2 — Criar o volume (o mais importante)
+
+1. Ainda no serviço do **App**  
+2. Procure uma destas abas (o nome muda um pouco conforme a versão do EasyPanel):
+
+   - **Mounts**  
+   - **Volumes**  
+   - **Storage**  
+   - **Disk**  
+   - **Advanced** → Mounts  
+
+3. Clique em **Add** / **+ Mount** / **Add volume**  
+
+4. Preencha assim:
+
+| Campo (pode ter nome parecido) | O que colocar |
+|--------------------------------|---------------|
+| **Type** | Volume (não “bind” de pasta do host, se não souber o path) |
+| **Volume name** / Name | `portal_uploads` |
+| **Mount path** / Container path / Destination | `/app/data/uploads` |
+| **Read only** | **Não** (desmarcado) |
+
+5. **Salve** o mount  
+
+### Se o EasyPanel pedir “Source” e “Target”
+
+- **Target / Container:** `/app/data/uploads`  
+- **Source / Volume:** crie ou escolha `portal_uploads`
+
+### Se só tiver “Bind mount”
+
+- Host path: algo como `/etc/easypanel/projects/.../uploads` (o painel sugere)  
+- Container path: `/app/data/uploads`  
+- Também serve, desde que o path do host **não** mude a cada deploy  
+
+---
+
+## Passo 3 — Subir de novo o app
+
+1. **Deploy** / **Implantar** **ou** **Restart** (se só mudou env + mount)  
+2. Espere o serviço ficar **verde** / Running  
+
+No log de start deve aparecer algo como:
+
+```text
+[entrypoint] UPLOADS_DIR=/app/data/uploads files=0
+```
+
+(`files=0` na primeira vez é normal.)
+
+---
+
+## Passo 4 — Testar se grava
+
+1. Admin → evento → **Enviar imagem**  
+2. Console do container:
 
 ```bash
-npx prisma db push --schema=./prisma/schema.prisma
+ls -la /app/data/uploads
 ```
 
-Deve aparecer sync OK. Sem isso o upload em modo `db` falha.
+Deve listar o arquivo (ex. `1783....jpg`).
+
+3. Abra a URL da imagem no site (ex. `https://portal.lordenelson.com.br/uploads/...`) — deve carregar.
 
 ---
 
-## Volume no EasyPanel (opcional)
+## Passo 5 — Testar se **não some** no deploy
 
-Só se quiser `UPLOAD_STORAGE=disk` com pasta no servidor:
+1. Anote o nome de um arquivo do `ls`  
+2. EasyPanel → **Implantar** de novo  
+3. Console de novo:
 
-- Mount path: `/app/data/uploads`
-- Env: `UPLOAD_STORAGE=disk` + `UPLOADS_DIR=/app/data/uploads`
+```bash
+ls -la /app/data/uploads
+```
 
-Para o dia a dia do portal, **`db` é mais simples** e não depende de volume.
+O arquivo **tem** que continuar.  
+
+- Se sumiu → o mount **não** está ligado nesse serviço (refaça o Passo 2 no **App** certo).  
+- Se ficou → está em produção de verdade.
 
 ---
 
 ## Checklist
 
-- [ ] Env `UPLOAD_STORAGE=db`  
-- [ ] Deploy do `main`  
-- [ ] `prisma db push` no console  
-- [ ] Upload no admin → URL tipo `/uploads/m/clxxxxxxxx`  
-- [ ] Novo deploy → imagem **ainda** abre  
+- [ ] Env `UPLOAD_STORAGE=disk`  
+- [ ] Env `UPLOADS_DIR=/app/data/uploads`  
+- [ ] Volume montado em `/app/data/uploads`  
+- [ ] Restart/Deploy  
+- [ ] Upload + `ls` mostra arquivo  
+- [ ] Novo Implantar + `ls` **ainda** mostra o arquivo  
 
 ---
 
-## Fotos antigas em `/uploads/1783....jpg` (disco)
+## Problemas comuns
 
-Essas eram só no container e **já se perderam** se houve deploy.  
-Reenvie no admin (agora grava no MySQL).
+| Sintoma | O que fazer |
+|---------|-------------|
+| Upload EACCES / sem permissão | Volume root-only: Restart; entrypoint dá `chmod`. Ou deixe o mount e reinicie. |
+| Upload ok, some no deploy | Volume não montado ou path errado (tem que ser **exato** `/app/data/uploads`) |
+| `ls` vazio sempre | Você está no console do **MySQL** sem querer — use o do **App** |
+| Imagens antigas sumiram | Não voltam; reenvie depois do volume ativo |
+| Quero voltar pro MySQL | `UPLOAD_STORAGE=db` + `prisma db push` (tabela MediaFile) |
+
+---
+
+## O que **não** fazer
+
+- Não monte volume em `/app` inteiro (quebra o código do container)  
+- Não use `UPLOAD_STORAGE=db` e volume ao mesmo tempo “sem saber” — escolha **um** modo  
+- Não apague o volume `portal_uploads` no painel (apaga as fotos)
+
+---
+
+## Resumo de 4 linhas
+
+1. Env: `UPLOAD_STORAGE=disk` e `UPLOADS_DIR=/app/data/uploads`  
+2. Mount: volume → `/app/data/uploads`  
+3. Deploy/Restart  
+4. Upload → `ls` → Deploy de novo → `ls` de novo (arquivos ainda lá)  
