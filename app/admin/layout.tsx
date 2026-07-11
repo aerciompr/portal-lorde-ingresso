@@ -69,24 +69,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <img
                 src={logoUrl}
                 alt={siteName}
-                className="h-10 w-auto max-w-[140px] object-contain"
+                className="h-10 w-auto max-w-[160px] object-contain"
                 onError={() => setLogoFailed(true)}
               />
             ) : (
-              <>
-                <div className="w-9 h-9 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">
-                  LN
-                </div>
-                <div className="min-w-0">
-                  <div className="font-semibold truncate">{siteName}</div>
-                  <div className="text-xs text-zinc-500">Portal Admin</div>
-                </div>
-              </>
+              <div className="min-w-0">
+                <div className="font-semibold truncate">{siteName}</div>
+              </div>
             )}
           </Link>
-          {logoUrl && !logoFailed && (
-            <div className="text-[10px] text-zinc-500 mt-2">Portal Admin</div>
-          )}
+          <div className="text-[10px] text-zinc-500 mt-2">Portal Admin</div>
         </div>
 
         <nav className="p-4 space-y-1 text-sm">

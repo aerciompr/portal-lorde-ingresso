@@ -31,26 +31,27 @@ export async function generateMetadata(): Promise<Metadata> {
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://portal.lordenelson.com.br";
 
-  // Preferência: favicon do admin; senão logo (PNG ok). Sem .ico fixo (conflitava com o PNG).
-  const faviconRaw =
-    s.branding.faviconUrl ||
-    s.branding.logoUrl ||
-    "/logo-lordenelson.jpg";
-  const favicon = absoluteMediaUrl(faviconRaw, base);
-  const mime = mimeFromUrl(faviconRaw);
+  // Só favicon/logo configurados no admin — sem imagem “padrão” extra
+  const faviconRaw = (s.branding.faviconUrl || s.branding.logoUrl || "").trim();
+  const favicon = faviconRaw ? absoluteMediaUrl(faviconRaw, base) : undefined;
+  const mime = faviconRaw ? mimeFromUrl(faviconRaw) : undefined;
 
   return {
     title: `${siteName} | Ingressos`,
     description:
       "Compre ingressos para eventos no Lorde Nelson Rest Pub - Maceió. Programação, shows, forró e jogos.",
-    icons: {
-      icon: [
-        { url: favicon, type: mime, sizes: "32x32" },
-        { url: favicon, type: mime, sizes: "16x16" },
-      ],
-      shortcut: favicon,
-      apple: favicon,
-    },
+    ...(favicon
+      ? {
+          icons: {
+            icon: [
+              { url: favicon, type: mime, sizes: "32x32" },
+              { url: favicon, type: mime, sizes: "16x16" },
+            ],
+            shortcut: favicon,
+            apple: favicon,
+          },
+        }
+      : {}),
   };
 }
 

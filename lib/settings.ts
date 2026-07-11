@@ -67,7 +67,7 @@ const DEFAULTS: AppSettings = {
     mpClientSecret: '',
   },
   branding: {
-    logoUrl: '/logo-lordenelson.jpg',
+    logoUrl: '',
     faviconUrl: '',
     siteName: 'Lorde Nelson',
     bannerImageUrl: '',

@@ -13,6 +13,7 @@ export default function Header({
   const [logoFailed, setLogoFailed] = useState(false);
 
   const siteName = initialBranding.siteName || 'Lorde Nelson';
+  // Só a logo enviada no admin — sem imagem padrão / sem “LN” junto com a logo
   const logoUrl = (initialBranding.logoUrl || '').trim();
   const showLogo = Boolean(logoUrl) && !logoFailed;
 
@@ -39,16 +40,11 @@ export default function Header({
             <img
               src={logoUrl}
               alt={siteName}
-              className="h-10 w-auto max-w-[min(180px,50vw)] object-contain"
+              className="h-10 w-auto max-w-[min(200px,55vw)] object-contain"
               onError={() => setLogoFailed(true)}
             />
           ) : (
-            <>
-              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white text-xs font-bold tracking-[1px]">
-                LN
-              </span>
-              <span className="truncate">{siteName}</span>
-            </>
+            <span className="truncate text-white">{siteName}</span>
           )}
         </Link>
 
@@ -61,10 +57,10 @@ export default function Header({
         </nav>
 
         <button
+          type="button"
           onClick={() => setOpen(!open)}
           className="md:hidden p-2 cursor-pointer"
           aria-label="Menu"
-          type="button"
         >
           {open ? <X size={20} /> : <Menu size={20} />}
         </button>

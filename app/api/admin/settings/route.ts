@@ -20,7 +20,7 @@ export async function GET() {
       cancel_hours: '12',
       cancel_fee: '10',
       site_name: 'Lorde Nelson',
-      logo_url: '/logo-lordenelson.jpg',
+      logo_url: '',
       favicon_url: '',
       banner_title: 'LORDE NELSON',
       banner_subtitle: 'Rest Pub • Shows, forró e grandes jogos. Compre seu ingresso agora.',
