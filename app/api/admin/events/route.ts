@@ -20,43 +20,70 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { title, date, priceCents, qty } = body;
 
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + Date.now().toString(36).slice(-4);
+  if (!title?.trim() || !date) {
+    return NextResponse.json({ error: 'Título e data são obrigatórios' }, { status: 400 });
+  }
+
+  const slug =
+    title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') +
+    '-' +
+    Date.now().toString(36).slice(-4);
+
+  const price = priceCents || 3500;
+  const totalQty = qty || 150;
+  const loteNome = (body.loteNome || '1º Lote').trim() || '1º Lote';
 
   const event = await prisma.event.create({
     data: {
-      title,
+      title: title.trim(),
       slug,
       date: new Date(date),
+      openTime: body.openTime || null,
       description: body.description || null,
       imageUrl: body.imageUrl || null,
       address: body.address || 'Rua Silvério Jorge, 241, Jaraguá, Maceió - AL, 57022-110',
       location: body.location || null,
+      salesDeadline: body.salesDeadline ? new Date(body.salesDeadline) : null,
       footerNotice: body.footerNotice?.trim() || null,
+      allowCancel: body.allowCancel !== false,
       cancelHoursBefore: body.cancelHoursBefore || 24,
       cancelFeePercent: body.cancelFeePercent || 10,
+      loteAcrescimoCents:
+        body.loteAcrescimoCents != null ? parseInt(body.loteAcrescimoCents, 10) : 500,
+      loteDefaultQty: body.loteDefaultQty != null ? parseInt(body.loteDefaultQty, 10) : 50,
       ticketTypes: {
-        create: [{
-          name: 'Ingresso Padrão',
-          priceCents: priceCents || 3500,
-          totalQty: qty || 150,
-        }],
+        create: [
+          {
+            name: loteNome,
+            priceCents: price,
+            totalQty,
+          },
+        ],
       },
       lotes: {
-        create: [{
-          nome: 'Lote Promocional',
-          precoCents: priceCents || 3500,
-          totalQty: qty || 150,
-          ordem: 1,
-          viradaAutomatica: true,
-          ativo: true,
-        }],
+        create: [
+          {
+            nome: loteNome,
+            precoCents: price,
+            totalQty,
+            ordem: 1,
+            viradaAutomatica: true,
+            ativo: true,
+          },
+        ],
       },
     },
   });
 
-  // Set the activeLote to the created one (simplified, in real would get the id)
-  // For now, we'll set it in a follow up or use the first
-  const createdLote = await prisma.lote.findFirst({ where: { eventId: event.id }, orderBy: { createdAt: 'desc' } });
+  const createdLote = await prisma.lote.findFirst({
+    where: { eventId: event.id },
+    orderBy: { createdAt: 'desc' },
+  });
   if (createdLote) {
     await prisma.event.update({
       where: { id: event.id },
@@ -64,7 +91,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  return NextResponse.json(event);
+  return NextResponse.json({ ...event, activeLoteId: createdLote?.id || null });
 }
 
 // Simple update for title/date (extend as needed)

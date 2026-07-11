@@ -57,9 +57,7 @@ export default function EditEventPage() {
     loteDefaultQty: 50,
   });
 
-  // Inline create/edit for ingressos/lotes (below image)
-  const [showAddForm, setShowAddForm] = useState<'none' | 'ticket' | 'lote'>('none');
-  const [addForm, setAddForm] = useState({ nome: 'Ingresso Padrão', preco: '35,00', qty: '50' });
+  // Edit inline de lote existente (criar novo = página dedicada)
   const [editingLote, setEditingLote] = useState<any>(null);
   const [editLoteForm, setEditLoteForm] = useState<any>(null);
 
@@ -175,48 +173,6 @@ export default function EditEventPage() {
       toast.error('Erro no upload');
     } finally {
       setUploadingImage(false);
-    }
-  }
-
-  async function createIngressoOrLote(type: 'ticket' | 'lote') {
-    if (!event) return;
-    const nome = addForm.nome.trim() || (type === 'ticket' ? 'Ingresso Padrão' : 'Lote Promocional');
-    const priceCents = parseBRLToCents(addForm.preco);
-    const totalQty = parseInt(addForm.qty) || 50;
-
-    try {
-      if (type === 'lote') {
-        // Use existing virar endpoint for new Lote (handles active switch)
-        const res = await fetch('/api/admin/lotes/virar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            eventId: event.id,
-            newNome: nome,
-            newPreco: priceCents,
-            newQty: totalQty,
-          }),
-        });
-        if (!res.ok) throw new Error();
-        toast.success('Novo lote criado');
-      } else {
-        // Create TicketType via extended events PUT
-        const res = await fetch('/api/admin/events', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: event.id,
-            addTicketType: { name: nome, priceCents, totalQty },
-          }),
-        });
-        if (!res.ok) throw new Error();
-        toast.success('Novo tipo de ingresso criado');
-      }
-      setShowAddForm('none');
-      setAddForm({ nome: 'Ingresso Padrão', preco: '35,00', qty: '50' });
-      await refreshEventData();
-    } catch {
-      toast.error('Erro ao criar ingresso/lote');
     }
   }
 
@@ -393,53 +349,20 @@ export default function EditEventPage() {
               )}
             </div>
             <div className="flex gap-2">
-              <button 
-                onClick={() => { setShowAddForm('ticket'); setAddForm({ nome: 'Ingresso Padrão', preco: '35,00', qty: String(event.loteDefaultQty || 50) }); }}
+              <Link
+                href={`/admin/eventos/${event.id}/ingresso/novo`}
                 className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
               >
                 <Plus size={14} /> Novo ingresso
-              </button>
-              <button 
-                onClick={() => { setShowAddForm('lote'); setAddForm({ nome: 'Lote Promocional', preco: centsToInput((event.activeLote?.precoCents || 3000) + form.loteAcrescimoCents), qty: String(event.loteDefaultQty || 50) }); }}
+              </Link>
+              <Link
+                href={`/admin/eventos/${event.id}/ingresso/novo?tipo=lote`}
                 className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-emerald-500/60 text-emerald-400 hover:bg-emerald-500/10"
               >
                 <Plus size={14} /> Virar Lote (+{formatPrice(form.loteAcrescimoCents)})
-              </button>
+              </Link>
             </div>
           </div>
-
-          {/* Inline create form */}
-          {showAddForm !== 'none' && (
-            <div className="mb-4 p-3 bg-zinc-950 border border-white/10 rounded-lg">
-              <div className="text-xs text-zinc-400 mb-2">{showAddForm === 'ticket' ? 'Criar novo tipo de ingresso' : 'Criar novo lote'}</div>
-              <div className="grid grid-cols-1 gap-2 text-xs sm:flex sm:items-end sm:gap-3">
-                <input 
-                  className="input py-1.5 text-sm sm:w-64" 
-                  placeholder="Nome do ingresso/lote" 
-                  value={addForm.nome} 
-                  onChange={e => setAddForm({ ...addForm, nome: e.target.value })} 
-                />
-                <div className="flex gap-2 sm:gap-3">
-                  <input 
-                    className="input py-1.5 text-sm w-28" 
-                    placeholder="35,00" 
-                    inputMode="decimal"
-                    value={addForm.preco} 
-                    onChange={e => setAddForm({ ...addForm, preco: e.target.value })} 
-                  />
-                  <input 
-                    className="input py-1.5 text-sm w-24" 
-                    placeholder="Qtd" 
-                    type="number" 
-                    value={addForm.qty} 
-                    onChange={e => setAddForm({ ...addForm, qty: e.target.value })} 
-                  />
-                  <button onClick={() => createIngressoOrLote(showAddForm)} className="btn btn-primary text-xs px-5">Adicionar</button>
-                  <button onClick={() => { setShowAddForm('none'); }} className="btn btn-secondary text-xs px-4">Cancelar</button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Inline edit form */}
           {editingLote && editLoteForm && (

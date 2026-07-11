@@ -6,9 +6,10 @@
 |------------|-----------|----------|
 | **1** | [`HANDOFF_COMPLETO.md`](./HANDOFF_COMPLETO.md) | **Estado real do projeto (2026-07-10)**: o que está feito, produção, armadilhas, próximos passos |
 | **2** | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Stack, modelos Prisma, fluxos de pagamento, map de pastas/APIs |
-| **3** | [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md) | Deploy atual no VPS EasyPanel (`portal.lordenelson.com.br`) |
-| **4** | [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md) | Checklist go-live operacional |
-| **5** | [`../PRODUCTION_SETUP.md`](../PRODUCTION_SETUP.md) | Gateways, webhooks, crons, segredos |
+| **3** | [`DEPLOY_RAPIDO.md`](./DEPLOY_RAPIDO.md) | **Deploy rápido**: imagem GHCR (sem build no VPS) |
+| **4** | [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md) | Deploy EasyPanel (Git/Dockerfile ou imagem) |
+| **5** | [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md) | Checklist go-live operacional |
+| **6** | [`../PRODUCTION_SETUP.md`](../PRODUCTION_SETUP.md) | Gateways, webhooks, crons, segredos |
 | — | [`.env.example`](../.env.example) | Template de variáveis (nunca commitar `.env`) |
 | — | [`SESSION_HANDOFF.md`](./SESSION_HANDOFF.md) | Handoff técnico da sessão de features (pré-VPS) |
 | — | [`DEPLOY_SUBDOMAIN.md`](./DEPLOY_SUBDOMAIN.md) | Deploy genérico subdomínio (Vercel/VPS) |
