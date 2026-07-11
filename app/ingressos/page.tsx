@@ -24,7 +24,6 @@ import {
   Ticket,
   Clock,
   History,
-  LayoutGrid,
   X,
   Menu,
   User,
@@ -54,7 +53,7 @@ interface Order {
 }
 
 type LoginTab = 'codigo' | 'senha';
-type NavId = 'proximos' | 'passados' | 'estornos' | 'todos' | 'conta';
+type NavId = 'proximos' | 'passados' | 'estornos' | 'conta';
 
 function eventDate(d: string | Date) {
   return new Date(d);
@@ -296,9 +295,10 @@ export default function MeusIngressos() {
         estornos: ref.length,
         validos: up.length + pa.length, // não estornados
         todos: orders.length,
-        // ingressos (unidade) — estorno NÃO entra em válidos
+        // ingressos (unidade) — estorno NUNCA entra em válidos / próximos / passados
         ticketsValidos: ticketCount(up) + ticketCount(pa),
         ticketsProximos: ticketCount(up),
+        ticketsPassados: ticketCount(pa),
         ticketsEstornos: ticketCount(ref),
       },
     };
@@ -311,9 +311,7 @@ export default function MeusIngressos() {
         ? past
         : nav === 'estornos'
           ? refunded
-          : nav === 'todos'
-            ? [...upcoming, ...past, ...refunded]
-            : [];
+          : [];
 
   function onEmailChange(val: string) {
     const digits = cleanDigits(val);
@@ -323,31 +321,38 @@ export default function MeusIngressos() {
   }
 
   const displayName = email || orders[0]?.buyerEmail || 'Cliente';
-  const navItems: { id: NavId; label: string; icon: typeof Clock; n?: number; desc: string }[] = [
+  const navItems: {
+    id: NavId;
+    label: string;
+    icon: typeof Clock;
+    n?: number;
+    desc: string;
+    tone?: 'default' | 'danger';
+  }[] = [
     {
       id: 'proximos',
       label: 'Próximos',
       icon: Sparkles,
-      n: counts.ticketsProximos,
-      desc: 'Válidos · por vir',
+      n: counts.ticketsProximos > 0 ? counts.ticketsProximos : undefined,
+      desc: 'Para usar na entrada',
     },
     {
       id: 'passados',
       label: 'Passados',
       icon: History,
-      n: counts.passados > 0 ? counts.passados : undefined,
-      desc: 'Já realizados',
+      n: counts.ticketsPassados > 0 ? counts.ticketsPassados : undefined,
+      desc: 'Eventos já realizados',
     },
     {
       id: 'estornos',
       label: 'Estornos',
       icon: Undo2,
-      n: counts.estornos > 0 ? counts.estornos : undefined,
-      desc: 'Não contam como ingresso',
+      n: counts.ticketsEstornos > 0 ? counts.ticketsEstornos : undefined,
+      desc: 'Histórico · sem entrada',
+      tone: 'danger',
     },
     { id: 'conta', label: 'Conta', icon: User, desc: 'Senha e sessão' },
   ];
-  // "Todos" removido do menu principal — confunde com soma de estornos
 
   // ─── LOGIN ─────────────────────────────────────────────
   if (!loggedIn) {
@@ -538,25 +543,32 @@ export default function MeusIngressos() {
   // ─── APP SHELL (logado) ────────────────────────────────
   function renderOrderCard(order: Order) {
     const st = statusBadge(order.status);
-    const up = isUpcoming(order.event.date);
+    const refunded = isRefunded(order);
+    const up = !refunded && isUpcoming(order.event.date);
     return (
       <article
         key={order.id}
         className={`rounded-2xl sm:rounded-3xl border bg-zinc-900/80 overflow-hidden transition ${
-          up && order.status === 'paid'
-            ? 'border-emerald-500/25 shadow-lg shadow-emerald-950/20'
-            : 'border-white/10'
+          refunded
+            ? 'border-red-500/20 opacity-95'
+            : up && order.status === 'paid'
+              ? 'border-emerald-500/25 shadow-lg shadow-emerald-950/20'
+              : 'border-white/10'
         }`}
       >
         <div className="p-4 sm:p-5 flex gap-3 sm:gap-4">
           <div
             className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex flex-col items-center justify-center shrink-0 ${
-              up ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
+              refunded
+                ? 'bg-red-500/10 text-red-400'
+                : up
+                  ? 'bg-emerald-500/15 text-emerald-400'
+                  : 'bg-zinc-800 text-zinc-500'
             }`}
           >
-            <Calendar size={18} className="mb-0.5" />
+            {refunded ? <Undo2 size={18} className="mb-0.5" /> : <Calendar size={18} className="mb-0.5" />}
             <span className="text-[9px] font-semibold uppercase tracking-wide">
-              {up ? 'Live' : 'Fim'}
+              {refunded ? 'Est.' : up ? 'Live' : 'Fim'}
             </span>
           </div>
           <div className="min-w-0 flex-1">
@@ -576,7 +588,9 @@ export default function MeusIngressos() {
               </span>
               <span className="text-zinc-600">·</span>
               <span>
-                {order.tickets.length} ingresso{order.tickets.length !== 1 ? 's' : ''}
+                {refunded
+                  ? `${order.tickets.length} estorno${order.tickets.length !== 1 ? 's' : ''}`
+                  : `${order.tickets.length} ingresso${order.tickets.length !== 1 ? 's' : ''}`}
               </span>
               <span className="text-zinc-600">·</span>
               <span className="tabular-nums">{formatPrice(order.totalCents)}</span>
@@ -689,36 +703,40 @@ export default function MeusIngressos() {
             <div className="font-semibold text-white truncate text-sm">{displayName}</div>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-zinc-950/80 border border-emerald-500/20 px-3 py-2.5 text-center">
-            <div className="text-lg font-semibold text-emerald-400 tabular-nums">
+
+        {/* Um único total: só o que vale na entrada. Estorno nunca soma aqui. */}
+        <div className="mt-4 rounded-2xl bg-zinc-950/80 border border-emerald-500/25 px-4 py-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xs text-zinc-400">Ingressos válidos</span>
+            <span className="text-2xl font-semibold text-emerald-400 tabular-nums leading-none">
               {counts.ticketsValidos}
-            </div>
-            <div className="text-[10px] text-zinc-500">Válidos</div>
+            </span>
           </div>
-          <div className="rounded-xl bg-zinc-950/80 border border-white/8 px-3 py-2.5 text-center">
-            <div className="text-lg font-semibold text-white tabular-nums">
-              {counts.ticketsProximos}
-            </div>
-            <div className="text-[10px] text-zinc-500">Por vir</div>
-          </div>
+          <p className="text-[10px] text-zinc-500 mt-1.5">
+            {counts.ticketsProximos > 0
+              ? `${counts.ticketsProximos} para usar · estorno não entra neste número`
+              : 'Nenhum por vir · estorno não entra neste número'}
+          </p>
         </div>
-        {counts.estornos > 0 && (
+
+        {counts.ticketsEstornos > 0 && (
           <button
             type="button"
             onClick={() => {
               setNav('estornos');
               setSidebarOpen(false);
             }}
-            className="mt-2 w-full rounded-xl border border-red-500/25 bg-red-950/20 px-3 py-2 text-left hover:bg-red-950/35 transition"
+            className="mt-2 w-full rounded-xl border border-red-500/20 bg-red-950/15 px-3 py-2 text-left hover:bg-red-950/30 transition"
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] text-red-300/90">Estornos (à parte)</span>
+              <span className="text-[11px] text-red-300/90 flex items-center gap-1.5">
+                <Undo2 size={12} /> Histórico de estornos
+              </span>
               <span className="text-sm font-semibold text-red-400 tabular-nums">
                 {counts.ticketsEstornos}
               </span>
             </div>
-            <p className="text-[9px] text-red-400/60 mt-0.5">Não entram em “válidos” nem “por vir”</p>
+            <p className="text-[9px] text-red-400/55 mt-0.5">Não contam como ingresso · sem QR de entrada</p>
           </button>
         )}
       </div>
@@ -727,6 +745,7 @@ export default function MeusIngressos() {
         {navItems.map((item) => {
           const active = nav === item.id;
           const Icon = item.icon;
+          const danger = item.tone === 'danger';
           return (
             <button
               key={item.id}
@@ -737,21 +756,39 @@ export default function MeusIngressos() {
               }}
               className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition ${
                 active
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/40'
-                  : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                  ? danger
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-950/40'
+                    : 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/40'
+                  : danger
+                    ? 'text-red-300/80 hover:bg-red-950/25 hover:text-red-200'
+                    : 'text-zinc-400 hover:bg-white/5 hover:text-white'
               }`}
             >
               <Icon size={18} className="shrink-0 opacity-90" />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-medium">{item.label}</span>
-                <span className={`block text-[10px] ${active ? 'text-emerald-100/80' : 'text-zinc-600'}`}>
+                <span
+                  className={`block text-[10px] ${
+                    active
+                      ? danger
+                        ? 'text-red-100/80'
+                        : 'text-emerald-100/80'
+                      : danger
+                        ? 'text-red-400/50'
+                        : 'text-zinc-600'
+                  }`}
+                >
                   {item.desc}
                 </span>
               </span>
               {item.n != null && (
                 <span
                   className={`text-xs font-semibold tabular-nums px-2 py-0.5 rounded-lg ${
-                    active ? 'bg-black/20' : 'bg-white/5 text-zinc-500'
+                    active
+                      ? 'bg-black/20'
+                      : danger
+                        ? 'bg-red-500/15 text-red-400'
+                        : 'bg-white/5 text-zinc-500'
                   }`}
                 >
                   {item.n}
@@ -793,8 +830,11 @@ export default function MeusIngressos() {
           <Menu size={18} /> Menu
         </button>
         <div className="text-sm font-medium text-white truncate">Meus Ingressos</div>
-        <div className="w-20 text-right text-[10px] text-emerald-400/90 tabular-nums">
+        <div className="min-w-[4.5rem] text-right text-[10px] text-emerald-400/90 tabular-nums leading-tight">
           {counts.ticketsValidos} válido{counts.ticketsValidos !== 1 ? 's' : ''}
+          {counts.ticketsEstornos > 0 && (
+            <span className="block text-red-400/70">{counts.ticketsEstornos} estorno{counts.ticketsEstornos !== 1 ? 's' : ''}</span>
+          )}
         </div>
       </div>
 
@@ -899,14 +939,15 @@ export default function MeusIngressos() {
                     {nav === 'proximos' && 'Próximos eventos'}
                     {nav === 'passados' && 'Eventos passados'}
                     {nav === 'estornos' && 'Estornos'}
-                    {nav === 'todos' && 'Todos os ingressos'}
                   </h1>
                   <p className="text-sm text-zinc-500 mt-1">
                     {visibleOrders.length === 0
                       ? 'Nada por aqui'
                       : nav === 'estornos'
-                        ? `${visibleOrders.length} pedido(s) estornado(s)`
-                        : `${visibleOrders.length} pedido(s) nesta lista`}
+                        ? `${counts.ticketsEstornos} estorno(s) · não valem na entrada`
+                        : nav === 'proximos'
+                          ? `${counts.ticketsProximos} ingresso(s) válido(s) para usar`
+                          : `${counts.ticketsPassados} ingresso(s) de eventos passados`}
                   </p>
                 </div>
                 {/* Chips mobile quick filter */}
@@ -920,8 +961,12 @@ export default function MeusIngressos() {
                         onClick={() => setNav(item.id)}
                         className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition ${
                           nav === item.id
-                            ? 'bg-emerald-600 border-emerald-500 text-white'
-                            : 'border-white/10 text-zinc-400'
+                            ? item.tone === 'danger'
+                              ? 'bg-red-600 border-red-500 text-white'
+                              : 'bg-emerald-600 border-emerald-500 text-white'
+                            : item.tone === 'danger'
+                              ? 'border-red-500/30 text-red-300/80'
+                              : 'border-white/10 text-zinc-400'
                         }`}
                       >
                         {item.label} {item.n != null ? `(${item.n})` : ''}
@@ -948,21 +993,32 @@ export default function MeusIngressos() {
                   <div className="w-14 h-14 rounded-2xl bg-zinc-800/80 flex items-center justify-center mx-auto mb-4">
                     <Ticket className="w-7 h-7 text-zinc-600" />
                   </div>
-                  <p className="font-medium text-zinc-300">Nenhum ingresso nesta aba</p>
+                  <p className="font-medium text-zinc-300">
+                    {nav === 'estornos' ? 'Nenhum estorno' : 'Nenhum ingresso nesta aba'}
+                  </p>
                   <p className="text-sm text-zinc-500 mt-1 max-w-xs mx-auto">
                     {nav === 'proximos'
-                      ? 'Eventos futuros com ingresso válido aparecem aqui. Estornos ficam em Estornos.'
+                      ? 'Só aparecem aqui ingressos válidos de eventos futuros. Estornos ficam na aba Estornos e não contam neste total.'
                       : nav === 'estornos'
                         ? 'Você não tem pedidos estornados.'
-                        : 'Tente outra aba no menu.'}
+                        : 'Tente a aba Próximos ou Estornos no menu.'}
                   </p>
-                  {nav !== 'todos' && (
+                  {nav === 'proximos' && counts.ticketsEstornos > 0 && (
                     <button
                       type="button"
-                      onClick={() => setNav('todos')}
+                      onClick={() => setNav('estornos')}
+                      className="mt-4 text-sm text-red-400 hover:underline"
+                    >
+                      Ver {counts.ticketsEstornos} estorno{counts.ticketsEstornos !== 1 ? 's' : ''} →
+                    </button>
+                  )}
+                  {nav === 'estornos' && counts.ticketsProximos > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setNav('proximos')}
                       className="mt-4 text-sm text-emerald-400 hover:underline"
                     >
-                      Ver todos
+                      Ver próximos válidos →
                     </button>
                   )}
                 </div>
