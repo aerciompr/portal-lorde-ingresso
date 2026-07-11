@@ -79,7 +79,7 @@ Leia também: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`DEPLOY_EASYPANEL.md`](./
 | Senha do cliente | Nunca na query string. |
 | PDF ingresso | Público exige `?code=LN-…` do pedido; admin autenticado ok. |
 | Sessão admin | Cookie **assinado** HMAC (`lib/auth.ts`). Cookie legado `=1` ainda aceito no deploy. |
-| Middleware | `middleware.ts` protege `/admin/*` e `/checkin`. |
+| Proxy (borda) | `proxy.ts` protege `/admin/*` e `/checkin` (Next.js 16; não usar `middleware.ts`). |
 | Link ADMIN no site | Removido do header público; acesso só `/admin/login`. |
 
 ### Infra / deploy
@@ -218,7 +218,7 @@ Em prod: criar eventos no admin.
 | Finalizar pagamento | `lib/finalize-paid-order.ts` |
 | Lote / estoque | `lib/lote-virada.ts`, `lib/order-stock.ts` |
 | Settings públicos vs secrets | `lib/settings-public.ts`, `app/api/admin/settings` |
-| Auth admin | `lib/auth.ts`, `lib/auth-edge.ts`, `middleware.ts` |
+| Auth admin | `lib/auth.ts`, `lib/auth-edge.ts`, `proxy.ts` |
 | Relatórios | `app/admin/reports`, `app/api/admin/reports` |
 | Pedidos admin | `app/admin/pedidos` |
 | WhatsApp / contato | `lib/contact.ts`, `components/Header.tsx`, `app/layout.tsx` |
@@ -233,7 +233,7 @@ Em prod: criar eventos no admin.
 | `lib/lote-virada.ts` | Preço/estoque lote |
 | `lib/prisma.ts` | Adapter + URL limpa |
 | `lib/settings.ts` | Env + DB |
-| `lib/auth.ts` / `middleware.ts` | Sessão admin |
+| `lib/auth.ts` / `proxy.ts` | Sessão admin (borda Next 16) |
 | `server.js` | Bind `0.0.0.0` |
 | `Dockerfile` | Node 22 produção |
 
