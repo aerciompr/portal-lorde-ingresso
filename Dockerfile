@@ -65,11 +65,13 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
 COPY --from=builder /app/scripts/postinstall-prisma.js ./scripts/postinstall-prisma.js
+COPY --from=builder /app/scripts/db-push.sh ./scripts/db-push.sh
 
 RUN mkdir -p /app/data/uploads /app/public/uploads /tmp/lordenelson-uploads \
   && chown -R nextjs:nodejs /app/data /app/public/uploads \
   && chmod -R 775 /app/data /app/public/uploads \
-  && chmod +x /app/scripts/docker-entrypoint.sh
+  && chmod +x /app/scripts/docker-entrypoint.sh /app/scripts/db-push.sh \
+  && ln -sf /app/node_modules/.bin/prisma /usr/local/bin/prisma 2>/dev/null || true
 
 USER root
 EXPOSE 3000
