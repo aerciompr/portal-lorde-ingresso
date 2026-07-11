@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ orders: matching });
   }
 
-  // Legacy: code based (accessCode) + optional email/cpf loose match
+  // Código de acesso: libera o pedido e, se possível, todos os pedidos pagos do mesmo e-mail
   if (code) {
     const order = await prisma.order.findUnique({
       where: { accessCode: code },
@@ -58,13 +58,28 @@ export async function GET(req: NextRequest) {
     if (!order) return NextResponse.json({ orders: [] });
     const qEmail = email || '';
     const qCpf = cpf || '';
-    // If the provided value looks like CPF, don't try email match
     const looksLikeCpf = /^\d{11}$/.test(qEmail.replace(/\D/g, ''));
-    if (qEmail && !looksLikeCpf && !order.buyerEmail.toLowerCase().includes(qEmail)) {
+    if (qEmail && !looksLikeCpf && !order.buyerEmail.toLowerCase().includes(qEmail.toLowerCase())) {
       return NextResponse.json({ orders: [] });
     }
-    if (qCpf && order.buyerCpf && order.buyerCpf.replace(/\D/g, '') !== qCpf) return NextResponse.json({ orders: [] });
-    return NextResponse.json({ orders: [order] });
+    if (qCpf && order.buyerCpf && order.buyerCpf.replace(/\D/g, '') !== qCpf) {
+      return NextResponse.json({ orders: [] });
+    }
+
+    // Lista todos os pedidos do mesmo comprador (vários eventos)
+    const all = await prisma.order.findMany({
+      where: {
+        buyerEmail: order.buyerEmail,
+        status: { in: ['paid', 'cancelled', 'refunded'] },
+      },
+      include: {
+        event: true,
+        tickets: { include: { ticketType: true } },
+        cancellationRequests: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return NextResponse.json({ orders: all.length ? all : [order] });
   }
 
   // Legacy cpf only (no password, no code) - for loading orders with CPF
