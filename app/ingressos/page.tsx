@@ -31,6 +31,7 @@ import {
   RefreshCw,
   Sparkles,
   ChevronRight,
+  Undo2,
 } from 'lucide-react';
 
 interface TicketItem {
@@ -53,7 +54,7 @@ interface Order {
 }
 
 type LoginTab = 'codigo' | 'senha';
-type NavId = 'proximos' | 'passados' | 'todos' | 'conta';
+type NavId = 'proximos' | 'passados' | 'estornos' | 'todos' | 'conta';
 
 function eventDate(d: string | Date) {
   return new Date(d);
@@ -63,6 +64,17 @@ function isUpcoming(d: string | Date) {
   const limit = new Date(d);
   limit.setHours(23, 59, 59, 999);
   return limit.getTime() >= Date.now();
+}
+
+function isRefunded(o: { status: string }) {
+  return (o.status || '').toLowerCase() === 'refunded';
+}
+
+/** Evento ainda por vir e pedido válido (não estornado / cancelado) */
+function isActiveUpcoming(o: Order) {
+  const s = (o.status || '').toLowerCase();
+  if (s === 'refunded' || s === 'cancelled' || s === 'canceled') return false;
+  return isUpcoming(o.event.date);
 }
 
 function statusBadge(status: string) {
@@ -150,7 +162,7 @@ export default function MeusIngressos() {
     if (e || list[0]?.buyerEmail) setEmail(e || list[0].buyerEmail);
     const hasHash = list.some((o) => !!(o as Order).buyerPasswordHash);
     setShowSetPassword(!hasHash);
-    setNav(list.some((o) => isUpcoming(o.event.date)) ? 'proximos' : 'passados');
+    setNav(list.some((o) => isActiveUpcoming(o)) ? 'proximos' : list.some(isRefunded) ? 'estornos' : 'passados');
     setSidebarOpen(false);
   }
 
@@ -254,21 +266,30 @@ export default function MeusIngressos() {
     return isUpcoming(order.event.date);
   };
 
-  const { upcoming, past, counts } = useMemo(() => {
+  const { upcoming, past, refunded, counts } = useMemo(() => {
     const up: Order[] = [];
     const pa: Order[] = [];
+    const ref: Order[] = [];
     for (const o of orders) {
-      if (isUpcoming(o.event.date)) up.push(o);
+      if (isRefunded(o)) {
+        ref.push(o);
+        continue;
+      }
+      // Estornado nunca entra em “próximos”, mesmo com data futura
+      if (isActiveUpcoming(o)) up.push(o);
       else pa.push(o);
     }
     up.sort((a, b) => eventDate(a.event.date).getTime() - eventDate(b.event.date).getTime());
     pa.sort((a, b) => eventDate(b.event.date).getTime() - eventDate(a.event.date).getTime());
+    ref.sort((a, b) => eventDate(b.event.date).getTime() - eventDate(a.event.date).getTime());
     return {
       upcoming: up,
       past: pa,
+      refunded: ref,
       counts: {
         proximos: up.length,
         passados: pa.length,
+        estornos: ref.length,
         todos: orders.length,
         tickets: orders.reduce((s, o) => s + o.tickets.length, 0),
       },
@@ -276,7 +297,15 @@ export default function MeusIngressos() {
   }, [orders]);
 
   const visibleOrders =
-    nav === 'proximos' ? upcoming : nav === 'passados' ? past : nav === 'todos' ? [...upcoming, ...past] : [];
+    nav === 'proximos'
+      ? upcoming
+      : nav === 'passados'
+        ? past
+        : nav === 'estornos'
+          ? refunded
+          : nav === 'todos'
+            ? [...upcoming, ...past, ...refunded]
+            : [];
 
   function onEmailChange(val: string) {
     const digits = cleanDigits(val);
@@ -287,8 +316,9 @@ export default function MeusIngressos() {
 
   const displayName = email || orders[0]?.buyerEmail || 'Cliente';
   const navItems: { id: NavId; label: string; icon: typeof Clock; n?: number; desc: string }[] = [
-    { id: 'proximos', label: 'Próximos', icon: Sparkles, n: counts.proximos, desc: 'Eventos por vir' },
-    { id: 'passados', label: 'Passados', icon: History, n: counts.passados, desc: 'Histórico' },
+    { id: 'proximos', label: 'Próximos', icon: Sparkles, n: counts.proximos, desc: 'Ainda por vir' },
+    { id: 'passados', label: 'Passados', icon: History, n: counts.passados, desc: 'Já realizados' },
+    { id: 'estornos', label: 'Estornos', icon: Undo2, n: counts.estornos, desc: 'Reembolsados' },
     { id: 'todos', label: 'Todos', icon: LayoutGrid, n: counts.todos, desc: 'Lista completa' },
     { id: 'conta', label: 'Conta', icon: User, desc: 'Senha e sessão' },
   ];
@@ -844,8 +874,10 @@ export default function MeusIngressos() {
                   <p className="font-medium text-zinc-300">Nenhum ingresso nesta aba</p>
                   <p className="text-sm text-zinc-500 mt-1 max-w-xs mx-auto">
                     {nav === 'proximos'
-                      ? 'Quando comprar para um evento futuro, ele aparece aqui.'
-                      : 'Tente outra aba no menu.'}
+                      ? 'Eventos futuros com ingresso válido aparecem aqui. Estornos ficam em Estornos.'
+                      : nav === 'estornos'
+                        ? 'Você não tem pedidos estornados.'
+                        : 'Tente outra aba no menu.'}
                   </p>
                   {nav !== 'todos' && (
                     <button
@@ -865,9 +897,9 @@ export default function MeusIngressos() {
         </main>
       </div>
 
-      {/* Bottom nav mobile */}
+      {/* Bottom nav mobile — 5 itens: scroll horizontal se precisar */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-zinc-950/95 backdrop-blur safe-area-pb">
-        <div className="grid grid-cols-4 max-w-lg mx-auto">
+        <div className="flex overflow-x-auto max-w-lg mx-auto scrollbar-none">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = nav === item.id;
@@ -876,12 +908,15 @@ export default function MeusIngressos() {
                 key={item.id}
                 type="button"
                 onClick={() => setNav(item.id)}
-                className={`flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition ${
+                className={`flex flex-col items-center gap-0.5 py-2.5 px-3 min-w-[4.5rem] flex-1 text-[10px] font-medium transition ${
                   active ? 'text-emerald-400' : 'text-zinc-500'
                 }`}
               >
-                <Icon size={20} strokeWidth={active ? 2.25 : 1.75} />
+                <Icon size={18} strokeWidth={active ? 2.25 : 1.75} />
                 {item.label}
+                {item.n != null && item.n > 0 && (
+                  <span className="tabular-nums text-[9px] opacity-80">{item.n}</span>
+                )}
               </button>
             );
           })}
