@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import Header from "@/components/Header";
 import { getAppSettings } from "@/lib/settings";
 import { absoluteMediaUrl, mimeFromUrl } from "@/lib/media-url";
+import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from "@/lib/contact";
 
 /** Branding (logo) vem do banco — não cachear layout vazio sem logo */
 export const dynamic = "force-dynamic";
@@ -95,7 +96,7 @@ export default async function RootLayout({
         <main className="flex-1">{children}</main>
 
         <footer className="border-t border-white/10 py-10 text-xs text-zinc-500">
-          <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-y-4">
+          <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-y-4 gap-x-6 items-start">
             <div
               dangerouslySetInnerHTML={{
                 __html:
@@ -103,14 +104,25 @@ export default async function RootLayout({
                   `Lorde Nelson Rest Pub • Rua Silvério Jorge, 241, Jaraguá — Maceió/AL<br/>Qui a Sáb • 20h às 02h`,
               }}
             />
-            <div
-              className="md:text-right"
-              dangerouslySetInnerHTML={{
-                __html:
-                  footerRight ||
-                  `© ${new Date().getFullYear()} ${siteName}. Portal moderno de ingressos.`,
-              }}
-            />
+            <div className="md:text-right space-y-3">
+              <div
+                dangerouslySetInnerHTML={{
+                  __html:
+                    footerRight ||
+                    `© ${new Date().getFullYear()} ${siteName}. Portal moderno de ingressos.`,
+                }}
+              />
+              <a
+                href={WHATSAPP_HREF}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-[#25D366] hover:text-[#3be07a] transition md:justify-end"
+                aria-label={`WhatsApp ${WHATSAPP_DISPLAY}`}
+              >
+                <i className="fa-brands fa-whatsapp text-xl leading-none" aria-hidden />
+                <span className="text-zinc-400 hover:text-zinc-200">{WHATSAPP_DISPLAY}</span>
+              </a>
+            </div>
           </div>
         </footer>
 
