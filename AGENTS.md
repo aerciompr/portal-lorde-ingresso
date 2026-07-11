@@ -15,10 +15,12 @@ Se o workspace do IDE abrir em `C:\Windows\System32` ou outro path, **sempre edi
 
 ## Documentação obrigatória antes de mudanças grandes
 
-1. [`docs/HANDOFF_COMPLETO.md`](./docs/HANDOFF_COMPLETO.md) — estado real e armadilhas  
+1. [`docs/HANDOFF_COMPLETO.md`](./docs/HANDOFF_COMPLETO.md) — estado real **2026-07-11**, checklist novo DEV, segurança  
 2. [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — fluxos e modelos  
 3. [`docs/DEPLOY_EASYPANEL.md`](./docs/DEPLOY_EASYPANEL.md) — se tocar deploy  
 4. [`docs/README.md`](./docs/README.md) — índice  
+
+**Secrets MP/Stripe:** ficam no banco/env; **não apagar** do MySQL “por segurança”. A API pública filtra em `lib/settings-public.ts`.
 
 ## Idioma
 
@@ -30,6 +32,7 @@ Se o workspace do IDE abrir em `C:\Windows\System32` ou outro path, **sempre edi
 - **Não** commitar `.env`, chaves, tokens, `*.db`, dumps, `dist-cpanel/`  
 - Não logar secrets em docs ou commits  
 - Não expor `ADMIN_PASSWORD` / tokens em issues ou prints commitados  
+- PDF de ingresso exige `?code=LN-…` (ou admin); lookup de cliente exige código ou senha
 
 ## Stack (não regredir)
 
