@@ -247,19 +247,22 @@ npx prisma db push --schema=./prisma/schema.prisma
 
 ---
 
-## 9. Uploads de imagem (admin)
+## 9. Uploads de imagem (admin) — **obrigatório volume em produção**
 
-Pasta padrão: **`/app/data/uploads`** (não `public/uploads` — volumes EasyPanel em `public` costumam ser root-only → EACCES).
+Sem volume, **cada deploy apaga as imagens**. Guia completo: [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md).
 
-- A API tenta automaticamente: `UPLOADS_DIR` → `/app/data/uploads` → `public/uploads` → `/tmp/...`
-- **Persistir:** monte volume em **`/app/data/uploads`**
-- No Environment do EasyPanel: `PRISMA_USE_ADAPTER=0` (ou remova a var se estiver `1`)
+1. Env: `UPLOADS_DIR=/app/data/uploads`  
+2. EasyPanel → App → **Mounts/Volumes** → montar **`/app/data/uploads`**  
+3. Restart/Deploy  
 
 ```env
 UPLOADS_DIR=/app/data/uploads
 UPLOAD_MAX_BYTES=8388608
 PRISMA_USE_ADAPTER=0
 ```
+
+No log do container deve aparecer: `[entrypoint] UPLOADS_DIR=/app/data/uploads files=N`  
+Se `files=0` **depois de cada deploy** e você já tinha subido fotos → volume **não** está montado.
 
 ---
 

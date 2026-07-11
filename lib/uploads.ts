@@ -3,7 +3,8 @@ import { mkdir, access, writeFile, unlink, constants } from 'fs/promises';
 
 /**
  * Candidatos a diretório de upload (primeiro gravável vence).
- * EasyPanel às vezes monta volume root-only em public/uploads → EACCES.
+ * Produção: use volume EasyPanel em /app/data/uploads (docs/UPLOADS_PERSISTENTES.md).
+ * /tmp só como último recurso — some no restart do container.
  */
 function candidateDirs(): string[] {
   const list: string[] = [];
@@ -11,13 +12,12 @@ function candidateDirs(): string[] {
   if (fromEnv) {
     list.push(path.isAbsolute(fromEnv) ? fromEnv : path.join(process.cwd(), fromEnv));
   }
-  list.push(
-    path.join(process.cwd(), 'data', 'uploads'),
-    '/app/data/uploads',
-    path.join(process.cwd(), 'public', 'uploads'),
-    '/tmp/lordenelson-uploads'
-  );
-  // unique
+  list.push('/app/data/uploads', path.join(process.cwd(), 'data', 'uploads'));
+  // legado / fallbacks
+  list.push(path.join(process.cwd(), 'public', 'uploads'));
+  if (process.env.NODE_ENV !== 'production') {
+    list.push('/tmp/lordenelson-uploads');
+  }
   return [...new Set(list)];
 }
 

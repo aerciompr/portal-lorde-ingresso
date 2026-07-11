@@ -6,7 +6,8 @@
 |------------|-----------|----------|
 | **1** | [`HANDOFF_COMPLETO.md`](./HANDOFF_COMPLETO.md) | **Estado real do projeto (2026-07-10)**: o que está feito, produção, armadilhas, próximos passos |
 | **2** | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Stack, modelos Prisma, fluxos de pagamento, map de pastas/APIs |
-| **3** | [`DEPLOY_RAPIDO.md`](./DEPLOY_RAPIDO.md) | **Deploy rápido**: imagem GHCR (sem build no VPS) |
+| **3** | [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md) | **Imagens que não somem** no deploy (volume EasyPanel) |
+| **3b** | [`DEPLOY_RAPIDO.md`](./DEPLOY_RAPIDO.md) | Deploy rápido: imagem GHCR (opcional) |
 | **4** | [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md) | Deploy EasyPanel (Git/Dockerfile ou imagem) |
 | **5** | [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md) | Checklist go-live operacional |
 | **6** | [`../PRODUCTION_SETUP.md`](../PRODUCTION_SETUP.md) | Gateways, webhooks, crons, segredos |
