@@ -1,7 +1,16 @@
 # Handoff completo — continuar o projeto (IA / DEV)
 
-**Atualizado:** 2026-07-11 (noite — GHCR, plano mestre A+B)  
+**Atualizado:** 2026-07-11 (Fases A+B do plano mestre **implementadas no código**)  
 **Objetivo:** permitir que **outra pessoa ou outra IA** retome o trabalho e a operação sem perder contexto.
+
+### Plano mestre — status
+
+| Fase | Conteúdo | Status |
+|------|----------|--------|
+| **A** | Crons doc, CI legado off, rate-limit admin, cookie assinado, smoke | Código ok · **cron no EasyPanel = você agenda** |
+| **B** | Reports por período, dashboard pagos, Meus Ingressos UX, modais pós-compra, pedidos badge | **Feito** |
+| **C** | Testes automatizados, typecheck CI, split monólitos | Backlog |
+| **D** | Produto P3 (PWA, cupom, S3…) | Backlog |
 
 Leia também: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md), [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md).
 

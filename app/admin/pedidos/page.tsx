@@ -221,22 +221,32 @@ export default function AdminPedidos() {
                 <Fragment key={o.id}>
                   <tr className="hover:bg-white/5">
                     <td className="p-3">
-                      {o.buyerName?.trim() ? (
-                        o.buyerName
-                      ) : (
-                        <span className="text-amber-400/90 italic text-xs">
-                          Sem cliente (checkout)
-                        </span>
-                      )}
-                      <br />
-                      <span className="text-xs text-zinc-500">
-                        {o.buyerEmail?.trim() || '—'}
-                      </span>
-                      {o.status === 'pending' && !o.buyerName?.trim() && (
-                        <span className="mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
-                          Reserva abandonada?
-                        </span>
-                      )}
+                      {(() => {
+                        const emptyBuyer =
+                          !o.buyerName?.trim() ||
+                          o.buyerName === 'Checkout em andamento' ||
+                          !o.buyerEmail?.trim();
+                        return (
+                          <>
+                            {emptyBuyer && o.status === 'pending' ? (
+                              <span className="text-amber-400/90 italic text-xs">
+                                Sem cliente (checkout)
+                              </span>
+                            ) : (
+                              o.buyerName || '—'
+                            )}
+                            <br />
+                            <span className="text-xs text-zinc-500">
+                              {o.buyerEmail?.trim() || '—'}
+                            </span>
+                            {o.status === 'pending' && emptyBuyer && (
+                              <span className="mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
+                                Reserva abandonada?
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td>{o.event.title}</td>
                     <td className="text-xs">{o.lote?.nome || '—'}</td>

@@ -47,11 +47,37 @@ export default function PurchaseSuccessModal({
   useEffect(() => {
     if (!open) return;
     primaryRef.current?.focus();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+      // Tab cycle simples dentro do dialog
+      if (e.key === 'Tab') {
+        const root = document.getElementById('purchase-success-modal');
+        if (!root) return;
+        const focusable = root.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
   }, [open, onClose]);
 
   useEffect(() => {
@@ -105,6 +131,7 @@ export default function PurchaseSuccessModal({
       onClick={onClose}
     >
       <div
+        id="purchase-success-modal"
         className="w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-white/10 bg-zinc-900 shadow-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >

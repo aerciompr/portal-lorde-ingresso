@@ -40,10 +40,11 @@ export async function POST(req: NextRequest) {
     const activeLoteId = event.activeLote?.id;
 
     // Create pending order + tickets (will be finalized on payment success)
+    // Placeholder evita "pedido fantasma" sem rótulo no admin
     const order = await prisma.order.create({
       data: {
         eventId,
-        buyerName: '', // filled at checkout
+        buyerName: 'Checkout em andamento',
         buyerEmail: '',
         totalCents,
         status: 'pending',

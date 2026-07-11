@@ -289,6 +289,11 @@ export default function MeusIngressos() {
     run
       .then(async (r) => {
         const data = await r.json();
+        if (r.status === 429) {
+          toast.error(data.error || 'Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+          applyOrders([], e, c, p);
+          return;
+        }
         if (!r.ok && data.error) toast.error(data.error);
         applyOrders(data.orders || [], e, c, p);
       })
@@ -557,11 +562,18 @@ export default function MeusIngressos() {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-500/10 via-transparent to-transparent" />
           <div className="relative max-w-lg mx-auto px-4 pt-10 pb-16 sm:pt-14 sm:pb-20 text-center">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/15 ring-1 ring-emerald-500/30 mb-4">
-              <Ticket className="w-7 h-7 text-emerald-400" />
+              {loading ? (
+                <RefreshCw className="w-7 h-7 text-emerald-400 animate-spin" />
+              ) : (
+                <Ticket className="w-7 h-7 text-emerald-400" />
+              )}
             </div>
             <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-white">
               Meus Ingressos
             </h1>
+            {loading && (
+              <p className="mt-3 text-sm text-emerald-400/80 animate-pulse">Buscando seus ingressos…</p>
+            )}
             <p className="mt-2 text-sm text-zinc-400 max-w-sm mx-auto">
               Sem conta obrigatória. Entre com o código da compra ou com a senha, se já tiver criado.
             </p>
@@ -1345,7 +1357,9 @@ export default function MeusIngressos() {
                       ? 'Só aparecem aqui ingressos válidos de eventos futuros. Estornos ficam no menu Estornos.'
                       : nav === 'estornos'
                         ? 'Você não tem pedidos estornados.'
-                        : 'Use o menu lateral para trocar de seção.'}
+                        : nav === 'passados'
+                          ? 'Quando o evento passar, o ingresso aparece aqui. Enquanto isso, confira a programação.'
+                          : 'Use o menu lateral para trocar de seção.'}
                   </p>
                   {nav === 'proximos' && counts.ticketsEstornos > 0 && (
                     <button
@@ -1364,6 +1378,14 @@ export default function MeusIngressos() {
                     >
                       Ver próximos válidos →
                     </button>
+                  )}
+                  {nav === 'passados' && (
+                    <Link
+                      href="/eventos"
+                      className="mt-4 inline-flex text-sm text-emerald-400 hover:underline"
+                    >
+                      Ver programação →
+                    </Link>
                   )}
                 </div>
               ) : (

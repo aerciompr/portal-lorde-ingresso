@@ -253,7 +253,12 @@ export default function CheckoutPage() {
         }
       } else if (data.type === 'stripe' && data.clientSecret) {
         setClientSecret(data.clientSecret);
-        if (data.accessCode) setPaidAccessCode(data.accessCode);
+        if (data.accessCode) {
+          setPaidAccessCode(data.accessCode);
+          try {
+            sessionStorage.setItem(`orderCode-${orderId}`, data.accessCode);
+          } catch {}
+        }
         toast.info(
           data.accessCode
             ? `Cartão. Guarde o código: ${data.accessCode}`
@@ -291,9 +296,11 @@ export default function CheckoutPage() {
 
     setProcessing(true);
 
-    const codeQ = paidAccessCode
-      ? `&code=${encodeURIComponent(paidAccessCode)}`
-      : '';
+    let code = paidAccessCode;
+    try {
+      code = code || sessionStorage.getItem(`orderCode-${orderId}`) || '';
+    } catch {}
+    const codeQ = code ? `&code=${encodeURIComponent(code)}` : '';
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {

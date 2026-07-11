@@ -3,6 +3,14 @@ import { addDays, setHours, setMinutes } from 'date-fns';
 import bcrypt from 'bcryptjs';
 
 async function main() {
+  // Proteção: em produção só roda com ALLOW_SEED=1 (seed APAGA pedidos/eventos)
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== '1') {
+    console.error(
+      '❌ Seed bloqueado em production. Defina ALLOW_SEED=1 só se tiver certeza (apaga dados).'
+    );
+    process.exit(1);
+  }
+
   console.log('🌱 Seeding Lorde Nelson events from live site...');
 
   // Clear existing for clean dev seed
