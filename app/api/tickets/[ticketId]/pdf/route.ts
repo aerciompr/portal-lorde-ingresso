@@ -5,9 +5,15 @@ import { formatDate } from '@/lib/utils';
 import { isAdmin } from '@/lib/auth';
 import { signCode } from '@/lib/validate-ticket';
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ ticketId: string }> }) {
+/**
+ * PDF do ingresso.
+ * - Admin autenticado: ok
+ * - Público: exige ?code=LN-… (accessCode do pedido) — não apaga dados; só autoriza download
+ */
+export async function GET(req: NextRequest, { params }: { params: Promise<{ ticketId: string }> }) {
   const { ticketId } = await params;
   const admin = await isAdmin();
+  const accessCode = (req.nextUrl.searchParams.get('code') || '').toUpperCase().trim();
 
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -19,6 +25,16 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ ticket
 
   if (!ticket) {
     return new NextResponse('Ingresso não encontrado', { status: 404 });
+  }
+
+  if (!admin) {
+    const orderCode = (ticket.order.accessCode || '').toUpperCase();
+    if (!accessCode || !orderCode || accessCode !== orderCode) {
+      return new NextResponse(
+        'Não autorizado. Abra o PDF a partir de Meus Ingressos (com o código da compra).',
+        { status: 401 }
+      );
+    }
   }
 
   const orderStatus = (ticket.order.status || '').toLowerCase();
@@ -53,7 +69,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ ticket
     });
   }
 
-  // Público: só ingresso válido de pedido pago
   if (!admin) {
     if (orderStatus !== 'paid' || ticket.status !== 'valid') {
       return new NextResponse(

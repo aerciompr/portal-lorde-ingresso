@@ -18,7 +18,12 @@ export async function GET() {
       },
     },
     orderBy: { createdAt: 'desc' },
-    take: 150,
+    take: 1000,
   });
-  return NextResponse.json(orders);
+  // Nunca devolver hash de senha do comprador no admin list
+  const safe = orders.map((o) => {
+    const { buyerPasswordHash, ...rest } = o as typeof o & { buyerPasswordHash?: string | null };
+    return { ...rest, hasPassword: Boolean(buyerPasswordHash) };
+  });
+  return NextResponse.json(safe);
 }

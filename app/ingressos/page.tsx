@@ -51,6 +51,8 @@ interface Order {
   buyerName: string;
   buyerEmail: string;
   buyerPasswordHash?: string | null;
+  /** API sanitizada — true se o comprador já tem senha (hash nunca vem no JSON) */
+  hasPassword?: boolean;
   event: {
     id: string;
     title: string;
@@ -219,7 +221,7 @@ export default function MeusIngressos() {
       JSON.stringify({ email: e || list[0]?.buyerEmail || '', code: c || '', password: p || '' })
     );
     if (e || list[0]?.buyerEmail) setEmail(e || list[0].buyerEmail);
-    const hasHash = list.some((o) => !!(o as Order).buyerPasswordHash);
+    const hasHash = list.some((o) => !!(o as Order).hasPassword || !!(o as Order).buyerPasswordHash);
     setShowSetPassword(!hasHash);
     setNav(list.some((o) => isActiveUpcoming(o)) ? 'proximos' : list.some(isRefunded) ? 'estornos' : 'passados');
     setSidebarOpen(false);
@@ -227,15 +229,33 @@ export default function MeusIngressos() {
 
   function lookupWith(e: string, c: string, p?: string) {
     setLoading(true);
-    const params = new URLSearchParams();
     const cleaned = cleanDigits(e);
-    if (cleaned.length === 11) params.set('cpf', cleaned);
-    else if (e) params.set('email', e);
-    if (c) params.set('code', c);
-    if (p) params.set('password', p);
-    fetch(`/api/orders/lookup?${params}`)
-      .then((r) => r.json())
-      .then((data) => applyOrders(data.orders || [], e, c, p))
+
+    // Senha: só POST (nunca na URL). Código: GET com code.
+    const run = p
+      ? fetch('/api/orders/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'login',
+            password: p,
+            ...(cleaned.length === 11 ? { cpf: cleaned } : e ? { email: e } : {}),
+          }),
+        })
+      : (() => {
+          const params = new URLSearchParams();
+          if (cleaned.length === 11) params.set('cpf', cleaned);
+          else if (e) params.set('email', e);
+          if (c) params.set('code', c);
+          return fetch(`/api/orders/lookup?${params}`);
+        })();
+
+    run
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok && data.error) toast.error(data.error);
+        applyOrders(data.orders || [], e, c, p);
+      })
       .catch(() => toast.error('Erro ao buscar ingressos'))
       .finally(() => setLoading(false));
   }
@@ -270,15 +290,29 @@ export default function MeusIngressos() {
       return;
     }
     setLoading(true);
-    const params = new URLSearchParams();
-    const cleaned = cleanDigits(email);
-    if (cleaned.length === 11) params.set('cpf', cleaned);
-    else if (email) params.set('email', email);
-    if (!usePassword && code) params.set('code', code);
-    if (usePassword && password) params.set('password', password);
     try {
-      const res = await fetch(`/api/orders/lookup?${params}`);
+      let res: Response;
+      if (usePassword) {
+        const cleaned = cleanDigits(email);
+        res = await fetch('/api/orders/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'login',
+            password,
+            ...(cleaned.length === 11 ? { cpf: cleaned } : { email }),
+          }),
+        });
+      } else {
+        const params = new URLSearchParams();
+        const cleaned = cleanDigits(email);
+        if (cleaned.length === 11) params.set('cpf', cleaned);
+        else if (email) params.set('email', email);
+        params.set('code', code);
+        res = await fetch(`/api/orders/lookup?${params}`);
+      }
       const data = await res.json();
+      if (!res.ok && data.error) toast.error(data.error);
       applyOrders(data.orders || [], email, usePassword ? '' : code, usePassword ? password : '');
       if ((data.orders || []).length > 0) toast.success('Ingressos carregados');
     } catch {
@@ -298,8 +332,27 @@ export default function MeusIngressos() {
     setNav('proximos');
   }
 
-  async function downloadPDF(ticketId: string) {
-    window.open(`/api/tickets/${ticketId}/pdf`, '_blank');
+  async function downloadPDF(ticketId: string, orderAccessCode?: string | null) {
+    // PDF exige código LN do pedido (ou sessão admin)
+    const c =
+      (orderAccessCode || '').trim() ||
+      code ||
+      (() => {
+        try {
+          const saved = localStorage.getItem('clientSession');
+          return saved ? JSON.parse(saved).code || '' : '';
+        } catch {
+          return '';
+        }
+      })();
+    // Se logou só com senha, pega accessCode de qualquer pedido carregado
+    const fromOrders =
+      c ||
+      orders.find((o) => o.tickets?.some((t) => t.id === ticketId))?.accessCode ||
+      orders[0]?.accessCode ||
+      '';
+    const q = fromOrders ? `?code=${encodeURIComponent(String(fromOrders).toUpperCase())}` : '';
+    window.open(`/api/tickets/${ticketId}/pdf${q}`, '_blank');
   }
 
   async function requestCancel(order: Order) {
@@ -798,7 +851,7 @@ export default function MeusIngressos() {
                       {refunded ? (
                         <button
                           type="button"
-                          onClick={() => downloadPDF(t.id)}
+                          onClick={() => downloadPDF(t.id, order.accessCode)}
                           className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-500 px-3.5 py-2.5 text-xs font-semibold text-white transition"
                         >
                           <Download size={14} /> Comprovante PDF
@@ -822,7 +875,7 @@ export default function MeusIngressos() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => downloadPDF(t.id)}
+                            onClick={() => downloadPDF(t.id, order.accessCode)}
                             className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3.5 py-2.5 text-xs font-medium text-zinc-200 hover:bg-white/5 transition"
                           >
                             <Download size={14} /> PDF
@@ -1055,9 +1108,20 @@ export default function MeusIngressos() {
                         className="btn btn-primary px-5"
                         onClick={async () => {
                           if (!newPassword) return toast.error('Preencha a senha');
+                          const access =
+                            code ||
+                            orders.find((o) => o.accessCode)?.accessCode ||
+                            '';
+                          if (!access) {
+                            return toast.error(
+                              'Para criar senha, entre com o código LN-… da compra'
+                            );
+                          }
                           const cleaned = cleanDigits(email);
-                          const payload: Record<string, string> = { password: newPassword };
-                          if (code) payload.code = code;
+                          const payload: Record<string, string> = {
+                            password: newPassword,
+                            code: access,
+                          };
                           if (cleaned.length === 11) payload.cpf = cleaned;
                           else if (email) payload.email = email;
                           const res = await fetch('/api/orders/lookup', {
@@ -1065,11 +1129,13 @@ export default function MeusIngressos() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(payload),
                           });
+                          const data = await res.json().catch(() => ({}));
                           if (res.ok) {
                             toast.success('Senha salva!');
                             setShowSetPassword(false);
                             setPassword(newPassword);
-                          } else toast.error('Não foi possível salvar');
+                            if (!code && access) setCode(String(access).toUpperCase());
+                          } else toast.error(data.error || 'Não foi possível salvar');
                         }}
                       >
                         Salvar

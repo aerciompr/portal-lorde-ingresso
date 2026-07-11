@@ -2,16 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
 import { bustSettingsCache } from '@/lib/settings';
+import { filterPublicSettings } from '@/lib/settings-public';
 
+/**
+ * GET
+ * - Público: só branding + chaves publishable (NÃO apaga nada do banco; só filtra a resposta).
+ * - Admin autenticado: todas as chaves (necessário para tela de configurações).
+ *
+ * Mercado Pago / Stripe secrets permanecem no MySQL; não são retornados sem login admin.
+ */
 export async function GET() {
-  // Allow public access for publishable keys (secrets should stay in .env ideally)
   let rows = await prisma.setting.findMany();
   const obj: Record<string, string> = {};
-  rows.forEach((r: any) => obj[r.key] = r.value);
+  rows.forEach((r) => {
+    obj[r.key] = r.value;
+  });
 
-  // Seed sensible defaults on first use (so fees work immediately)
   if (rows.length === 0) {
-    const defaults = {
+    const defaults: Record<string, string> = {
       pix_fee_percent: '1.99',
       pix_fee_fixed_cents: '0',
       card_fee_percent: '3.99',
@@ -30,16 +38,20 @@ export async function GET() {
         '© {year} Lorde Nelson\nPortal moderno de ingressos.\n\nPagamentos via Stripe e Mercado Pago\nCheck-in no local',
     };
     for (const [k, v] of Object.entries(defaults)) {
-      await prisma.setting.upsert({ where: { key: k }, update: { value: v }, create: { key: k, value: v } });
+      await prisma.setting.upsert({
+        where: { key: k },
+        update: { value: v },
+        create: { key: k, value: v },
+      });
       obj[k] = v;
     }
   }
 
-  // Note: Branding defaults and seeding are handled in lib/settings.ts and seed scripts.
-  // Removed always-on upsert here to avoid DB writes/locks on every public page load (Header fetches this).
-  // This helps reduce startup and page load latency.
+  if (await isAdmin()) {
+    return NextResponse.json(obj);
+  }
 
-  return NextResponse.json(obj);
+  return NextResponse.json(filterPublicSettings(obj));
 }
 
 export async function POST(req: NextRequest) {
