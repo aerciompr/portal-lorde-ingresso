@@ -2,156 +2,262 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function prismaErrorMessage(e: unknown): string {
+  const err = e as {
+    code?: string;
+    message?: string;
+    meta?: { target?: string | string[]; column_name?: string };
+  };
+  if (err?.code === 'P2002') {
+    return 'Já existe registro com o mesmo valor único (slug ou código). Tente outro título.';
+  }
+  if (err?.code === 'P2000') {
+    return 'Algum texto é longo demais para o banco. Encurte a descrição ou rode prisma db push (campos TEXT).';
+  }
+  if (err?.code === 'P1001' || err?.message?.includes("Can't reach database")) {
+    return 'Não foi possível conectar ao MySQL. Verifique DATABASE_URL e se o serviço MySQL está no ar.';
+  }
+  if (err?.code === 'P2021' || err?.message?.includes('does not exist')) {
+    return 'Tabela ausente no banco. No container: npx prisma db push --schema=./prisma/schema.prisma';
+  }
+  // mensagem útil sem vazar stack inteira
+  const msg = err?.message || String(e);
+  if (msg.length > 280) return msg.slice(0, 280) + '…';
+  return msg || 'Erro desconhecido ao salvar evento';
+}
+
+function parseEventDate(raw: string): Date | null {
+  if (!raw || typeof raw !== 'string') return null;
+  // datetime-local: "2026-08-14T20:00" (sem timezone)
+  const d = new Date(raw.length === 16 ? `${raw}:00` : raw);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
 export async function GET() {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const events = await prisma.event.findMany({
-    include: { 
-      ticketTypes: true,
-      lotes: { orderBy: { ordem: 'asc' } },
-      activeLote: true,
-    },
-    orderBy: { date: 'desc' },
-  });
-  return NextResponse.json(events);
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    const events = await prisma.event.findMany({
+      include: {
+        ticketTypes: true,
+        lotes: { orderBy: { ordem: 'asc' } },
+        activeLote: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+    return NextResponse.json(events);
+  } catch (e) {
+    console.error('[admin/events GET]', e);
+    return NextResponse.json({ error: prismaErrorMessage(e) }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const body = await req.json();
-  const { title, date, priceCents, qty } = body;
-
-  if (!title?.trim() || !date) {
-    return NextResponse.json({ error: 'Título e data são obrigatórios' }, { status: 400 });
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const slug =
-    title
+  try {
+    const body = await req.json();
+    const title = String(body.title || '').trim();
+    const date = parseEventDate(String(body.date || ''));
+
+    if (!title) {
+      return NextResponse.json({ error: 'Título é obrigatório' }, { status: 400 });
+    }
+    if (!date) {
+      return NextResponse.json(
+        { error: 'Data inválida. Use o campo Data e Hora do formulário.' },
+        { status: 400 }
+      );
+    }
+
+    const slugBase = title
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') +
-    '-' +
-    Date.now().toString(36).slice(-4);
+      .replace(/(^-|-$)/g, '')
+      .slice(0, 80);
+    const slug = `${slugBase || 'evento'}-${Date.now().toString(36).slice(-6)}`;
 
-  const price = priceCents || 3500;
-  const totalQty = qty || 150;
-  const loteNome = (body.loteNome || '1º Lote').trim() || '1º Lote';
+    // R$ 0,20 = 20 centavos — não usar `|| 3500` (0 e valores baixos são válidos)
+    const price =
+      body.priceCents != null && body.priceCents !== ''
+        ? Math.max(0, parseInt(String(body.priceCents), 10) || 0)
+        : 3500;
+    const totalQty =
+      body.qty != null && body.qty !== ''
+        ? Math.max(1, parseInt(String(body.qty), 10) || 1)
+        : 150;
+    const loteNome = String(body.loteNome || '1º Lote').trim() || '1º Lote';
 
-  const event = await prisma.event.create({
-    data: {
-      title: title.trim(),
-      slug,
-      date: new Date(date),
-      openTime: body.openTime || null,
-      description: body.description || null,
-      imageUrl: body.imageUrl || null,
-      address: body.address || 'Rua Silvério Jorge, 241, Jaraguá, Maceió - AL, 57022-110',
-      location: body.location || null,
-      salesDeadline: body.salesDeadline ? new Date(body.salesDeadline) : null,
-      footerNotice: body.footerNotice?.trim() || null,
-      allowCancel: body.allowCancel !== false,
-      cancelHoursBefore: body.cancelHoursBefore || 24,
-      cancelFeePercent: body.cancelFeePercent || 10,
-      loteAcrescimoCents:
-        body.loteAcrescimoCents != null ? parseInt(body.loteAcrescimoCents, 10) : 500,
-      loteDefaultQty: body.loteDefaultQty != null ? parseInt(body.loteDefaultQty, 10) : 50,
-      ticketTypes: {
-        create: [
-          {
-            name: loteNome,
-            priceCents: price,
-            totalQty,
-          },
-        ],
+    const salesDeadline = body.salesDeadline
+      ? parseEventDate(String(body.salesDeadline))
+      : null;
+
+    // Criação em passos (evita falha opaca de nested create + FK circular activeLote)
+    const event = await prisma.event.create({
+      data: {
+        title,
+        slug,
+        date,
+        openTime: body.openTime ? String(body.openTime).slice(0, 32) : null,
+        description: body.description ? String(body.description) : null,
+        imageUrl: body.imageUrl ? String(body.imageUrl) : null,
+        address:
+          body.address ||
+          'Rua Silvério Jorge, 241, Jaraguá, Maceió - AL, 57022-110',
+        location: body.location ? String(body.location) : null,
+        salesDeadline,
+        footerNotice: body.footerNotice?.trim() || null,
+        allowCancel: body.allowCancel !== false,
+        cancelHoursBefore: parseInt(String(body.cancelHoursBefore || 24), 10) || 24,
+        cancelFeePercent: parseFloat(String(body.cancelFeePercent ?? 10)) || 10,
+        loteAcrescimoCents:
+          body.loteAcrescimoCents != null
+            ? parseInt(String(body.loteAcrescimoCents), 10) || 500
+            : 500,
+        loteDefaultQty:
+          body.loteDefaultQty != null
+            ? parseInt(String(body.loteDefaultQty), 10) || 50
+            : 50,
       },
-      lotes: {
-        create: [
-          {
-            nome: loteNome,
-            precoCents: price,
-            totalQty,
-            ordem: 1,
-            viradaAutomatica: true,
-            ativo: true,
-          },
-        ],
-      },
-    },
-  });
-
-  const createdLote = await prisma.lote.findFirst({
-    where: { eventId: event.id },
-    orderBy: { createdAt: 'desc' },
-  });
-  if (createdLote) {
-    await prisma.event.update({
-      where: { id: event.id },
-      data: { activeLoteId: createdLote.id },
     });
-  }
 
-  return NextResponse.json({ ...event, activeLoteId: createdLote?.id || null });
+    await prisma.ticketType.create({
+      data: {
+        eventId: event.id,
+        name: loteNome,
+        priceCents: price,
+        totalQty,
+      },
+    });
+
+    const lote = await prisma.lote.create({
+      data: {
+        eventId: event.id,
+        nome: loteNome,
+        precoCents: price,
+        totalQty,
+        ordem: 1,
+        viradaAutomatica: true,
+        ativo: true,
+      },
+    });
+
+    const updated = await prisma.event.update({
+      where: { id: event.id },
+      data: { activeLoteId: lote.id },
+      include: {
+        ticketTypes: true,
+        lotes: true,
+        activeLote: true,
+      },
+    });
+
+    return NextResponse.json(updated);
+  } catch (e) {
+    console.error('[admin/events POST]', e);
+    return NextResponse.json({ error: prismaErrorMessage(e) }, { status: 500 });
+  }
 }
 
-// Simple update for title/date (extend as needed)
 export async function PUT(req: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const body = await req.json();
-  const { id } = body;
-  if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
-
-  const data: any = {};
-
-  if (body.title) data.title = body.title;
-  if (body.date) data.date = new Date(body.date);
-  if (body.description !== undefined) data.description = body.description || null;
-  if (body.imageUrl !== undefined) data.imageUrl = body.imageUrl || null;
-  if (body.address) data.address = body.address;
-  if (body.location !== undefined) data.location = body.location || null;
-  if (body.openTime !== undefined) data.openTime = body.openTime || null;
-  if (body.footerNotice !== undefined) data.footerNotice = (body.footerNotice || '').trim() || null;
-  if (body.salesDeadline) data.salesDeadline = new Date(body.salesDeadline);
-  if (body.allowCancel !== undefined) data.allowCancel = !!body.allowCancel;
-  if (body.cancelHoursBefore) data.cancelHoursBefore = parseInt(body.cancelHoursBefore);
-  if (body.cancelFeePercent) data.cancelFeePercent = parseFloat(body.cancelFeePercent);
-  if (body.loteAcrescimoCents !== undefined) data.loteAcrescimoCents = parseInt(body.loteAcrescimoCents);
-  if (body.loteDefaultQty !== undefined) data.loteDefaultQty = parseInt(body.loteDefaultQty);
-
-  const updated = await prisma.event.update({
-    where: { id },
-    data,
-  });
-
-  // Support adding new TicketType from edit page (for "Novo ingresso")
-  if (body.addTicketType) {
-    const { name, priceCents, totalQty } = body.addTicketType;
-    if (name && priceCents != null) {
-      await prisma.ticketType.create({
-        data: {
-          eventId: id,
-          name,
-          priceCents: parseInt(priceCents),
-          totalQty: parseInt(totalQty || 50),
-        },
-      });
-    }
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Return fresh data
-  const fresh = await prisma.event.findUnique({
-    where: { id },
-    include: { ticketTypes: true, lotes: { orderBy: { ordem: 'asc' } } },
-  });
-  return NextResponse.json(fresh || updated);
+  try {
+    const body = await req.json();
+    const { id } = body;
+    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
+
+    const data: Record<string, unknown> = {};
+
+    if (body.title) data.title = String(body.title).trim();
+    if (body.date) {
+      const d = parseEventDate(String(body.date));
+      if (!d) return NextResponse.json({ error: 'Data inválida' }, { status: 400 });
+      data.date = d;
+    }
+    if (body.description !== undefined) data.description = body.description || null;
+    if (body.imageUrl !== undefined) data.imageUrl = body.imageUrl || null;
+    if (body.address) data.address = body.address;
+    if (body.location !== undefined) data.location = body.location || null;
+    if (body.openTime !== undefined) data.openTime = body.openTime || null;
+    if (body.footerNotice !== undefined) {
+      data.footerNotice = (body.footerNotice || '').trim() || null;
+    }
+    if (body.salesDeadline !== undefined) {
+      data.salesDeadline = body.salesDeadline
+        ? parseEventDate(String(body.salesDeadline))
+        : null;
+    }
+    if (body.allowCancel !== undefined) data.allowCancel = !!body.allowCancel;
+    if (body.cancelHoursBefore != null) {
+      data.cancelHoursBefore = parseInt(String(body.cancelHoursBefore), 10) || 24;
+    }
+    if (body.cancelFeePercent != null) {
+      data.cancelFeePercent = parseFloat(String(body.cancelFeePercent)) || 10;
+    }
+    if (body.loteAcrescimoCents !== undefined) {
+      data.loteAcrescimoCents = parseInt(String(body.loteAcrescimoCents), 10) || 0;
+    }
+    if (body.loteDefaultQty !== undefined) {
+      data.loteDefaultQty = parseInt(String(body.loteDefaultQty), 10) || 50;
+    }
+
+    if (Object.keys(data).length > 0) {
+      await prisma.event.update({ where: { id }, data });
+    }
+
+    if (body.addTicketType) {
+      const { name, priceCents, totalQty } = body.addTicketType;
+      if (name && priceCents != null) {
+        await prisma.ticketType.create({
+          data: {
+            eventId: id,
+            name: String(name),
+            priceCents: parseInt(String(priceCents), 10) || 0,
+            totalQty: parseInt(String(totalQty || 50), 10) || 50,
+          },
+        });
+      }
+    }
+
+    const fresh = await prisma.event.findUnique({
+      where: { id },
+      include: {
+        ticketTypes: true,
+        lotes: { orderBy: { ordem: 'asc' } },
+        activeLote: true,
+      },
+    });
+    return NextResponse.json(fresh);
+  } catch (e) {
+    console.error('[admin/events PUT]', e);
+    return NextResponse.json({ error: prismaErrorMessage(e) }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-  await prisma.event.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+    await prisma.event.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error('[admin/events DELETE]', e);
+    return NextResponse.json({ error: prismaErrorMessage(e) }, { status: 500 });
+  }
 }
-

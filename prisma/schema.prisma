@@ -1,5 +1,6 @@
 // Lorde Nelson Ingressos - Modern Ticket Portal
-// Banco: MySQL (cPanel / produção)
+// Banco: MySQL (EasyPanel / produção)
+// Campos longos usam @db.Text — VARCHAR(191) estoura com HTML de descrição
 
 generator client {
   provider = "prisma-client-js"
@@ -12,28 +13,26 @@ datasource db {
 
 model Event {
   id                String    @id @default(cuid())
-  slug              String    @unique
-  title             String
-  description       String?
+  slug              String    @unique @db.VarChar(191)
+  title             String    @db.VarChar(500)
+  description       String?   @db.LongText
   date              DateTime
-  openTime          String? // e.g. "20:00"
-  address           String    @default("Rua Silvério Jorge, 241, Jaraguá, Maceió - AL, 57022-110")
-  location          String?   // Nome do Pub / Local para exibição no card
-  imageUrl          String?
+  openTime          String?   @db.VarChar(32)
+  address           String    @default("Rua Silvério Jorge, 241, Jaraguá, Maceió - AL, 57022-110") @db.VarChar(500)
+  location          String?   @db.VarChar(255)
+  imageUrl          String?   @db.Text
   salesDeadline     DateTime?
-  // Aviso legal no final da descrição (se vazio, usa o texto padrão do sistema)
-  footerNotice      String?
+  footerNotice      String?   @db.Text
   allowCancel       Boolean   @default(true)
   cancelHoursBefore Int       @default(24)
-  cancelFeePercent  Float     @default(10.0) // e.g. 10%
+  cancelFeePercent  Float     @default(10.0)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  // Lotes com virada automática
   lotes              Lote[]  @relation("EventToLotes")
-  activeLoteId       String? @unique
-  activeLote         Lote?   @relation("EventToActiveLote", fields: [activeLoteId], references: [id])
-  loteAcrescimoCents Int     @default(500) // R$ 5.00 default increase
+  activeLoteId       String? @unique @db.VarChar(191)
+  activeLote         Lote?   @relation("EventToActiveLote", fields: [activeLoteId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  loteAcrescimoCents Int     @default(500)
   loteDefaultQty     Int     @default(50)
 
   ticketTypes TicketType[]
@@ -44,44 +43,49 @@ model TicketType {
   id          String    @id @default(cuid())
   eventId     String
   event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  priceCents  Int // always store in cents
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  priceCents  Int
   totalQty    Int
   sold        Int       @default(0)
   salesEndAt  DateTime?
 
   tickets Ticket[]
+
+  @@index([eventId])
 }
 
 model Order {
   id                String    @id @default(cuid())
   eventId           String
   event             Event     @relation(fields: [eventId], references: [id])
-  buyerName         String
-  buyerEmail        String
-  buyerCpf          String?
-  buyerPhone        String?
-  buyerPasswordHash String? // bcrypt hash for client password login (email/cpf + senha)
+  buyerName         String    @db.VarChar(255)
+  buyerEmail        String    @db.VarChar(255)
+  buyerCpf          String?   @db.VarChar(32)
+  buyerPhone        String?   @db.VarChar(32)
+  buyerPasswordHash String?   @db.VarChar(255)
   totalCents        Int
-  status            String    @default("pending")
-  paymentGateway    String?
-  paymentId         String?
-  paymentMethod     String?
-  accessCode        String?   @unique // unique short code for guest access (passwordless)
+  status            String    @default("pending") @db.VarChar(32)
+  paymentGateway    String?   @db.VarChar(64)
+  paymentId         String?   @db.VarChar(191)
+  paymentMethod     String?   @db.VarChar(64)
+  accessCode        String?   @unique @db.VarChar(64)
   createdAt         DateTime  @default(now())
   paidAt            DateTime?
 
-  // Lote e valores financeiros
   loteId     String?
-  lote       Lote?   @relation(fields: [loteId], references: [id])
+  lote       Lote?   @relation(fields: [loteId], references: [id], onDelete: SetNull)
   grossCents Int     @default(0)
   netCents   Int     @default(0)
   feeCents   Int     @default(0)
-  feeDetails String? // e.g. "pix 1.99% + R$0.49"
+  feeDetails String? @db.VarChar(255)
 
   tickets              Ticket[]
   cancellationRequests CancellationRequest[]
+
+  @@index([eventId])
+  @@index([buyerEmail])
+  @@index([status])
 }
 
 model Ticket {
@@ -90,36 +94,39 @@ model Ticket {
   order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ticketTypeId String
   ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
-  uniqueCode   String     @unique
-  qrPayload    String // the data encoded in QR (usually uniqueCode or signed json)
-  status       String     @default("valid") // valid | used | cancelled
+  uniqueCode   String     @unique @db.VarChar(64)
+  qrPayload    String     @db.Text
+  status       String     @default("valid") @db.VarChar(32)
   checkedInAt  DateTime?
-  checkedInBy  String?
+  checkedInBy  String?    @db.VarChar(255)
 
   @@index([uniqueCode])
+  @@index([orderId])
 }
 
 model CancellationRequest {
   id          String    @id @default(cuid())
   orderId     String
-  order       Order     @relation(fields: [orderId], references: [id])
-  reason      String
-  status      String    @default("pending") // pending | approved | rejected
-  adminNotes  String?
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reason      String    @db.Text
+  status      String    @default("pending") @db.VarChar(32)
+  adminNotes  String?   @db.Text
   requestedAt DateTime  @default(now())
   processedAt DateTime?
+
+  @@index([orderId])
 }
 
 model Setting {
-  key   String @id
-  value String
+  key   String @id @db.VarChar(191)
+  value String @db.LongText
 }
 
 model Lote {
   id               String   @id @default(cuid())
   eventId          String
   event            Event    @relation("EventToLotes", fields: [eventId], references: [id], onDelete: Cascade)
-  nome             String
+  nome             String   @db.VarChar(255)
   precoCents       Int
   totalQty         Int
   sold             Int      @default(0)
@@ -130,4 +137,6 @@ model Lote {
 
   orders         Order[]
   activeForEvent Event?  @relation("EventToActiveLote")
+
+  @@index([eventId])
 }

@@ -134,16 +134,26 @@ export default function NovoEventoPage() {
         }),
       });
 
+      const errBody = await res.json().catch(() => ({} as { error?: string }));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Falha ao criar');
+        const detail =
+          errBody.error ||
+          (res.status === 401
+            ? 'Sessão expirada — faça login de novo em /admin/login'
+            : `Falha ao criar (HTTP ${res.status})`);
+        throw new Error(detail);
       }
 
-      const created = await res.json();
+      if (!errBody.id) {
+        throw new Error('Resposta inválida do servidor (sem id do evento)');
+      }
+
       toast.success('Evento criado!');
-      router.push(`/admin/eventos/${created.id}/edit`);
+      router.push(`/admin/eventos/${errBody.id}/edit`);
     } catch (e: unknown) {
-      toast.error((e as Error).message || 'Erro ao criar evento');
+      const msg = (e as Error).message || 'Erro ao criar evento';
+      console.error('[novo evento]', e);
+      toast.error(msg, { duration: 8000 });
     } finally {
       setSaving(false);
     }

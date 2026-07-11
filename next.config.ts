@@ -12,10 +12,10 @@ const nextConfig: NextConfig = {
   ...(isDockerBuild ? { output: "standalone" as const } : {}),
 
   // Docker: typecheck roda no CI/local (`npm run typecheck`) — no VPS economiza ~3 min
+  // (Next 16: não usar key `eslint` em next.config — gera warning)
   ...(isDockerBuild
     ? {
         typescript: { ignoreBuildErrors: true },
-        eslint: { ignoreDuringBuilds: true },
       }
     : {}),
 

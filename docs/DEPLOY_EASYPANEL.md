@@ -164,6 +164,8 @@ node scripts/db-push-cpanel.js
 
 Aviso `EACCES unlink .../.prisma/client` pode aparecer (user `nextjs` sem write nos files gerados no build). Se a mensagem foi **database is now in sync**, o schema está OK.
 
+**Depois de atualizar o schema** (descrição longa, TEXT, etc.), rode de novo o `db push` no console do container — senão criar evento falha com “data too long” ou erro genérico.
+
 **Seed (opcional):** a imagem não inclui `tsx`. Preferir criar eventos no **Admin**. Se precisar:
 
 ```bash
