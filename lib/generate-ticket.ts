@@ -33,26 +33,42 @@ async function loadImageForPdf(
     let bytes: Uint8Array;
     let contentType = '';
 
-    if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:')) {
+    if (raw.startsWith('data:')) {
+      const m = raw.match(/^data:([^;]+);base64,(.+)$/s);
+      if (!m) return null;
+      contentType = m[1];
+      bytes = new Uint8Array(Buffer.from(m[2], 'base64'));
+    } else if (raw.startsWith('http://') || raw.startsWith('https://')) {
       const res = await fetch(raw);
       if (!res.ok) return null;
       contentType = res.headers.get('content-type') || '';
       bytes = new Uint8Array(await res.arrayBuffer());
     } else {
-      // Path local: /uploads/foo.jpg → UPLOADS_DIR ou public/uploads
       const rel = raw.replace(/^\//, '').replace(/\.\./g, '');
-      let filePath: string;
-      if (rel.startsWith('uploads/')) {
+      // /uploads/m/{id} → MySQL
+      if (rel.startsWith('uploads/m/')) {
+        const id = rel.slice('uploads/m/'.length).replace(/\.[a-zA-Z0-9]+$/, '');
+        const { prisma } = await import('@/lib/prisma');
+        const row = await prisma.mediaFile.findUnique({ where: { id } });
+        if (!row) return null;
+        contentType = row.mime;
+        bytes = new Uint8Array(row.data);
+      } else if (rel.startsWith('uploads/')) {
         const { getUploadsDir } = await import('@/lib/uploads');
-        filePath = path.join(getUploadsDir(), rel.slice('uploads/'.length));
+        const filePath = path.join(getUploadsDir(), rel.slice('uploads/'.length));
+        bytes = new Uint8Array(await readFile(filePath));
+        const ext = path.extname(filePath).toLowerCase();
+        if (ext === '.png') contentType = 'image/png';
+        else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+        else if (ext === '.webp') contentType = 'image/webp';
       } else {
-        filePath = path.join(process.cwd(), 'public', rel);
+        const filePath = path.join(process.cwd(), 'public', rel);
+        bytes = new Uint8Array(await readFile(filePath));
+        const ext = path.extname(filePath).toLowerCase();
+        if (ext === '.png') contentType = 'image/png';
+        else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+        else if (ext === '.webp') contentType = 'image/webp';
       }
-      bytes = new Uint8Array(await readFile(filePath));
-      const ext = path.extname(filePath).toLowerCase();
-      if (ext === '.png') contentType = 'image/png';
-      else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
-      else if (ext === '.webp') contentType = 'image/webp';
     }
 
     const isPng =

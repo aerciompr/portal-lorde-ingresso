@@ -247,22 +247,21 @@ npx prisma db push --schema=./prisma/schema.prisma
 
 ---
 
-## 9. Uploads de imagem (admin) — **obrigatório volume em produção**
+## 9. Uploads de imagem (admin)
 
-Sem volume, **cada deploy apaga as imagens**. Guia completo: [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md).
-
-1. Env: `UPLOADS_DIR=/app/data/uploads`  
-2. EasyPanel → App → **Mounts/Volumes** → montar **`/app/data/uploads`**  
-3. Restart/Deploy  
+**Pelo env (recomendado — sem volume):**
 
 ```env
-UPLOADS_DIR=/app/data/uploads
-UPLOAD_MAX_BYTES=8388608
+UPLOAD_STORAGE=db
 PRISMA_USE_ADAPTER=0
 ```
 
-No log do container deve aparecer: `[entrypoint] UPLOADS_DIR=/app/data/uploads files=N`  
-Se `files=0` **depois de cada deploy** e você já tinha subido fotos → volume **não** está montado.
+Imagens no **MySQL** (tabela `MediaFile`) → **não somem** no deploy.  
+Após deploy: `npx prisma db push --schema=./prisma/schema.prisma`  
+
+Detalhes: [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md).
+
+**Opcional (disco + volume):** `UPLOAD_STORAGE=disk` + mount em `/app/data/uploads`.
 
 ---
 

@@ -2,10 +2,19 @@ import path from 'path';
 import { mkdir, access, writeFile, unlink, constants } from 'fs/promises';
 
 /**
- * Candidatos a diretório de upload (primeiro gravável vence).
- * Produção: use volume EasyPanel em /app/data/uploads (docs/UPLOADS_PERSISTENTES.md).
- * /tmp só como último recurso — some no restart do container.
+ * Onde gravar uploads:
+ * - db   (padrão produção): MySQL MediaFile — NÃO some no deploy (só env + banco)
+ * - disk: pasta no container — precisa volume EasyPanel em UPLOADS_DIR
+ * - auto: tenta disk; se falhar, usa db
+ *
+ * Env: UPLOAD_STORAGE=db|disk|auto
  */
+export function uploadStorageMode(): 'db' | 'disk' | 'auto' {
+  const m = (process.env.UPLOAD_STORAGE || 'db').toLowerCase().trim();
+  if (m === 'disk' || m === 'auto' || m === 'db') return m;
+  return 'db';
+}
+
 function candidateDirs(): string[] {
   const list: string[] = [];
   const fromEnv = process.env.UPLOADS_DIR?.trim();
@@ -13,11 +22,7 @@ function candidateDirs(): string[] {
     list.push(path.isAbsolute(fromEnv) ? fromEnv : path.join(process.cwd(), fromEnv));
   }
   list.push('/app/data/uploads', path.join(process.cwd(), 'data', 'uploads'));
-  // legado / fallbacks
   list.push(path.join(process.cwd(), 'public', 'uploads'));
-  if (process.env.NODE_ENV !== 'production') {
-    list.push('/tmp/lordenelson-uploads');
-  }
   return [...new Set(list)];
 }
 
@@ -45,7 +50,6 @@ async function isWritableDir(dir: string): Promise<boolean> {
   }
 }
 
-/** Resolve e cacheia o primeiro diretório realmente gravável */
 export async function ensureUploadsDir(): Promise<string> {
   if (cachedWritableDir) {
     await mkdir(cachedWritableDir, { recursive: true });
@@ -57,9 +61,7 @@ export async function ensureUploadsDir(): Promise<string> {
     tried.push(dir);
     if (await isWritableDir(dir)) {
       cachedWritableDir = dir;
-      if (process.env.NODE_ENV === 'production') {
-        console.log('[uploads] using directory:', dir);
-      }
+      console.log('[uploads] disk directory:', dir);
       return dir;
     }
   }
@@ -71,8 +73,14 @@ export async function ensureUploadsDir(): Promise<string> {
   throw err;
 }
 
+/** URL pública de arquivo no disco */
 export function publicUrlForUpload(filename: string): string {
   return `/uploads/${filename.replace(/^\/+/, '')}`;
+}
+
+/** URL pública de arquivo no MySQL */
+export function publicUrlForMediaId(id: string): string {
+  return `/uploads/m/${id}`;
 }
 
 export function maxUploadBytes(): number {

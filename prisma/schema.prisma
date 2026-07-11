@@ -122,6 +122,17 @@ model Setting {
   value String @db.LongText
 }
 
+/// Imagens do admin gravadas no MySQL — sobrevivem a deploy sem volume Docker
+/// URL pública: /uploads/m/{id}
+model MediaFile {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(255)
+  mime      String   @db.VarChar(128)
+  data      Bytes
+  size      Int
+  createdAt DateTime @default(now())
+}
+
 model Lote {
   id               String   @id @default(cuid())
   eventId          String
