@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
+import { requireAdminMutation } from '@/lib/request-security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -58,17 +59,22 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
 
   try {
     const body = await req.json();
     const title = String(body.title || '').trim();
     const date = parseEventDate(String(body.date || ''));
 
-    if (!title) {
-      return NextResponse.json({ error: 'Título é obrigatório' }, { status: 400 });
+    if (!title || title.length < 2) {
+      return NextResponse.json(
+        { error: 'Título é obrigatório (mín. 2 caracteres)' },
+        { status: 400 }
+      );
+    }
+    if (title.length > 500) {
+      return NextResponse.json({ error: 'Título muito longo' }, { status: 400 });
     }
     if (!date) {
       return NextResponse.json(
@@ -184,18 +190,30 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
 
   try {
     const body = await req.json();
     const { id } = body;
-    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'ID obrigatório' }, { status: 400 });
+    }
+
+    const exists = await prisma.event.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) {
+      return NextResponse.json({ error: 'Evento não encontrado' }, { status: 404 });
+    }
 
     const data: Record<string, unknown> = {};
 
-    if (body.title) data.title = String(body.title).trim();
+    if (body.title !== undefined) {
+      const t = String(body.title || '').trim();
+      if (t.length < 2) {
+        return NextResponse.json({ error: 'Título inválido' }, { status: 400 });
+      }
+      data.title = t;
+    }
     if (body.date) {
       const d = parseEventDate(String(body.date));
       if (!d) return NextResponse.json({ error: 'Data inválida' }, { status: 400 });

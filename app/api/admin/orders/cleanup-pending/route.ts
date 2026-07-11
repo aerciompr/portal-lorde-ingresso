@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAdmin } from '@/lib/auth';
 import { cleanupPendingOrders } from '@/lib/order-stock';
 import { prisma } from '@/lib/prisma';
+import { requireAdminMutation } from '@/lib/request-security';
 
 /** GET: prévia de quantos pedidos pendentes seriam limpos */
 export async function GET(req: NextRequest) {
@@ -53,9 +54,8 @@ export async function GET(req: NextRequest) {
 
 /** POST: limpa pedidos pending e devolve estoque */
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
 
   try {
     const body = await req.json().catch(() => ({}));

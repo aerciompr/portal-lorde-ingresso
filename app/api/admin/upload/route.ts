@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isAdmin } from '@/lib/auth';
 import { writeFile } from 'fs/promises';
 import path from 'path';
 import { prisma } from '@/lib/prisma';
@@ -10,6 +9,7 @@ import {
   publicUrlForUpload,
   uploadStorageMode,
 } from '@/lib/uploads';
+import { requireAdminMutation } from '@/lib/request-security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -57,9 +57,8 @@ async function saveToDisk(
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
 
   try {
     const formData = await req.formData();

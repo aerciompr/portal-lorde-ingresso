@@ -11,6 +11,7 @@
 | **B** | Reports por período, dashboard pagos, Meus Ingressos UX, modais pós-compra, pedidos badge | **Feito** |
 | **C** | Vitest + CI (`ci.yml`), dashboard limpo, `PeriodFilter`/`StatusBadge`, `lib/order-metrics` | **Feito** |
 | **D** | Paginação pedidos, componentes design leves, CONTRIBUTING | **Parcial** (PWA/S3/cupom ainda backlog) |
+| **Hardening** | 6 lacunas: cancel ownership, check-in cookie assinado, GET order, validação admin, CSRF origin, testes | **Feito** |
 
 Leia também: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md), [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md).
 

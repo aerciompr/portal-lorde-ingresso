@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
 import { bustSettingsCache } from '@/lib/settings';
 import { filterPublicSettings } from '@/lib/settings-public';
+import { requireAdminMutation } from '@/lib/request-security';
 
 /**
  * GET
@@ -55,9 +56,15 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
+
   const data = await req.json();
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
+  }
   for (const [k, v] of Object.entries(data)) {
+    if (!k || typeof k !== 'string' || k.length > 120) continue;
     await prisma.setting.upsert({
       where: { key: k },
       update: { value: String(v) },

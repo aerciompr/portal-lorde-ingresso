@@ -412,11 +412,29 @@ export default function MeusIngressos() {
 
   async function requestCancel(order: Order) {
     const reason = prompt('Motivo do cancelamento (obrigatório):');
-    if (!reason) return;
+    if (!reason || reason.trim().length < 3) {
+      toast.error('Informe um motivo (mín. 3 caracteres)');
+      return;
+    }
+    const access =
+      code ||
+      order.accessCode ||
+      orders.find((o) => o.accessCode)?.accessCode ||
+      '';
+    if (!access && !password) {
+      toast.error('Entre com o código LN ou senha para solicitar cancelamento');
+      return;
+    }
+    const cleaned = cleanDigits(email);
     const res = await fetch('/api/cancellations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: order.id, reason }),
+      body: JSON.stringify({
+        orderId: order.id,
+        reason: reason.trim(),
+        ...(access ? { code: access } : {}),
+        ...(password ? { password, email, ...(cleaned.length === 11 ? { cpf: cleaned } : {}) } : {}),
+      }),
     });
     const data = await res.json();
     if (!res.ok) toast.error(data.error || 'Não foi possível solicitar');

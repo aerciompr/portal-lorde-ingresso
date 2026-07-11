@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { isAdmin } from '@/lib/auth';
 import Stripe from 'stripe';
 import { MercadoPagoConfig, PaymentRefund } from 'mercadopago';
 import { sendCancellationApproved } from '@/lib/email';
 import { getAppSettings } from '@/lib/settings';
 import { restoreStockOnRefund } from '@/lib/order-stock';
+import { requireAdminMutation } from '@/lib/request-security';
 
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
 
   const { orderId } = await req.json();
   if (!orderId) return NextResponse.json({ error: 'orderId obrigatório' }, { status: 400 });

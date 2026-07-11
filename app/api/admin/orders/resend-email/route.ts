@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { isAdmin } from '@/lib/auth';
 import {
   sendOrderConfirmation,
   sendAccessCodesEmail,
   type OrderWithDetails,
 } from '@/lib/email';
 import { rateLimit } from '@/lib/rate-limit';
+import { requireAdminMutation } from '@/lib/request-security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,9 +18,8 @@ type Mode = 'confirmation' | 'access_code' | 'both';
  * Não altera pedido nem tokens de gateway.
  */
 export async function POST(req: NextRequest) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
 
   const rl = rateLimit({
     key: `admin-resend-email`,
