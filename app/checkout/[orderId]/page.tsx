@@ -62,7 +62,11 @@ export default function CheckoutPage() {
     isValidCpf(cleanedCpf) &&
     isPhoneValid;
 
-  const isFormValid = basicValid && selectedMethod;
+  const passwordOk =
+    !wantPassword ||
+    (buyer.password.length >= 6 && buyer.password === buyer.password2);
+
+  const isFormValid = basicValid && selectedMethod && passwordOk;
 
   useEffect(() => {
     async function load() {
@@ -182,6 +186,10 @@ export default function CheckoutPage() {
         toast.error('Telefone inválido (use DDD + número)');
       } else if (!selectedMethod) {
         toast.error('Escolha PIX ou Cartão');
+      } else if (wantPassword && buyer.password.length < 6) {
+        toast.error('Senha com no mínimo 6 caracteres (ou desmarque criar senha)');
+      } else if (wantPassword && buyer.password !== buyer.password2) {
+        toast.error('As senhas não coincidem');
       }
       return;
     }
@@ -189,12 +197,15 @@ export default function CheckoutPage() {
     setProcessing(true);
 
     // Send cleaned values to API (good for storage + gateways)
-    const buyerPayload = {
+    const buyerPayload: Record<string, string> = {
       name: buyer.name.trim(),
       email: buyer.email.trim(),
       cpf: cleanedCpf,
       phone: buyer.phone ? cleanPhone(buyer.phone) : '',
     };
+    if (wantPassword && buyer.password.length >= 6) {
+      buyerPayload.password = buyer.password;
+    }
 
     try {
       const gateway = selectedMethod === 'pix' ? 'mercadopago' : 'stripe';
@@ -310,6 +321,56 @@ export default function CheckoutPage() {
           maxLength={15}
         />
         {buyer.phone && !isPhoneValid && <div className="text-[10px] text-red-400 mt-1">Telefone deve ter 10 ou 11 dígitos (com DDD).</div>}
+
+        {/* Cadastro opcional de senha na compra */}
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-1 rounded border-white/20"
+              checked={wantPassword}
+              onChange={(e) => {
+                setWantPassword(e.target.checked);
+                if (!e.target.checked) setBuyer((b) => ({ ...b, password: '', password2: '' }));
+              }}
+            />
+            <span>
+              <span className="text-sm font-medium text-zinc-200">Criar senha (opcional)</span>
+              <span className="block text-[11px] text-zinc-500 mt-0.5">
+                Depois acessa Meus Ingressos com e-mail/CPF + senha, sem o código LN-…. Pode pular e
+                usar só o código.
+              </span>
+            </span>
+          </label>
+          {wantPassword && (
+            <div className="mt-3 space-y-2">
+              <input
+                type="password"
+                className="input"
+                placeholder="Senha (mín. 6 caracteres)"
+                value={buyer.password}
+                onChange={(e) => setBuyer({ ...buyer, password: e.target.value })}
+                autoComplete="new-password"
+              />
+              <input
+                type="password"
+                className={`input ${
+                  buyer.password2 && buyer.password !== buyer.password2
+                    ? 'border-red-500 focus:ring-red-500/30'
+                    : ''
+                }`}
+                placeholder="Confirmar senha"
+                value={buyer.password2}
+                onChange={(e) => setBuyer({ ...buyer, password2: e.target.value })}
+                autoComplete="new-password"
+              />
+              {buyer.password2 && buyer.password !== buyer.password2 && (
+                <div className="text-[10px] text-red-400">As senhas não coincidem.</div>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="text-[10px] text-zinc-400 mt-2">* Campos obrigatórios. CPF é exigido para PIX e emissão do ingresso.</div>
       </div>
 

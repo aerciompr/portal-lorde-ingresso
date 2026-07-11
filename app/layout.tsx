@@ -31,11 +31,11 @@ export async function generateMetadata(): Promise<Metadata> {
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://portal.lordenelson.com.br";
 
-  // Preferência: favicon do admin; fallback logo; depois ico do app
+  // Preferência: favicon do admin; senão logo (PNG ok). Sem .ico fixo (conflitava com o PNG).
   const faviconRaw =
     s.branding.faviconUrl ||
     s.branding.logoUrl ||
-    "/favicon.ico";
+    "/logo-lordenelson.jpg";
   const favicon = absoluteMediaUrl(faviconRaw, base);
   const mime = mimeFromUrl(faviconRaw);
 
@@ -43,11 +43,13 @@ export async function generateMetadata(): Promise<Metadata> {
     title: `${siteName} | Ingressos`,
     description:
       "Compre ingressos para eventos no Lorde Nelson Rest Pub - Maceió. Programação, shows, forró e jogos.",
-    // PNG/JPG/ICO — type explícito para o navegador não exigir só .ico
     icons: {
-      icon: [{ url: favicon, type: mime, sizes: "any" }],
-      shortcut: [{ url: favicon, type: mime }],
-      apple: [{ url: favicon, type: mime }],
+      icon: [
+        { url: favicon, type: mime, sizes: "32x32" },
+        { url: favicon, type: mime, sizes: "16x16" },
+      ],
+      shortcut: favicon,
+      apple: favicon,
     },
   };
 }
