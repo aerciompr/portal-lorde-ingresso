@@ -9,8 +9,8 @@
 |------|----------|--------|
 | **A** | Crons doc, CI legado off, rate-limit admin, cookie assinado, smoke | Código ok · **cron no EasyPanel = você agenda** |
 | **B** | Reports por período, dashboard pagos, Meus Ingressos UX, modais pós-compra, pedidos badge | **Feito** |
-| **C** | Testes automatizados, typecheck CI, split monólitos | Backlog |
-| **D** | Produto P3 (PWA, cupom, S3…) | Backlog |
+| **C** | Vitest + CI (`ci.yml`), dashboard limpo, `PeriodFilter`/`StatusBadge`, `lib/order-metrics` | **Feito** |
+| **D** | Paginação pedidos, componentes design leves, CONTRIBUTING | **Parcial** (PWA/S3/cupom ainda backlog) |
 
 Leia também: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), [`UPLOADS_PERSISTENTES.md`](./UPLOADS_PERSISTENTES.md), [`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md).
 

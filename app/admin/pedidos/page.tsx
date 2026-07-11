@@ -1,9 +1,10 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { formatPrice, orderStatusLabel, ticketStatusLabel } from '@/lib/utils';
+import { formatPrice, ticketStatusLabel } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Download, FileText, Mail, KeyRound, Loader2 } from 'lucide-react';
+import StatusBadge from '@/components/StatusBadge';
 
 interface TicketRow {
   id: string;
@@ -38,26 +39,38 @@ export default function AdminPedidos() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 50;
 
   const load = useCallback(async () => {
-    const res = await fetch('/api/admin/orders');
-    if (res.ok) setOrders(await res.json());
-  }, []);
+    const res = await fetch(`/api/admin/orders?page=${page}&limit=${limit}&paged=1`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      setOrders(data);
+      setTotalPages(1);
+      setTotal(data.length);
+    } else {
+      setOrders(data.orders || []);
+      setTotalPages(data.totalPages || 1);
+      setTotal(data.total || 0);
+    }
+  }, [page]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const filteredOrders = orders
-    .filter((o) => {
-      const matchesSearch =
-        o.buyerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        o.buyerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        o.event.title.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    })
-    .slice(0, 100);
+  const filteredOrders = orders.filter((o) => {
+    const matchesSearch =
+      (o.buyerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (o.buyerEmail || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      o.event.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   async function refund(orderId: string) {
     if (!confirm('Confirmar estorno real via gateway?')) return;
@@ -150,20 +163,6 @@ export default function AdminPedidos() {
       setResendingId(null);
     }
   }
-
-  const StatusBadge = ({ status }: { status: string }) => {
-    const colors: Record<string, string> = {
-      paid: 'bg-emerald-500/20 text-emerald-400',
-      refunded: 'bg-red-500/20 text-red-400',
-      pending: 'bg-yellow-500/20 text-yellow-400',
-      cancelled: 'bg-zinc-600/40 text-zinc-400',
-    };
-    return (
-      <span className={`px-2 py-0.5 rounded text-xs ${colors[status] || 'bg-zinc-700'}`}>
-        {orderStatusLabel(status)}
-      </span>
-    );
-  };
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -354,6 +353,32 @@ export default function AdminPedidos() {
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400">
+          <span>
+            Página {page} de {totalPages} · {total} pedido(s)
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-lg border border-white/10 disabled:opacity-40 hover:bg-white/5"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 rounded-lg border border-white/10 disabled:opacity-40 hover:bg-white/5"
+            >
+              Próxima
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

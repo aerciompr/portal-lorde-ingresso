@@ -15,6 +15,8 @@ import {
   Undo2,
   Wallet,
 } from 'lucide-react';
+import PeriodFilter from '@/components/PeriodFilter';
+import { periodToRange, type PeriodId } from '@/lib/period';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,30 +54,6 @@ type ReportsPayload = {
 };
 
 type TabId = 'geral' | 'eventos';
-type PeriodId = 'today' | '7d' | '15d' | '30d' | 'all' | 'custom';
-
-function ymd(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
-function periodToRange(period: PeriodId, customFrom: string, customTo: string): { from?: string; to?: string } {
-  const now = new Date();
-  if (period === 'all') return {};
-  if (period === 'today') {
-    const t = ymd(now);
-    return { from: t, to: t };
-  }
-  if (period === 'custom') {
-    return {
-      ...(customFrom ? { from: customFrom } : {}),
-      ...(customTo ? { to: customTo } : {}),
-    };
-  }
-  const days = period === '7d' ? 7 : period === '15d' ? 15 : 30;
-  const from = new Date(now);
-  from.setDate(from.getDate() - (days - 1));
-  return { from: ymd(from), to: ymd(now) };
-}
 
 function KpiCard({
   label,
@@ -299,57 +277,15 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Período */}
       <div className="mb-6">
-        <div className="text-[11px] uppercase tracking-wide text-zinc-500 mb-2">Período</div>
-        <div className="flex flex-wrap gap-1.5">
-          {(
-            [
-              ['today', 'Hoje'],
-              ['7d', '7 dias'],
-              ['15d', '15 dias'],
-              ['30d', '30 dias'],
-              ['all', 'Tudo'],
-              ['custom', 'Personalizado'],
-            ] as [PeriodId, string][]
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setPeriod(id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                period === id
-                  ? 'bg-emerald-600 border-emerald-500 text-white'
-                  : 'border-white/10 text-zinc-400 hover:bg-white/5'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {period === 'custom' && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            <label className="text-xs text-zinc-500 flex items-center gap-1.5">
-              De
-              <input
-                type="date"
-                className="input py-1 text-xs"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-              />
-            </label>
-            <label className="text-xs text-zinc-500 flex items-center gap-1.5">
-              Até
-              <input
-                type="date"
-                className="input py-1 text-xs"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-              />
-            </label>
-          </div>
-        )}
-        <p className="text-[11px] text-zinc-600 mt-2">Estornos aparecem à parte e não somam no bruto.</p>
+        <PeriodFilter
+          period={period}
+          onPeriodChange={setPeriod}
+          customFrom={customFrom}
+          customTo={customTo}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+        />
       </div>
 
       {/* Tabs */}

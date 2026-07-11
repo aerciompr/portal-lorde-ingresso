@@ -1,0 +1,31 @@
+# Fase C: typecheck + testes unitários em todo push/PR na main
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+        continue-on-error: true
+        # continue-on-error: erros legados Prisma/mediaFile no tsc; testes unitários são gate obrigatório
