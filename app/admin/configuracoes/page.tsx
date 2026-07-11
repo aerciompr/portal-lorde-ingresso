@@ -37,17 +37,30 @@ export default function AdminConfiguracoes() {
     try {
       const res = await fetch('/api/admin/upload', {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
       const data = await res.json();
 
       if (res.ok && data.url) {
-        setSettings(prev => ({ ...prev, [key]: data.url }));
-        toast.success('Imagem enviada com sucesso');
+        // Atualiza estado e salva no banco na hora (logo/favicon não dependem do botão Salvar)
+        const next = { ...settings, [key]: data.url };
+        setSettings(next);
+        const saveRes = await fetch('/api/admin/settings', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [key]: data.url }),
+        });
+        if (saveRes.ok) {
+          toast.success('Imagem enviada e salva. Atualize a página (Ctrl+F5) se o favicon não mudar.');
+        } else {
+          toast.success('Imagem enviada — clique em Salvar configurações');
+        }
       } else {
         toast.error(data.error || 'Falha ao enviar imagem');
       }
-    } catch (e) {
+    } catch {
       toast.error('Erro no upload');
     } finally {
       setUploading(null);
@@ -378,9 +391,9 @@ export default function AdminConfiguracoes() {
               )}
 
               {renderImageField(
-                'Favicon', 
-                'favicon_url', 
-                'Ícone da aba do navegador. Use .ico ou PNG quadrado (32x32 ou maior).'
+                'Favicon',
+                'favicon_url',
+                'Ícone da aba do navegador. PNG quadrado (32×32 ou 64×64) ou .ico. Após enviar, use Ctrl+F5 (cache do browser).'
               )}
 
               <div className="md:col-span-2">
