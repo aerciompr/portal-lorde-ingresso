@@ -381,12 +381,12 @@ export default function MeusIngressos() {
   }
 
   const displayName = email || orders[0]?.buyerEmail || 'Cliente';
+  /** Menu no estilo do admin: uma linha, ícone + label + badge */
   const navItems: {
     id: NavId;
     label: string;
     icon: typeof Clock;
     n?: number;
-    desc: string;
     tone?: 'default' | 'danger';
   }[] = [
     {
@@ -394,25 +394,42 @@ export default function MeusIngressos() {
       label: 'Próximos',
       icon: Sparkles,
       n: counts.ticketsProximos > 0 ? counts.ticketsProximos : undefined,
-      desc: 'Para usar na entrada',
     },
     {
       id: 'passados',
       label: 'Passados',
       icon: History,
       n: counts.ticketsPassados > 0 ? counts.ticketsPassados : undefined,
-      desc: 'Eventos já realizados',
     },
     {
       id: 'estornos',
       label: 'Estornos',
       icon: Undo2,
       n: counts.ticketsEstornos > 0 ? counts.ticketsEstornos : undefined,
-      desc: 'Histórico · sem entrada',
       tone: 'danger',
     },
-    { id: 'conta', label: 'Conta', icon: User, desc: 'Senha e sessão' },
+    { id: 'conta', label: 'Conta', icon: User },
   ];
+
+  const pageTitle =
+    nav === 'proximos'
+      ? 'Próximos eventos'
+      : nav === 'passados'
+        ? 'Eventos passados'
+        : nav === 'estornos'
+          ? 'Estornos'
+          : 'Conta';
+
+  const pageSubtitle =
+    nav === 'conta'
+      ? 'Sessão e opções opcionais'
+      : visibleOrders.length === 0
+        ? 'Nada por aqui'
+        : nav === 'estornos'
+          ? `${counts.ticketsEstornos} estorno(s) · não valem na entrada`
+          : nav === 'proximos'
+            ? `${counts.ticketsProximos} ingresso(s) válido(s) para usar`
+            : `${counts.ticketsPassados} ingresso(s) de eventos passados`;
 
   // ─── LOGIN ─────────────────────────────────────────────
   if (!loggedIn) {
@@ -842,191 +859,174 @@ export default function MeusIngressos() {
     );
   }
 
-  const sidebar = (
-    <div className="flex flex-col h-full">
-      <div className="p-5 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500/30 to-emerald-700/20 ring-1 ring-emerald-500/30 flex items-center justify-center">
-            <Ticket className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-widest text-zinc-500">Área do cliente</div>
-            <div className="font-semibold text-white truncate text-sm">{displayName}</div>
-          </div>
-        </div>
-
-        {/* Um único total: só o que vale na entrada. Estorno nunca soma aqui. */}
-        <div className="mt-4 rounded-2xl bg-zinc-950/80 border border-emerald-500/25 px-4 py-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xs text-zinc-400">Ingressos válidos</span>
-            <span className="text-2xl font-semibold text-emerald-400 tabular-nums leading-none">
-              {counts.ticketsValidos}
-            </span>
-          </div>
-          <p className="text-[10px] text-zinc-500 mt-1.5">
-            {counts.ticketsProximos > 0
-              ? `${counts.ticketsProximos} para usar · estorno não entra neste número`
-              : 'Nenhum por vir · estorno não entra neste número'}
-          </p>
-        </div>
-
-        {counts.ticketsEstornos > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setNav('estornos');
-              setSidebarOpen(false);
-            }}
-            className="mt-2 w-full rounded-xl border border-red-500/20 bg-red-950/15 px-3 py-2 text-left hover:bg-red-950/30 transition"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] text-red-300/90 flex items-center gap-1.5">
-                <Undo2 size={12} /> Histórico de estornos
-              </span>
-              <span className="text-sm font-semibold text-red-400 tabular-nums">
-                {counts.ticketsEstornos}
-              </span>
-            </div>
-            <p className="text-[9px] text-red-400/55 mt-0.5">Não contam como ingresso · sem QR de entrada</p>
-          </button>
-        )}
-      </div>
-
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const active = nav === item.id;
-          const Icon = item.icon;
-          const danger = item.tone === 'danger';
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                setNav(item.id);
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition ${
-                active
-                  ? danger
-                    ? 'bg-red-600 text-white shadow-lg shadow-red-950/40'
-                    : 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/40'
-                  : danger
-                    ? 'text-red-300/80 hover:bg-red-950/25 hover:text-red-200'
-                    : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <Icon size={18} className="shrink-0 opacity-90" />
-              <span className="flex-1 min-w-0">
-                <span className="block text-sm font-medium">{item.label}</span>
-                <span
-                  className={`block text-[10px] ${
-                    active
-                      ? danger
-                        ? 'text-red-100/80'
-                        : 'text-emerald-100/80'
-                      : danger
-                        ? 'text-red-400/50'
-                        : 'text-zinc-600'
-                  }`}
-                >
-                  {item.desc}
-                </span>
-              </span>
-              {item.n != null && (
-                <span
-                  className={`text-xs font-semibold tabular-nums px-2 py-0.5 rounded-lg ${
-                    active
-                      ? 'bg-black/20'
-                      : danger
-                        ? 'bg-red-500/15 text-red-400'
-                        : 'bg-white/5 text-zinc-500'
-                  }`}
-                >
-                  {item.n}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="p-3 border-t border-white/10 space-y-1">
-        <Link
-          href="/eventos"
-          className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition"
-          onClick={() => setSidebarOpen(false)}
-        >
-          <ChevronRight size={16} /> Programação
-        </Link>
-        <button
-          type="button"
-          onClick={logout}
-          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-red-400/90 hover:bg-red-950/30 transition"
-        >
-          <LogOut size={16} /> Sair
-        </button>
-      </div>
-    </div>
-  );
-
+  // ─── Shell no estilo do admin: sidebar fixa + área principal ───
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-zinc-950">
-      {/* Mobile top bar */}
-      <div className="lg:hidden sticky top-16 z-40 border-b border-white/10 bg-zinc-950/95 backdrop-blur px-4 py-3 flex items-center justify-between gap-3">
+    <div className="min-h-[calc(100vh-4rem)] bg-zinc-950 text-white flex">
+      {/* Overlay mobile */}
+      {sidebarOpen && (
         <button
           type="button"
-          onClick={() => setSidebarOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-200 hover:bg-white/5"
-        >
-          <Menu size={18} /> Menu
-        </button>
-        <div className="text-sm font-medium text-white truncate">Meus Ingressos</div>
-        <div className="min-w-[4.5rem] text-right text-[10px] text-emerald-400/90 tabular-nums leading-tight">
-          {counts.ticketsValidos} válido{counts.ticketsValidos !== 1 ? 's' : ''}
-          {counts.ticketsEstornos > 0 && (
-            <span className="block text-red-400/70">{counts.ticketsEstornos} estorno{counts.ticketsEstornos !== 1 ? 's' : ''}</span>
-          )}
-        </div>
-      </div>
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+          aria-label="Fechar menu"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-      {/* Mobile drawer */}
-      {sidebarOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/70"
-            aria-label="Fechar menu"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <aside className="relative w-[min(100%,288px)] h-full bg-zinc-900 border-r border-white/10 shadow-2xl animate-in slide-in-from-left">
+      {/* Sidebar — mesmo padrão do admin */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-zinc-900 border-r border-white/10 flex flex-col transform transition-transform duration-200 ease-out lg:static lg:translate-x-0 lg:inset-auto lg:min-h-[calc(100vh-4rem)] ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="p-5 border-b border-white/10 shrink-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-500/25 shrink-0">
+                  <Ticket className="w-4 h-4 text-emerald-400" />
+                </span>
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm truncate">Meus Ingressos</div>
+                  <div className="text-[10px] text-zinc-500 truncate">{displayName}</div>
+                </div>
+              </div>
+            </div>
             <button
               type="button"
+              className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:bg-white/5"
               onClick={() => setSidebarOpen(false)}
-              className="absolute top-3 right-3 p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5"
               aria-label="Fechar"
             >
               <X size={18} />
             </button>
-            {sidebar}
-          </aside>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-zinc-950/80 border border-emerald-500/20 px-2.5 py-2 text-center">
+              <div className="text-lg font-semibold text-emerald-400 tabular-nums leading-none">
+                {counts.ticketsValidos}
+              </div>
+              <div className="text-[10px] text-zinc-500 mt-1">Válidos</div>
+            </div>
+            <div className="rounded-xl bg-zinc-950/80 border border-white/8 px-2.5 py-2 text-center">
+              <div className="text-lg font-semibold text-white tabular-nums leading-none">
+                {counts.ticketsProximos}
+              </div>
+              <div className="text-[10px] text-zinc-500 mt-1">Por vir</div>
+            </div>
+          </div>
+          {counts.ticketsEstornos > 0 && (
+            <p className="text-[10px] text-red-400/80 mt-2 text-center">
+              {counts.ticketsEstornos} estorno{counts.ticketsEstornos !== 1 ? 's' : ''} (à parte)
+            </p>
+          )}
         </div>
-      )}
 
-      <div className="max-w-6xl mx-auto lg:px-6 lg:py-8 flex gap-0 lg:gap-6">
-        {/* Desktop sidebar */}
-        <aside className="hidden lg:block w-72 shrink-0 rounded-3xl border border-white/10 bg-zinc-900/60 overflow-hidden sticky top-24 h-[calc(100vh-8rem)]">
-          {sidebar}
-        </aside>
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto overscroll-contain">
+          {navItems.map((item) => {
+            const active = nav === item.id;
+            const Icon = item.icon;
+            const danger = item.tone === 'danger';
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setNav(item.id);
+                  setSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-left transition cursor-pointer ${
+                  active
+                    ? danger
+                      ? 'bg-red-500/15 text-red-400'
+                      : 'bg-white/10 text-emerald-400'
+                    : danger
+                      ? 'text-red-400/70 hover:bg-red-950/30 hover:text-red-300'
+                      : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <Icon size={18} className="shrink-0 opacity-90" strokeWidth={active ? 2.25 : 1.75} />
+                <span className="flex-1 font-medium">{item.label}</span>
+                {item.n != null && (
+                  <span
+                    className={`text-[11px] font-semibold tabular-nums min-w-[1.25rem] text-center px-1.5 py-0.5 rounded-md ${
+                      active
+                        ? danger
+                          ? 'bg-red-500/20 text-red-300'
+                          : 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-white/5 text-zinc-500'
+                    }`}
+                  >
+                    {item.n}
+                  </span>
+                )}
+              </button>
+            );
+          })}
 
-        {/* Main */}
-        <main className="flex-1 min-w-0 px-4 py-5 sm:px-6 lg:px-0 lg:py-0 pb-24 lg:pb-8">
+          <div className="pt-2 mt-2 border-t border-white/5 space-y-1">
+            <Link
+              href="/eventos"
+              className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm text-zinc-400 hover:bg-white/5 hover:text-white transition"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <ChevronRight size={18} className="shrink-0" />
+              <span>Programação</span>
+            </Link>
+          </div>
+        </nav>
+
+        <div className="shrink-0 p-4 border-t border-white/10">
+          <button
+            type="button"
+            onClick={logout}
+            className="w-full text-sm py-2.5 rounded-lg bg-zinc-800 hover:bg-red-900/40 text-red-400 flex items-center justify-center gap-2 cursor-pointer transition"
+          >
+            <LogOut size={15} /> Sair
+          </button>
+          <div className="text-[10px] text-center text-zinc-600 mt-3">Área do cliente • Lorde Nelson</div>
+        </div>
+      </aside>
+
+      {/* Coluna principal */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-14 shrink-0 border-b border-white/10 bg-zinc-900/80 backdrop-blur flex items-center px-4 sm:px-6 justify-between gap-3 sticky top-16 z-30">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-2 -ml-1 rounded-lg text-zinc-300 hover:bg-white/5"
+              aria-label="Abrir menu"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-white truncate">{pageTitle}</div>
+              <div className="text-[11px] text-zinc-500 truncate hidden sm:block">{pageSubtitle}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-sm shrink-0">
+            <span className="text-[11px] text-emerald-400 tabular-nums hidden xs:inline sm:inline">
+              {counts.ticketsValidos} válido{counts.ticketsValidos !== 1 ? 's' : ''}
+            </span>
+            <button
+              type="button"
+              onClick={logout}
+              className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/40 text-red-400 transition"
+            >
+              Sair
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
           {nav === 'conta' ? (
             <div className="space-y-4 max-w-xl">
-              <div>
+              <div className="mb-2">
                 <h1 className="text-2xl font-semibold tracking-tight text-white">Conta</h1>
                 <p className="text-sm text-zinc-500 mt-1">Sessão e opções opcionais</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-zinc-900/80 p-5 space-y-4">
+              <div className="rounded-2xl border border-white/10 bg-zinc-900/80 p-5 space-y-4">
                 <div>
                   <div className="text-xs text-zinc-500">Acessando como</div>
                   <div className="font-medium text-white mt-0.5 break-all">{displayName}</div>
@@ -1077,15 +1077,27 @@ export default function MeusIngressos() {
                     </div>
                   </div>
                 )}
-                <button type="button" onClick={logout} className="btn btn-secondary w-full text-red-400 border-red-500/20">
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="btn btn-secondary w-full text-red-400 border-red-500/20"
+                >
                   <LogOut size={16} className="mr-2" /> Sair desta sessão
                 </button>
               </div>
             </div>
           ) : (
-            <>
+            <div className="max-w-3xl space-y-4">
+              <div className="mb-1 lg:mb-2">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 mb-1">Carteira</p>
+                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+                  {pageTitle}
+                </h1>
+                <p className="text-sm text-zinc-500 mt-1">{pageSubtitle}</p>
+              </div>
+
               {justPaid && nav === 'proximos' && (
-                <div className="mb-4 rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/50 to-zinc-900/80 px-4 py-4 sm:px-5 sm:py-5">
+                <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/50 to-zinc-900/80 px-4 py-4 sm:px-5">
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 ring-1 ring-emerald-500/30 flex items-center justify-center shrink-0">
                       <Check className="w-5 h-5 text-emerald-400" />
@@ -1093,59 +1105,17 @@ export default function MeusIngressos() {
                     <div className="min-w-0">
                       <p className="font-semibold text-emerald-100">Pagamento confirmado</p>
                       <p className="text-sm text-emerald-200/70 mt-0.5 leading-relaxed">
-                        Seu ingresso está pronto. Toque no <strong className="text-emerald-200">QR</strong> no
-                        card abaixo e mostre na portaria. Guarde o PDF no celular se preferir.
+                        Seu ingresso está pronto. Toque no{' '}
+                        <strong className="text-emerald-200">QR</strong> no card abaixo e mostre na
+                        portaria.
                       </p>
                     </div>
                   </div>
                 </div>
               )}
 
-              <div className="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 mb-1">Carteira</p>
-                  <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
-                    {nav === 'proximos' && 'Próximos eventos'}
-                    {nav === 'passados' && 'Eventos passados'}
-                    {nav === 'estornos' && 'Estornos'}
-                  </h1>
-                  <p className="text-sm text-zinc-500 mt-1">
-                    {visibleOrders.length === 0
-                      ? 'Nada por aqui'
-                      : nav === 'estornos'
-                        ? `${counts.ticketsEstornos} estorno(s) · não valem na entrada`
-                        : nav === 'proximos'
-                          ? `${counts.ticketsProximos} ingresso(s) válido(s) para usar`
-                          : `${counts.ticketsPassados} ingresso(s) de eventos passados`}
-                  </p>
-                </div>
-                {/* Chips mobile quick filter */}
-                <div className="flex lg:hidden gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-                  {navItems
-                    .filter((i) => i.id !== 'conta')
-                    .map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setNav(item.id)}
-                        className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition ${
-                          nav === item.id
-                            ? item.tone === 'danger'
-                              ? 'bg-red-600 border-red-500 text-white'
-                              : 'bg-emerald-600 border-emerald-500 text-white'
-                            : item.tone === 'danger'
-                              ? 'border-red-500/30 text-red-300/80'
-                              : 'border-white/10 text-zinc-400'
-                        }`}
-                      >
-                        {item.label} {item.n != null ? `(${item.n})` : ''}
-                      </button>
-                    ))}
-                </div>
-              </div>
-
               {showSetPassword && (
-                <div className="mb-4 rounded-2xl border border-white/10 bg-zinc-900/60 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="rounded-2xl border border-white/10 bg-zinc-900/60 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs text-zinc-300">
                     Opcional: crie senha para entrar sem o código LN nas próximas vezes.
                   </span>
@@ -1160,7 +1130,7 @@ export default function MeusIngressos() {
               )}
 
               {visibleOrders.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-white/10 bg-zinc-900/40 px-6 py-16 text-center">
+                <div className="rounded-2xl border border-dashed border-white/10 bg-zinc-900/40 px-6 py-16 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-zinc-800/80 flex items-center justify-center mx-auto mb-4">
                     <Ticket className="w-7 h-7 text-zinc-600" />
                   </div>
@@ -1169,10 +1139,10 @@ export default function MeusIngressos() {
                   </p>
                   <p className="text-sm text-zinc-500 mt-1 max-w-xs mx-auto">
                     {nav === 'proximos'
-                      ? 'Só aparecem aqui ingressos válidos de eventos futuros. Estornos ficam na aba Estornos e não contam neste total.'
+                      ? 'Só aparecem aqui ingressos válidos de eventos futuros. Estornos ficam no menu Estornos.'
                       : nav === 'estornos'
                         ? 'Você não tem pedidos estornados.'
-                        : 'Tente a aba Próximos ou Estornos no menu.'}
+                        : 'Use o menu lateral para trocar de seção.'}
                   </p>
                   {nav === 'proximos' && counts.ticketsEstornos > 0 && (
                     <button
@@ -1196,52 +1166,15 @@ export default function MeusIngressos() {
               ) : (
                 <div className="space-y-4">{visibleOrders.map(renderOrderCard)}</div>
               )}
-            </>
+            </div>
           )}
         </main>
       </div>
 
-      {/* Bottom nav mobile */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-zinc-950/95 backdrop-blur safe-area-pb">
-        <div className="grid grid-cols-4 max-w-lg mx-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = nav === item.id;
-            const danger = item.tone === 'danger';
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setNav(item.id)}
-                className={`flex flex-col items-center gap-0.5 py-2.5 px-1 text-[10px] font-medium transition ${
-                  active ? (danger ? 'text-red-400' : 'text-emerald-400') : 'text-zinc-500'
-                }`}
-              >
-                <span className="relative">
-                  <Icon size={18} strokeWidth={active ? 2.25 : 1.75} />
-                  {item.n != null && item.n > 0 && (
-                    <span
-                      className={`absolute -top-1.5 -right-2.5 min-w-[14px] h-3.5 px-0.5 rounded-full text-[9px] font-bold flex items-center justify-center ${
-                        item.id === 'estornos'
-                          ? 'bg-red-500 text-white'
-                          : 'bg-emerald-500 text-white'
-                      }`}
-                    >
-                      {item.n}
-                    </span>
-                  )}
-                </span>
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-
       {/* QR modal — tela de entrada */}
       {previewTicket && (
         <div
-          className="fixed inset-0 z-[60] bg-black/95 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className="fixed inset-0 z-[70] bg-black/95 flex items-end sm:items-center justify-center p-0 sm:p-4"
           onClick={() => setPreviewTicket(null)}
         >
           <div
