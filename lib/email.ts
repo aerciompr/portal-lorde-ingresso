@@ -37,16 +37,19 @@ export interface OrderWithDetails {
     date: Date | string;
     address: string;
     openTime?: string | null;
+    imageUrl?: string | null;
   };
+  lote?: { nome: string } | null;
   tickets: Array<{
     id: string;
     uniqueCode: string;
-    ticketType: { name: string };
+    qrPayload?: string | null;
+    ticketType: { name: string; priceCents?: number };
   }>;
 }
 
 /**
- * Envia confirmação. Retorna { ok, skipped?, error? }.
+ * Envia confirmação com PDF(s) do ingresso em anexo.
  * Resend NÃO lança erro em falha de domínio — vem em result.error.
  */
 export async function sendOrderConfirmation(order: OrderWithDetails) {
@@ -68,7 +71,7 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
   const ticketLinks = order.tickets
     .map(
       (t) =>
-        `<li><strong>${t.ticketType.name}</strong> — Código: <code>${t.uniqueCode}</code> — <a href="${APP_URL}/ingressos?email=${encodeURIComponent(order.buyerEmail)}">Baixar PDF</a></li>`
+        `<li><strong>${t.ticketType.name}</strong> — Código: <code>${t.uniqueCode}</code></li>`
     )
     .join('');
 
@@ -90,9 +93,13 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
       <ul style="line-height: 1.8;">
         ${ticketLinks}
       </ul>
+
+      <p style="margin-top:16px;padding:12px;background:#1a2e1a;border-radius:8px;border:1px solid #22c55e44;">
+        📎 <strong>O PDF do ingresso está em anexo</strong> neste e-mail (um arquivo por ingresso). Abra no celular ou imprima para a entrada.
+      </p>
       
       <p style="margin-top: 24px;">
-        Acesse <a href="${APP_URL}/ingressos?email=${encodeURIComponent(order.buyerEmail)}${order.accessCode ? `&code=${order.accessCode}` : ''}" style="color:#22c55e;">Meus Ingressos</a> a qualquer momento para baixar os PDFs com QR Code.
+        Também pode acessar <a href="${APP_URL}/ingressos?email=${encodeURIComponent(order.buyerEmail)}${order.accessCode ? `&code=${order.accessCode}` : ''}" style="color:#22c55e;">Meus Ingressos</a> a qualquer momento.
       </p>
       
       <p style="font-size: 13px; color: #888; margin-top: 32px;">
@@ -104,12 +111,55 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
     </div>
   `;
 
+  // PDFs em anexo (máx. 8 para não estourar limite do e-mail)
+  const attachments: Array<{ filename: string; content: Buffer }> = [];
+  try {
+    const { generateTicketPDF } = await import('@/lib/generate-ticket');
+    const { formatDate } = await import('@/lib/utils');
+    const { signCode } = await import('@/lib/validate-ticket');
+
+    const tickets = order.tickets.slice(0, 8);
+    for (const t of tickets) {
+      try {
+        const qrPayload = t.qrPayload || signCode(t.uniqueCode);
+        const pdfBytes = await generateTicketPDF({
+          eventTitle: order.event.title,
+          eventDate:
+            formatDate(order.event.date) + ' • ' + (order.event.openTime || ''),
+          buyerName: order.buyerName,
+          buyerEmail: order.buyerEmail,
+          ticketType: order.lote?.nome || t.ticketType.name,
+          uniqueCode: t.uniqueCode,
+          qrPayload,
+          address: order.event.address,
+          priceCents: t.ticketType.priceCents ?? 0,
+          imageUrl: order.event.imageUrl,
+        });
+        const safeCode = t.uniqueCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+        attachments.push({
+          filename: `ingresso-${safeCode}.pdf`,
+          content: Buffer.from(pdfBytes),
+        });
+      } catch (e) {
+        console.error('[EMAIL] falha ao gerar PDF do ticket', t.uniqueCode, e);
+      }
+    }
+  } catch (e) {
+    console.error('[EMAIL] não foi possível montar anexos PDF (envia sem anexo):', e);
+  }
+
   try {
     const result = await resend.emails.send({
       from: from.includes('<') ? from : `Lorde Nelson <${from}>`,
       to: order.buyerEmail,
       subject: `Ingressos confirmados - ${order.event.title}`,
       html,
+      attachments: attachments.length
+        ? attachments.map((a) => ({
+            filename: a.filename,
+            content: a.content,
+          }))
+        : undefined,
     });
 
     // SDK Resend devolve { data, error } sem throw
@@ -130,8 +180,9 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
       from,
       id: result.data?.id,
       orderId: order.id,
+      attachments: attachments.length,
     });
-    return { ok: true, id: result.data?.id };
+    return { ok: true, id: result.data?.id, attachments: attachments.length };
   } catch (err) {
     console.error('[EMAIL] Error sending confirmation', err);
     throw err;

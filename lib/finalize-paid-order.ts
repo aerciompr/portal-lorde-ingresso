@@ -65,7 +65,11 @@ export async function finalizePaidOrder(
 
   const fullOrder = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { tickets: { include: { ticketType: true } }, event: true },
+    include: {
+      tickets: { include: { ticketType: true } },
+      event: true,
+      lote: true,
+    },
   });
 
   if (fullOrder) {
