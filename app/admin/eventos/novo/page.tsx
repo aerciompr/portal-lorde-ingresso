@@ -112,6 +112,7 @@ export default function NovoEventoPage() {
 
       const res = await fetch('/api/admin/events', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: form.title.trim(),
@@ -134,7 +135,18 @@ export default function NovoEventoPage() {
         }),
       });
 
-      const errBody = await res.json().catch(() => ({} as { error?: string }));
+      const raw = await res.text();
+      let errBody: { error?: string; id?: string } = {};
+      try {
+        errBody = raw ? JSON.parse(raw) : {};
+      } catch {
+        throw new Error(
+          raw
+            ? `Servidor: ${raw.slice(0, 200)}`
+            : `Falha ao criar (HTTP ${res.status}). Veja logs do container no EasyPanel.`
+        );
+      }
+
       if (!res.ok) {
         const detail =
           errBody.error ||
@@ -153,7 +165,7 @@ export default function NovoEventoPage() {
     } catch (e: unknown) {
       const msg = (e as Error).message || 'Erro ao criar evento';
       console.error('[novo evento]', e);
-      toast.error(msg, { duration: 8000 });
+      toast.error(msg, { duration: 10000 });
     } finally {
       setSaving(false);
     }

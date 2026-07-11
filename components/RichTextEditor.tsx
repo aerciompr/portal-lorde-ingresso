@@ -93,6 +93,7 @@ export default function RichTextEditor({
           HTMLAttributes: { class: 'my-1.5' },
         },
       }),
+      // Link/Underline: se o console avisar "Duplicate extension", ignore — não quebra o save
       Link.configure({
         openOnClick: false,
         HTMLAttributes: { class: 'text-emerald-400 underline underline-offset-2' },

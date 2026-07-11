@@ -151,9 +151,18 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const updated = await prisma.event.update({
+    try {
+      await prisma.event.update({
+        where: { id: event.id },
+        data: { activeLoteId: lote.id },
+      });
+    } catch (e) {
+      // Lote já está ativo=true; listagens usam isso como fallback
+      console.error('[admin/events POST] activeLoteId update failed (evento já criado):', e);
+    }
+
+    const full = await prisma.event.findUnique({
       where: { id: event.id },
-      data: { activeLoteId: lote.id },
       include: {
         ticketTypes: true,
         lotes: true,
@@ -161,10 +170,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json(full || { ...event, activeLoteId: lote.id });
   } catch (e) {
     console.error('[admin/events POST]', e);
-    return NextResponse.json({ error: prismaErrorMessage(e) }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: prismaErrorMessage(e),
+        hint: 'No console do container: npx prisma db push --schema=./prisma/schema.prisma',
+      },
+      { status: 500 }
+    );
   }
 }
 
