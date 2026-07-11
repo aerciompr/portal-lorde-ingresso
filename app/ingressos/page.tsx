@@ -34,12 +34,15 @@ import {
   Copy,
   Check,
   DoorOpen,
+  ExternalLink,
 } from 'lucide-react';
+import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from '@/lib/contact';
 
 interface TicketItem {
   id: string;
   uniqueCode: string;
   status: string;
+  qrPayload?: string | null;
   ticketType: { name: string; priceCents: number };
 }
 
@@ -138,6 +141,29 @@ async function copyText(text: string) {
   }
 }
 
+/** Link Google Calendar (UTC approx via local ISO) */
+function googleCalendarUrl(order: Order) {
+  const start = eventDate(order.event.date);
+  const end = new Date(start.getTime() + 4 * 60 * 60 * 1000);
+  const fmt = (d: Date) =>
+    d
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .replace(/\.\d{3}/, '');
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: order.event.title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: `Ingresso Lorde Nelson${order.accessCode ? ` · Pedido ${order.accessCode}` : ''}`,
+    location: order.event.address || 'Lorde Nelson Rest Pub',
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
+
+function ticketQrValue(t: TicketItem) {
+  return (t.qrPayload && t.qrPayload.trim()) || t.uniqueCode;
+}
+
 export default function MeusIngressos() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
@@ -197,6 +223,14 @@ export default function MeusIngressos() {
   const [resending, setResending] = useState(false);
   const [showResend, setShowResend] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [hidePwBanner, setHidePwBanner] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem('hidePwBanner') === '1';
+    } catch {
+      return false;
+    }
+  });
 
   const loggedIn = orders.length > 0;
 
@@ -434,7 +468,7 @@ export default function MeusIngressos() {
   }
 
   const displayName = email || orders[0]?.buyerEmail || 'Cliente';
-  /** Menu no estilo do admin: uma linha, ícone + label + badge */
+  /** Menu no estilo do admin — estornos só se existirem */
   const navItems: {
     id: NavId;
     label: string;
@@ -454,15 +488,29 @@ export default function MeusIngressos() {
       icon: History,
       n: counts.ticketsPassados > 0 ? counts.ticketsPassados : undefined,
     },
-    {
-      id: 'estornos',
-      label: 'Estornos',
-      icon: Undo2,
-      n: counts.ticketsEstornos > 0 ? counts.ticketsEstornos : undefined,
-      tone: 'danger',
-    },
+    ...(counts.ticketsEstornos > 0
+      ? [
+          {
+            id: 'estornos' as const,
+            label: 'Estornos',
+            icon: Undo2,
+            n: counts.ticketsEstornos,
+            tone: 'danger' as const,
+          },
+        ]
+      : []),
     { id: 'conta', label: 'Conta', icon: User },
   ];
+
+  /** Primeiro ingresso válido por vir — CTA rápido mobile */
+  const primaryDoorTicket = useMemo(() => {
+    for (const o of upcoming) {
+      if ((o.status || '').toLowerCase() !== 'paid') continue;
+      const t = o.tickets.find((x) => x.status === 'valid' || !x.status);
+      if (t) return { order: o, ticket: t };
+    }
+    return null;
+  }, [upcoming]);
 
   const pageTitle =
     nav === 'proximos'
@@ -769,17 +817,29 @@ export default function MeusIngressos() {
           )}
 
           {up && !refunded && (
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/25 px-3.5 py-2.5 flex items-start gap-2.5 text-xs text-emerald-100/90">
-              <DoorOpen size={16} className="text-emerald-400 shrink-0 mt-0.5" />
-              <span>
-                <strong className="text-emerald-200">Na entrada:</strong> abra o QR Code deste ingresso
-                (ou o PDF) e apresente na portaria. Nome no pedido: {order.buyerName}.
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex-1 min-w-[12rem] rounded-2xl border border-emerald-500/20 bg-emerald-950/25 px-3.5 py-2.5 flex items-start gap-2.5 text-xs text-emerald-100/90">
+                <DoorOpen size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong className="text-emerald-200">Na entrada:</strong> mostre o QR (ou PDF). Titular:{' '}
+                  {order.buyerName || '—'}.
+                </span>
+              </div>
+              <a
+                href={googleCalendarUrl(order)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2.5 text-[11px] text-zinc-300 hover:bg-white/5 shrink-0"
+              >
+                <Calendar size={14} /> Calendário
+                <ExternalLink size={11} className="opacity-50" />
+              </a>
             </div>
           )}
 
           {order.tickets.map((t) => {
             const canUse = !refunded && order.status === 'paid' && (t.status === 'valid' || !t.status);
+            const qrVal = ticketQrValue(t);
             return (
               <div
                 key={t.id}
@@ -799,7 +859,7 @@ export default function MeusIngressos() {
                       onClick={() =>
                         setPreviewTicket({
                           code: t.uniqueCode,
-                          payload: t.uniqueCode,
+                          payload: qrVal,
                           name: order.buyerName,
                           event: order.event.title,
                           date: formatDate(order.event.date),
@@ -808,7 +868,7 @@ export default function MeusIngressos() {
                       className="shrink-0 w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-xl bg-white p-1.5 ring-2 ring-emerald-500/40 hover:ring-emerald-400 transition shadow-lg shadow-emerald-950/40"
                       title="Abrir QR em tela cheia"
                     >
-                      <QRCode value={t.uniqueCode} size={64} className="w-full h-full" />
+                      <QRCode value={qrVal} size={64} className="w-full h-full" />
                     </button>
                   ) : (
                     <div className="shrink-0 w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center">
@@ -863,20 +923,20 @@ export default function MeusIngressos() {
                             onClick={() =>
                               setPreviewTicket({
                                 code: t.uniqueCode,
-                                payload: t.uniqueCode,
+                                payload: qrVal,
                                 name: order.buyerName,
                                 event: order.event.title,
                                 date: formatDate(order.event.date),
                               })
                             }
-                            className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2.5 text-xs font-semibold text-white transition shadow-md shadow-emerald-950/40"
+                            className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition shadow-md shadow-emerald-950/40"
                           >
-                            <QrCode size={14} /> Abrir QR
+                            <QrCode size={16} /> Mostrar QR
                           </button>
                           <button
                             type="button"
                             onClick={() => downloadPDF(t.id, order.accessCode)}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3.5 py-2.5 text-xs font-medium text-zinc-200 hover:bg-white/5 transition"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3.5 py-3 text-xs font-medium text-zinc-200 hover:bg-white/5 transition"
                           >
                             <Download size={14} /> PDF
                           </button>
@@ -954,25 +1014,35 @@ export default function MeusIngressos() {
             </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-zinc-950/80 border border-emerald-500/20 px-2.5 py-2 text-center">
-              <div className="text-lg font-semibold text-emerald-400 tabular-nums leading-none">
-                {counts.ticketsValidos}
+          <div className="mt-4 rounded-2xl bg-zinc-950/80 border border-emerald-500/25 px-3 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500">Para a porta</div>
+                <div className="text-2xl font-semibold text-emerald-400 tabular-nums leading-none mt-1">
+                  {counts.ticketsProximos}
+                </div>
               </div>
-              <div className="text-[10px] text-zinc-500 mt-1">Válidos</div>
+              <DoorOpen className="w-8 h-8 text-emerald-500/40" />
             </div>
-            <div className="rounded-xl bg-zinc-950/80 border border-white/8 px-2.5 py-2 text-center">
-              <div className="text-lg font-semibold text-white tabular-nums leading-none">
-                {counts.ticketsProximos}
-              </div>
-              <div className="text-[10px] text-zinc-500 mt-1">Por vir</div>
-            </div>
-          </div>
-          {counts.ticketsEstornos > 0 && (
-            <p className="text-[10px] text-red-400/80 mt-2 text-center">
-              {counts.ticketsEstornos} estorno{counts.ticketsEstornos !== 1 ? 's' : ''} (à parte)
+            <p className="text-[10px] text-zinc-500 mt-2">
+              {counts.ticketsProximos === 1
+                ? '1 ingresso válido por vir'
+                : `${counts.ticketsProximos} ingressos válidos por vir`}
+              {counts.ticketsPassados > 0 ? ` · ${counts.ticketsPassados} passado(s)` : ''}
             </p>
-          )}
+            {counts.ticketsEstornos > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNav('estornos');
+                  setSidebarOpen(false);
+                }}
+                className="mt-2 w-full text-left text-[10px] text-red-400/90 hover:text-red-300"
+              >
+                {counts.ticketsEstornos} estorno{counts.ticketsEstornos !== 1 ? 's' : ''} no histórico →
+              </button>
+            )}
+          </div>
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto overscroll-contain">
@@ -1029,7 +1099,16 @@ export default function MeusIngressos() {
           </div>
         </nav>
 
-        <div className="shrink-0 p-4 border-t border-white/10">
+        <div className="shrink-0 p-4 border-t border-white/10 space-y-2">
+          <a
+            href={WHATSAPP_HREF}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full text-sm py-2.5 rounded-lg border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/10 flex items-center justify-center gap-2 transition"
+          >
+            <i className="fa-brands fa-whatsapp text-base" aria-hidden />
+            Ajuda {WHATSAPP_DISPLAY}
+          </a>
           <button
             type="button"
             onClick={logout}
@@ -1037,7 +1116,7 @@ export default function MeusIngressos() {
           >
             <LogOut size={15} /> Sair
           </button>
-          <div className="text-[10px] text-center text-zinc-600 mt-3">Área do cliente • Lorde Nelson</div>
+          <div className="text-[10px] text-center text-zinc-600">Área do cliente • Lorde Nelson</div>
         </div>
       </aside>
 
@@ -1058,21 +1137,31 @@ export default function MeusIngressos() {
               <div className="text-[11px] text-zinc-500 truncate hidden sm:block">{pageSubtitle}</div>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-sm shrink-0">
-            <span className="text-[11px] text-emerald-400 tabular-nums hidden xs:inline sm:inline">
-              {counts.ticketsValidos} válido{counts.ticketsValidos !== 1 ? 's' : ''}
+          <div className="flex items-center gap-2 text-sm shrink-0">
+            {primaryDoorTicket && nav === 'proximos' && (
+              <button
+                type="button"
+                onClick={() =>
+                  setPreviewTicket({
+                    code: primaryDoorTicket.ticket.uniqueCode,
+                    payload: ticketQrValue(primaryDoorTicket.ticket),
+                    name: primaryDoorTicket.order.buyerName,
+                    event: primaryDoorTicket.order.event.title,
+                    date: formatDate(primaryDoorTicket.order.event.date),
+                  })
+                }
+                className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white"
+              >
+                <QrCode size={14} /> Mostrar QR
+              </button>
+            )}
+            <span className="text-[11px] text-emerald-400 tabular-nums">
+              {counts.ticketsProximos} por vir
             </span>
-            <button
-              type="button"
-              onClick={logout}
-              className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/40 text-red-400 transition"
-            >
-              Sair
-            </button>
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden pb-24 sm:pb-8">
           {nav === 'conta' ? (
             <div className="space-y-4 max-w-xl">
               <div className="mb-2">
@@ -1154,13 +1243,15 @@ export default function MeusIngressos() {
             </div>
           ) : (
             <div className="max-w-3xl space-y-4">
-              <div className="mb-1 lg:mb-2">
+              {/* Título só no desktop — no mobile o sticky header já mostra */}
+              <div className="hidden lg:block mb-1">
                 <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 mb-1">Carteira</p>
                 <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
                   {pageTitle}
                 </h1>
                 <p className="text-sm text-zinc-500 mt-1">{pageSubtitle}</p>
               </div>
+              <p className="lg:hidden text-sm text-zinc-500 -mt-1">{pageSubtitle}</p>
 
               {justPaid && nav === 'proximos' && (
                 <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/50 to-zinc-900/80 px-4 py-4 sm:px-5">
@@ -1168,30 +1259,60 @@ export default function MeusIngressos() {
                     <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 ring-1 ring-emerald-500/30 flex items-center justify-center shrink-0">
                       <Check className="w-5 h-5 text-emerald-400" />
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="font-semibold text-emerald-100">Pagamento confirmado</p>
                       <p className="text-sm text-emerald-200/70 mt-0.5 leading-relaxed">
-                        Seu ingresso está pronto. Toque no{' '}
-                        <strong className="text-emerald-200">QR</strong> no card abaixo e mostre na
-                        portaria.
+                        Seu ingresso está pronto. Use <strong className="text-emerald-200">Mostrar QR</strong>{' '}
+                        na porta.
                       </p>
+                      {primaryDoorTicket && (
+                        <button
+                          type="button"
+                          className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white"
+                          onClick={() =>
+                            setPreviewTicket({
+                              code: primaryDoorTicket.ticket.uniqueCode,
+                              payload: ticketQrValue(primaryDoorTicket.ticket),
+                              name: primaryDoorTicket.order.buyerName,
+                              event: primaryDoorTicket.order.event.title,
+                              date: formatDate(primaryDoorTicket.order.event.date),
+                            })
+                          }
+                        >
+                          <QrCode size={16} /> Mostrar QR agora
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
-              {showSetPassword && (
+              {showSetPassword && !hidePwBanner && (
                 <div className="rounded-2xl border border-white/10 bg-zinc-900/60 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs text-zinc-300">
                     Opcional: crie senha para entrar sem o código LN nas próximas vezes.
                   </span>
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-emerald-400 hover:underline shrink-0"
-                    onClick={() => setNav('conta')}
-                  >
-                    Criar senha →
-                  </button>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button
+                      type="button"
+                      className="text-xs text-zinc-500 hover:text-zinc-300"
+                      onClick={() => {
+                        setHidePwBanner(true);
+                        try {
+                          localStorage.setItem('hidePwBanner', '1');
+                        } catch {}
+                      }}
+                    >
+                      Agora não
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-emerald-400 hover:underline"
+                      onClick={() => setNav('conta')}
+                    >
+                      Criar senha →
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1237,37 +1358,60 @@ export default function MeusIngressos() {
         </main>
       </div>
 
+      {/* CTA fixo mobile — prioridade: mostrar QR na porta */}
+      {loggedIn && primaryDoorTicket && nav === 'proximos' && !previewTicket && (
+        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none">
+          <button
+            type="button"
+            className="pointer-events-auto w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-xl shadow-emerald-950/50 flex items-center justify-center gap-2"
+            onClick={() =>
+              setPreviewTicket({
+                code: primaryDoorTicket.ticket.uniqueCode,
+                payload: ticketQrValue(primaryDoorTicket.ticket),
+                name: primaryDoorTicket.order.buyerName,
+                event: primaryDoorTicket.order.event.title,
+                date: formatDate(primaryDoorTicket.order.event.date),
+              })
+            }
+          >
+            <QrCode size={18} /> Mostrar QR na entrada
+          </button>
+        </div>
+      )}
+
       {/* QR modal — tela de entrada */}
       {previewTicket && (
         <div
-          className="fixed inset-0 z-[70] bg-black/95 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className="fixed inset-0 z-[70] bg-black flex items-end sm:items-center justify-center p-0 sm:p-4"
           onClick={() => setPreviewTicket(null)}
         >
           <div
-            className="bg-zinc-950 border border-white/10 rounded-t-[1.75rem] sm:rounded-3xl w-full max-w-sm p-6 text-center shadow-2xl"
+            className="bg-zinc-950 border border-white/10 rounded-t-[1.75rem] sm:rounded-3xl w-full max-w-md p-6 sm:p-8 text-center shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5 sm:hidden" />
-            <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-emerald-400 mb-3">
+            <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-emerald-400 mb-4">
               <DoorOpen size={12} /> Apresente na entrada
             </div>
-            <div className="mx-auto w-[min(100%,240px)] bg-white p-4 rounded-2xl mb-4 ring-4 ring-emerald-500/20">
-              <QRCode value={previewTicket.payload} size={200} className="w-full h-auto" />
+            <div className="mx-auto w-[min(100%,280px)] bg-white p-5 rounded-2xl mb-5 ring-4 ring-emerald-500/25">
+              <QRCode value={previewTicket.payload} size={240} className="w-full h-auto" />
             </div>
-            <div className="font-semibold text-lg text-white leading-snug px-2">
+            <div className="font-semibold text-lg sm:text-xl text-white leading-snug px-2">
               {previewTicket.event}
             </div>
             <div className="text-xs text-zinc-500 mt-1">{previewTicket.date}</div>
             <button
               type="button"
               onClick={() => handleCopy('modal-code', previewTicket.code)}
-              className="font-mono text-xl text-emerald-400 tracking-[0.15em] mt-2 inline-flex items-center gap-2 mx-auto hover:text-emerald-300"
+              className="font-mono text-xl text-emerald-400 tracking-[0.15em] mt-3 inline-flex items-center gap-2 mx-auto hover:text-emerald-300"
             >
               {previewTicket.code}
               {copiedKey === 'modal-code' ? <Check size={16} /> : <Copy size={16} className="opacity-60" />}
             </button>
             <div className="text-zinc-400 text-sm mt-1">{previewTicket.name}</div>
-            <p className="text-[11px] text-zinc-600 mt-3">Aumente o brilho da tela se a portaria pedir.</p>
+            <p className="text-[11px] text-amber-200/80 mt-4 rounded-xl bg-amber-950/40 border border-amber-500/20 px-3 py-2">
+              Aumente o brilho da tela se a portaria pedir.
+            </p>
             <button
               type="button"
               onClick={() => setPreviewTicket(null)}
