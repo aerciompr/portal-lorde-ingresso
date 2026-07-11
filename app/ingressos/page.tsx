@@ -31,6 +31,9 @@ import {
   Sparkles,
   ChevronRight,
   Undo2,
+  Copy,
+  Check,
+  DoorOpen,
 } from 'lucide-react';
 
 interface TicketItem {
@@ -44,10 +47,17 @@ interface Order {
   id: string;
   totalCents: number;
   status: string;
+  accessCode?: string | null;
   buyerName: string;
   buyerEmail: string;
   buyerPasswordHash?: string | null;
-  event: { id: string; title: string; date: string | Date; address: string };
+  event: {
+    id: string;
+    title: string;
+    date: string | Date;
+    address: string;
+    imageUrl?: string | null;
+  };
   tickets: TicketItem[];
   cancellationRequests: { id: string; status: string; reason: string }[];
 }
@@ -84,6 +94,46 @@ function statusBadge(status: string) {
   if (s === 'cancelled' || s === 'canceled')
     return { text, cls: 'bg-zinc-500/20 text-zinc-400 ring-zinc-500/20' };
   return { text, cls: 'bg-amber-500/15 text-amber-400 ring-amber-500/20' };
+}
+
+/** “Hoje”, “Amanhã”, “Em 5 dias”, “Foi em 12/03” */
+function relativeEventLabel(d: string | Date, refunded = false): string {
+  if (refunded) return 'Estornado';
+  const event = eventDate(d);
+  const startToday = new Date();
+  startToday.setHours(0, 0, 0, 0);
+  const startEvent = new Date(event);
+  startEvent.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((startEvent.getTime() - startToday.getTime()) / 86400000);
+  if (diffDays === 0) return 'Hoje';
+  if (diffDays === 1) return 'Amanhã';
+  if (diffDays > 1 && diffDays <= 60) return `Em ${diffDays} dias`;
+  if (diffDays < 0) {
+    const n = Math.abs(diffDays);
+    if (n === 1) return 'Ontem';
+    if (n <= 60) return `Há ${n} dias`;
+    return 'Encerrado';
+  }
+  return 'Por vir';
+}
+
+function formatDateShort(d: string | Date) {
+  return eventDate(d).toLocaleDateString('pt-BR', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export default function MeusIngressos() {
@@ -144,8 +194,18 @@ export default function MeusIngressos() {
   const [resendEmail, setResendEmail] = useState('');
   const [resending, setResending] = useState(false);
   const [showResend, setShowResend] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const loggedIn = orders.length > 0;
+
+  async function handleCopy(key: string, text: string) {
+    const ok = await copyText(text);
+    if (ok) {
+      setCopiedKey(key);
+      toast.success('Copiado');
+      setTimeout(() => setCopiedKey(null), 1800);
+    } else toast.error('Não foi possível copiar');
+  }
 
   function applyOrders(list: Order[], e: string, c: string, p?: string) {
     setOrders(list);
@@ -545,108 +605,125 @@ export default function MeusIngressos() {
     const st = statusBadge(order.status);
     const refunded = isRefunded(order);
     const up = !refunded && isUpcoming(order.event.date);
+    const rel = relativeEventLabel(order.event.date, refunded);
+    const img = order.event.imageUrl?.trim() || '';
+    const when = formatDateShort(order.event.date);
+
     return (
       <article
         key={order.id}
-        className={`rounded-2xl sm:rounded-3xl border bg-zinc-900/80 overflow-hidden transition ${
+        className={`rounded-3xl border overflow-hidden bg-zinc-900/90 shadow-xl shadow-black/30 ${
           refunded
-            ? 'border-red-500/20 opacity-95'
+            ? 'border-red-500/25'
             : up && order.status === 'paid'
-              ? 'border-emerald-500/25 shadow-lg shadow-emerald-950/20'
+              ? 'border-emerald-500/30'
               : 'border-white/10'
         }`}
       >
-        <div className="p-4 sm:p-5 flex gap-3 sm:gap-4">
-          <div
-            className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex flex-col items-center justify-center shrink-0 ${
-              refunded
-                ? 'bg-red-500/10 text-red-400'
-                : up
-                  ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'bg-zinc-800 text-zinc-500'
-            }`}
-          >
-            {refunded ? <Undo2 size={18} className="mb-0.5" /> : <Calendar size={18} className="mb-0.5" />}
-            <span className="text-[9px] font-semibold uppercase tracking-wide">
-              {refunded ? 'Est.' : up ? 'Live' : 'Fim'}
+        {/* Capa do evento — sensação de ingresso de verdade */}
+        <div className="relative h-36 sm:h-44 bg-zinc-800">
+          {img ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-zinc-900 to-zinc-950" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/55 to-zinc-950/10" />
+          <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-md ring-1 ${
+                refunded
+                  ? 'bg-red-950/80 text-red-200 ring-red-500/30'
+                  : up
+                    ? 'bg-emerald-950/80 text-emerald-200 ring-emerald-500/30'
+                    : 'bg-zinc-950/80 text-zinc-300 ring-white/10'
+              }`}
+            >
+              {refunded ? <Undo2 size={12} /> : <Calendar size={12} />}
+              {rel}
+            </span>
+            <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-md ring-1 backdrop-blur-md ${st.cls}`}>
+              {st.text}
             </span>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-semibold text-base sm:text-lg text-white tracking-tight leading-snug">
-                {order.event.title}
-              </h2>
-              <span
-                className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md ring-1 ${st.cls}`}
-              >
-                {st.text}
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-zinc-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
+            <h2 className="font-semibold text-lg sm:text-xl text-white tracking-tight leading-snug drop-shadow">
+              {order.event.title}
+            </h2>
+            <p className="mt-1.5 text-xs sm:text-sm text-zinc-200/90 flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="inline-flex items-center gap-1">
-                <Clock size={12} /> {formatDate(order.event.date)}
+                <Clock size={13} className="opacity-80" /> {when}
               </span>
-              <span className="text-zinc-600">·</span>
-              <span>
-                {refunded
-                  ? `${order.tickets.length} estorno${order.tickets.length !== 1 ? 's' : ''}`
-                  : `${order.tickets.length} ingresso${order.tickets.length !== 1 ? 's' : ''}`}
+              <span className="inline-flex items-center gap-1 min-w-0">
+                <MapPin size={13} className="opacity-80 shrink-0" />
+                <span className="truncate max-w-[16rem] sm:max-w-none">{order.event.address}</span>
               </span>
-              <span className="text-zinc-600">·</span>
-              <span className="tabular-nums">{formatPrice(order.totalCents)}</span>
-            </p>
-            <p className="text-[11px] text-zinc-500 mt-1 flex items-start gap-1 line-clamp-1">
-              <MapPin size={11} className="mt-0.5 shrink-0" />
-              {order.event.address}
             </p>
           </div>
         </div>
 
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-2.5 border-t border-white/5 pt-3">
-          {isRefunded(order) && (
-            <div className="rounded-xl border border-red-500/25 bg-red-950/25 px-3 py-2.5 text-xs text-red-200/90">
-              Este pedido foi <strong>estornado</strong>. O QR de entrada não é válido. Use o
-              comprovante de estorno em PDF.
+        {/* Linha de picote (visual de ticket) */}
+        <div className="relative h-4 bg-zinc-950/40">
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-zinc-950 border border-white/5" />
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-4 h-4 rounded-full bg-zinc-950 border border-white/5" />
+          <div className="absolute inset-x-5 top-1/2 border-t border-dashed border-white/15" />
+        </div>
+
+        <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
+            <span>
+              {refunded
+                ? `${order.tickets.length} estorno${order.tickets.length !== 1 ? 's' : ''}`
+                : `${order.tickets.length} ingresso${order.tickets.length !== 1 ? 's' : ''}`}
+              {' · '}
+              <span className="tabular-nums text-zinc-400">{formatPrice(order.totalCents)}</span>
+            </span>
+            {order.accessCode && (
+              <button
+                type="button"
+                onClick={() => handleCopy(`order-${order.id}`, order.accessCode || '')}
+                className="inline-flex items-center gap-1 text-zinc-400 hover:text-white transition"
+                title="Copiar código do pedido"
+              >
+                {copiedKey === `order-${order.id}` ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                <span className="font-mono tracking-wide">{order.accessCode}</span>
+              </button>
+            )}
+          </div>
+
+          {refunded && (
+            <div className="rounded-2xl border border-red-500/25 bg-red-950/30 px-3.5 py-3 text-xs text-red-100/90 leading-relaxed">
+              <strong className="text-red-200">Pedido estornado.</strong> Não vale na porta — sem QR de
+              entrada. Baixe o comprovante de estorno se precisar.
             </div>
           )}
-          {order.tickets.map((t) => (
-            <div
-              key={t.id}
-              className="rounded-2xl bg-zinc-950/90 border border-white/8 p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center gap-3"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-zinc-100">{t.ticketType.name}</div>
-                <div
-                  className={`font-mono text-sm tracking-wider mt-0.5 ${
-                    isRefunded(order) ? 'text-zinc-500 line-through' : 'text-emerald-400'
-                  }`}
-                >
-                  {t.uniqueCode}
-                </div>
-                {(t.status !== 'valid' || isRefunded(order)) && (
-                  <div className="text-[10px] text-zinc-500 mt-1">
-                    {isRefunded(order) ? 'Cancelado (estorno)' : ticketStatusLabel(t.status)}
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:flex gap-2 w-full sm:w-auto">
-                {isRefunded(order) ? (
-                  <button
-                    type="button"
-                    onClick={() => downloadPDF(t.id)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600/90 hover:bg-red-500 px-3 py-2.5 text-xs font-medium text-white transition"
-                  >
-                    <Download size={14} /> Comprovante de estorno
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => downloadPDF(t.id)}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 py-2.5 text-xs font-medium hover:bg-white/5 transition"
-                    >
-                      <Download size={14} /> PDF
-                    </button>
+
+          {up && !refunded && (
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/25 px-3.5 py-2.5 flex items-start gap-2.5 text-xs text-emerald-100/90">
+              <DoorOpen size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+              <span>
+                <strong className="text-emerald-200">Na entrada:</strong> abra o QR Code deste ingresso
+                (ou o PDF) e apresente na portaria. Nome no pedido: {order.buyerName}.
+              </span>
+            </div>
+          )}
+
+          {order.tickets.map((t) => {
+            const canUse = !refunded && order.status === 'paid' && (t.status === 'valid' || !t.status);
+            return (
+              <div
+                key={t.id}
+                className={`rounded-2xl border p-3.5 sm:p-4 ${
+                  refunded
+                    ? 'bg-zinc-950/60 border-red-500/15'
+                    : canUse
+                      ? 'bg-zinc-950/90 border-emerald-500/20'
+                      : 'bg-zinc-950/90 border-white/8'
+                }`}
+              >
+                <div className="flex gap-3 sm:gap-4">
+                  {/* Mini QR no card — atalho visual */}
+                  {canUse ? (
                     <button
                       type="button"
                       onClick={() =>
@@ -658,15 +735,89 @@ export default function MeusIngressos() {
                           date: formatDate(order.event.date),
                         })
                       }
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2.5 text-xs font-medium text-white transition"
+                      className="shrink-0 w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-xl bg-white p-1.5 ring-2 ring-emerald-500/40 hover:ring-emerald-400 transition shadow-lg shadow-emerald-950/40"
+                      title="Abrir QR em tela cheia"
                     >
-                      <QrCode size={14} /> QR Code
+                      <QRCode value={t.uniqueCode} size={64} className="w-full h-full" />
                     </button>
-                  </>
-                )}
+                  ) : (
+                    <div className="shrink-0 w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center">
+                      {refunded ? (
+                        <Undo2 className="w-7 h-7 text-red-400/70" />
+                      ) : (
+                        <Ticket className="w-7 h-7 text-zinc-600" />
+                      )}
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1 flex flex-col">
+                    <div className="text-sm font-semibold text-zinc-50">{t.ticketType.name}</div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(`tkt-${t.id}`, t.uniqueCode)}
+                      className={`mt-0.5 font-mono text-sm tracking-wider text-left inline-flex items-center gap-1.5 w-fit max-w-full ${
+                        refunded ? 'text-zinc-500 line-through' : 'text-emerald-400 hover:text-emerald-300'
+                      }`}
+                      title="Copiar código do ingresso"
+                    >
+                      <span className="truncate">{t.uniqueCode}</span>
+                      {copiedKey === `tkt-${t.id}` ? (
+                        <Check size={12} className="shrink-0 text-emerald-400" />
+                      ) : (
+                        <Copy size={12} className="shrink-0 opacity-60" />
+                      )}
+                    </button>
+                    <div className="text-[10px] text-zinc-500 mt-1">
+                      {refunded
+                        ? 'Cancelado (estorno) · sem entrada'
+                        : t.status && t.status !== 'valid'
+                          ? ticketStatusLabel(t.status)
+                          : canUse
+                            ? 'Toque no QR para ampliar'
+                            : ticketStatusLabel(t.status)}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {refunded ? (
+                        <button
+                          type="button"
+                          onClick={() => downloadPDF(t.id)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-500 px-3.5 py-2.5 text-xs font-semibold text-white transition"
+                        >
+                          <Download size={14} /> Comprovante PDF
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewTicket({
+                                code: t.uniqueCode,
+                                payload: t.uniqueCode,
+                                name: order.buyerName,
+                                event: order.event.title,
+                                date: formatDate(order.event.date),
+                              })
+                            }
+                            className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2.5 text-xs font-semibold text-white transition shadow-md shadow-emerald-950/40"
+                          >
+                            <QrCode size={14} /> Abrir QR
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadPDF(t.id)}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3.5 py-2.5 text-xs font-medium text-zinc-200 hover:bg-white/5 transition"
+                          >
+                            <Download size={14} /> PDF
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {order.status === 'paid' && canCancel(order) && (
             <button
@@ -933,8 +1084,26 @@ export default function MeusIngressos() {
             </div>
           ) : (
             <>
-              <div className="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+              {justPaid && nav === 'proximos' && (
+                <div className="mb-4 rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/50 to-zinc-900/80 px-4 py-4 sm:px-5 sm:py-5">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 ring-1 ring-emerald-500/30 flex items-center justify-center shrink-0">
+                      <Check className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-emerald-100">Pagamento confirmado</p>
+                      <p className="text-sm text-emerald-200/70 mt-0.5 leading-relaxed">
+                        Seu ingresso está pronto. Toque no <strong className="text-emerald-200">QR</strong> no
+                        card abaixo e mostre na portaria. Guarde o PDF no celular se preferir.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
                 <div>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 mb-1">Carteira</p>
                   <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
                     {nav === 'proximos' && 'Próximos eventos'}
                     {nav === 'passados' && 'Eventos passados'}
@@ -975,15 +1144,17 @@ export default function MeusIngressos() {
                 </div>
               </div>
 
-              {showSetPassword && nav !== 'conta' && (
-                <div className="mb-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/15 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-emerald-200/90">Quer criar senha opcional?</span>
+              {showSetPassword && (
+                <div className="mb-4 rounded-2xl border border-white/10 bg-zinc-900/60 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-zinc-300">
+                    Opcional: crie senha para entrar sem o código LN nas próximas vezes.
+                  </span>
                   <button
                     type="button"
-                    className="text-xs font-medium text-emerald-400 hover:underline"
+                    className="text-xs font-medium text-emerald-400 hover:underline shrink-0"
                     onClick={() => setNav('conta')}
                   >
-                    Ir para Conta →
+                    Criar senha →
                   </button>
                 </div>
               )}
@@ -1036,13 +1207,14 @@ export default function MeusIngressos() {
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = nav === item.id;
+            const danger = item.tone === 'danger';
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setNav(item.id)}
                 className={`flex flex-col items-center gap-0.5 py-2.5 px-1 text-[10px] font-medium transition ${
-                  active ? 'text-emerald-400' : 'text-zinc-500'
+                  active ? (danger ? 'text-red-400' : 'text-emerald-400') : 'text-zinc-500'
                 }`}
               >
                 <span className="relative">
@@ -1066,7 +1238,7 @@ export default function MeusIngressos() {
         </div>
       </nav>
 
-      {/* QR modal */}
+      {/* QR modal — tela de entrada */}
       {previewTicket && (
         <div
           className="fixed inset-0 z-[60] bg-black/95 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -1077,24 +1249,30 @@ export default function MeusIngressos() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5 sm:hidden" />
-            <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 mb-3">
-              Apresente na entrada
+            <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-emerald-400 mb-3">
+              <DoorOpen size={12} /> Apresente na entrada
             </div>
-            <div className="mx-auto w-[min(100%,240px)] bg-white p-4 rounded-2xl mb-4">
+            <div className="mx-auto w-[min(100%,240px)] bg-white p-4 rounded-2xl mb-4 ring-4 ring-emerald-500/20">
               <QRCode value={previewTicket.payload} size={200} className="w-full h-auto" />
             </div>
             <div className="font-semibold text-lg text-white leading-snug px-2">
               {previewTicket.event}
             </div>
             <div className="text-xs text-zinc-500 mt-1">{previewTicket.date}</div>
-            <div className="font-mono text-xl text-emerald-400 tracking-[0.15em] mt-2">
+            <button
+              type="button"
+              onClick={() => handleCopy('modal-code', previewTicket.code)}
+              className="font-mono text-xl text-emerald-400 tracking-[0.15em] mt-2 inline-flex items-center gap-2 mx-auto hover:text-emerald-300"
+            >
               {previewTicket.code}
-            </div>
+              {copiedKey === 'modal-code' ? <Check size={16} /> : <Copy size={16} className="opacity-60" />}
+            </button>
             <div className="text-zinc-400 text-sm mt-1">{previewTicket.name}</div>
+            <p className="text-[11px] text-zinc-600 mt-3">Aumente o brilho da tela se a portaria pedir.</p>
             <button
               type="button"
               onClick={() => setPreviewTicket(null)}
-              className="mt-6 w-full py-3.5 rounded-2xl bg-white text-black text-sm font-semibold"
+              className="mt-5 w-full py-3.5 rounded-2xl bg-white text-black text-sm font-semibold"
             >
               Fechar
             </button>
