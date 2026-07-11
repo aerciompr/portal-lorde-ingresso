@@ -97,15 +97,13 @@ export default function CheckoutPage() {
         const data = await res.json();
         if (data.status === 'paid') {
           setPaymentStatus('paid');
-          setPaymentStatusMsg('Pagamento confirmado! Redirecionando…');
-          toast.success('PIX confirmado! Seus ingressos estão prontos.');
-          const email = buyer.email || data.buyerEmail || '';
-          const code = data.accessCode || pixData.accessCode || '';
-          setTimeout(() => {
-            router.push(
-              `/ingressos?email=${encodeURIComponent(email)}${code ? `&code=${code}` : ''}&success=1`
-            );
-          }, 800);
+          setPaymentStatusMsg('Pagamento confirmado! Guarde o código abaixo.');
+          toast.success('PIX confirmado! Guarde seu código de acesso.');
+          // Atualiza código se o servidor gerou/confirmou outro
+          if (data.accessCode) {
+            setPixData((prev) => (prev ? { ...prev, accessCode: data.accessCode } : prev));
+          }
+          // NÃO redireciona sozinho — o cliente precisa ver o código (não há “cadastro” obrigatório)
           return;
         }
         if (data.mpStatus && ['rejected', 'cancelled', 'canceled', 'expired'].includes(data.mpStatus)) {
@@ -376,16 +374,50 @@ export default function CheckoutPage() {
             </p>
           </div>
 
-          {pixData.accessCode && (
-            <div className="mt-3 p-3 bg-zinc-950 border border-emerald-900 rounded font-mono text-emerald-400 text-center text-lg tracking-widest">{pixData.accessCode}</div>
-          )}
-          
-          <button 
-            onClick={() => router.push(`/ingressos?email=${encodeURIComponent(buyer.email)}&code=${pixData.accessCode || ''}`)} 
-            className="btn btn-secondary w-full mt-4"
-            disabled={paymentStatus === 'waiting'}
+          {/* Código de acesso — principal forma de ver ingressos (sem cadastro/senha) */}
+          <div className="mt-4 p-4 rounded-2xl border border-emerald-500/40 bg-emerald-950/40">
+            <div className="text-xs uppercase tracking-widest text-emerald-400/90 mb-2 text-center">
+              Seu código de acesso (sem senha)
+            </div>
+            <div className="font-mono text-emerald-300 text-center text-2xl sm:text-3xl tracking-[0.2em] font-semibold select-all">
+              {pixData.accessCode || '—'}
+            </div>
+            <p className="text-[11px] text-zinc-400 text-center mt-2 leading-relaxed">
+              Não precisa criar conta. Guarde este código + o e-mail da compra.
+              Em <strong className="text-zinc-300">Meus Ingressos</strong> use a opção
+              &quot;Código de acesso&quot;.
+            </p>
+            {pixData.accessCode && (
+              <button
+                type="button"
+                className="btn btn-secondary w-full mt-3 text-sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(pixData.accessCode || '');
+                    toast.success('Código copiado!');
+                  } catch {
+                    toast.message(pixData.accessCode || '');
+                  }
+                }}
+              >
+                Copiar código
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                `/ingressos?email=${encodeURIComponent(buyer.email)}&code=${encodeURIComponent(pixData.accessCode || '')}&success=1`
+              )
+            }
+            className="btn btn-primary w-full mt-4"
+            disabled={!pixData.accessCode && paymentStatus !== 'paid'}
           >
-            {paymentStatus === 'paid' ? 'Ver meus ingressos' : 'Ver ingressos com código (se já pagou)'}
+            {paymentStatus === 'paid'
+              ? 'Ver meus ingressos agora'
+              : 'Já paguei — ver ingressos com este código'}
           </button>
         </div>
       )}

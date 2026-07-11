@@ -213,20 +213,39 @@ export default function MeusIngressos() {
       <div className="max-w-2xl mx-auto px-6 pb-12">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-semibold tracking-tight mb-2">Acesse seus ingressos</h2>
-          <p className="text-zinc-400 text-sm">Escolha como prefere entrar</p>
+          <p className="text-zinc-400 text-sm">
+            <strong className="text-zinc-300">Não precisa criar conta.</strong> Use o código da compra
+            (ou senha, se você já criou uma).
+          </p>
         </div>
 
-        {/* Duas opções claras e intuitivas (estilo Sympla + Ingresso.com) */}
+        {justPaid && (
+          <div className="mb-6 p-4 rounded-2xl border border-emerald-500/30 bg-emerald-950/30 text-sm text-emerald-100">
+            <p className="font-medium">Compra confirmada</p>
+            <p className="text-xs text-emerald-200/80 mt-1">
+              Não há cadastro obrigatório. Preencha o <strong>código LN-…</strong> abaixo (mostrou na
+              tela do PIX) e clique em Acessar.
+            </p>
+            {code && (
+              <p className="mt-2 font-mono text-lg tracking-wider text-white">
+                Código: <span className="text-emerald-400">{code}</span>
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="space-y-6 mb-8">
-          {/* Opção 1: Com senha (recomendado para quem já usou) */}
-          <div className="card p-6 border border-emerald-900/30">
+          {/* PRINCIPAL: código — sem cadastro */}
+          <div className="card p-6 border border-emerald-500/40">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-emerald-600/10 rounded-xl">
-                <Mail className="w-5 h-5 text-emerald-400" />
+              <div className="p-2 bg-emerald-600/15 rounded-xl">
+                <KeyRound className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <div className="font-semibold">Entrar com e-mail ou CPF + senha</div>
-                <div className="text-xs text-emerald-400">Mais rápido nas próximas vezes</div>
+                <div className="font-semibold">Código de acesso (sem cadastro)</div>
+                <div className="text-xs text-emerald-400/90">
+                  Mostrado na tela após o PIX · também no e-mail se o Resend estiver ok
+                </div>
               </div>
             </div>
 
@@ -234,9 +253,9 @@ export default function MeusIngressos() {
               <input
                 type="text"
                 className="input"
-                placeholder="seu@email.com ou 123.456.789-00"
+                placeholder="E-mail da compra (opcional se tiver o código)"
                 value={email}
-                onChange={e => {
+                onChange={(e) => {
                   const val = e.target.value;
                   const digits = cleanDigits(val);
                   if (digits.length > 0 && digits.length <= 11 && /^[0-9.\- ]*$/.test(val)) {
@@ -246,77 +265,79 @@ export default function MeusIngressos() {
                   }
                 }}
               />
-              <input 
-                type="password" 
-                className="input" 
-                placeholder="Sua senha" 
-                value={password} 
-                onChange={e => setPassword(e.target.value)} 
-                onKeyDown={e => e.key === 'Enter' && lookup(true)} 
+              <input
+                className="input font-mono tracking-[4px] text-center text-lg"
+                placeholder="LN-XXXXXX"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && lookup()}
+                maxLength={12}
               />
-              <button 
-                onClick={() => lookup(true)} 
-                disabled={loading || !email || !password} 
+              <button
+                type="button"
+                onClick={() => lookup()}
+                disabled={loading || !code}
                 className="btn btn-primary w-full py-3"
               >
-                {loading ? 'Entrando...' : 'Acessar meus ingressos'}
+                {loading ? 'Buscando…' : 'Ver meus ingressos'}
               </button>
             </div>
-            <p className="text-center text-[11px] text-zinc-500 mt-3">Use a senha que você definiu na primeira compra</p>
+            <p className="text-center text-[11px] text-zinc-500 mt-3">
+              Só o código já basta. E-mail ajuda se você tiver mais de um pedido.
+            </p>
           </div>
 
-          {/* Opção 2: Com código (simples para todos) */}
-          <div className="card p-6">
+          {/* Secundário: senha opcional */}
+          <div className="card p-6 border border-white/10 opacity-95">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-white/5 rounded-xl">
-                <KeyRound className="w-5 h-5" />
+                <Mail className="w-5 h-5 text-zinc-400" />
               </div>
               <div>
-                <div className="font-semibold">Acessar com código de acesso</div>
-                <div className="text-xs text-zinc-500">Recebido por e-mail</div>
+                <div className="font-semibold text-zinc-200">Já criei senha (opcional)</div>
+                <div className="text-xs text-zinc-500">Só se você salvou senha depois da 1ª visita</div>
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <input 
-                className="input font-mono tracking-[4px] text-center flex-1" 
-                placeholder="LN-XXXXXX" 
-                value={code} 
-                onChange={e => setCode(e.target.value.toUpperCase())} 
-                onKeyDown={e => e.key === 'Enter' && lookup()} 
-                maxLength={9}
+            <div className="space-y-3">
+              <input
+                type="text"
+                className="input"
+                placeholder="seu@email.com ou CPF"
+                value={email}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const digits = cleanDigits(val);
+                  if (digits.length > 0 && digits.length <= 11 && /^[0-9.\- ]*$/.test(val)) {
+                    setEmail(formatCpf(val));
+                  } else {
+                    setEmail(val);
+                  }
+                }}
               />
-              <button 
-                onClick={() => lookup()} 
-                disabled={loading || !code} 
-                className="btn btn-secondary px-6"
+              <input
+                type="password"
+                className="input"
+                placeholder="Senha (se já criou)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && lookup(true)}
+              />
+              <button
+                type="button"
+                onClick={() => lookup(true)}
+                disabled={loading || !email || !password}
+                className="btn btn-secondary w-full py-3"
               >
-                {loading ? '...' : 'Acessar'}
+                {loading ? 'Entrando…' : 'Entrar com senha'}
               </button>
             </div>
-            <p className="text-center text-[11px] text-zinc-500 mt-3">Use o código se ainda não criou uma senha</p>
           </div>
         </div>
 
-        {justPaid && (
-          <div className="mb-6 p-4 rounded-2xl border border-emerald-500/30 bg-emerald-950/30 text-sm text-emerald-100 max-w-lg mx-auto">
-            <p className="font-medium">Compra confirmada</p>
-            <p className="text-xs text-emerald-200/80 mt-1">
-              Não é obrigatório criar senha no checkout. Use o <strong>código de acesso</strong> (aba ao lado)
-              ou o e-mail + código. Depois de ver os ingressos, você pode <strong>criar uma senha</strong> na
-              caixa verde abaixo.
-            </p>
-            {code && (
-              <p className="mt-2 font-mono text-base tracking-wider text-white">
-                Seu código: <span className="text-emerald-400">{code}</span>
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="text-center text-xs text-zinc-500 max-w-xs mx-auto">
-          Primeira vez? Use o <strong>código de acesso</strong> (aba Código). Depois você pode criar uma
-          senha para acessar só com e-mail/CPF. O e-mail automático depende do Resend (domínio verificado).
+        <div className="text-center text-xs text-zinc-500 max-w-md mx-auto mb-8">
+          Perdeu o código? Peça no WhatsApp do Lorde com o e-mail/CPF da compra, ou confira o pedido no
+          e-mail (quando o envio automático estiver ativo).
         </div>
 
         {orders.length > 0 && (
@@ -334,7 +355,7 @@ export default function MeusIngressos() {
           </div>
         )}
 
-      {/* Set password - shown nicely after first access */}
+      {/* Senha opcional — só depois de já ver os ingressos */}
       {showSetPassword && orders.length > 0 && (
         <div className="mb-8 p-5 bg-zinc-900 border border-emerald-900/30 rounded-2xl">
           <div className="flex items-start gap-3 mb-3">
@@ -342,8 +363,11 @@ export default function MeusIngressos() {
               <Lock className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="flex-1">
-              <div className="font-medium">Crie uma senha para acessar mais rápido</div>
-              <div className="text-sm text-zinc-400 mt-0.5">Na próxima vez você só precisa do seu e-mail/CPF + essa senha. Sem precisar do código.</div>
+              <div className="font-medium">Opcional: criar senha</div>
+              <div className="text-sm text-zinc-400 mt-0.5">
+                Não é cadastro obrigatório. Se quiser, na próxima vez usa e-mail/CPF + senha em vez do
+                código. Pode pular e só baixar o PDF agora.
+              </div>
             </div>
           </div>
           
