@@ -118,6 +118,9 @@ export default function MeusIngressos() {
   });
   const [filter, setFilter] = useState<FilterTab>('proximos');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [resendEmail, setResendEmail] = useState('');
+  const [resending, setResending] = useState(false);
+  const [showResend, setShowResend] = useState(false);
 
   const loggedIn = orders.length > 0;
 

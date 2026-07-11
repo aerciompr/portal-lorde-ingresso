@@ -138,6 +138,69 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
   }
 }
 
+/** Reenvio de código(s) de acesso por e-mail (Meus Ingressos) */
+export async function sendAccessCodesEmail(params: {
+  to: string;
+  buyerName?: string | null;
+  codes: Array<{ accessCode: string; eventTitle: string; orderId: string }>;
+}) {
+  const apiKey = getResendKey();
+  if (!apiKey) {
+    return { ok: false, skipped: true, error: 'RESEND_API_KEY não configurada' };
+  }
+  if (!params.to?.includes('@') || !params.codes.length) {
+    return { ok: false, error: 'Dados incompletos' };
+  }
+
+  const resend = new Resend(apiKey);
+  const APP_URL = await getAppUrl();
+  const from = getFromEmail();
+
+  const list = params.codes
+    .map(
+      (c) =>
+        `<li style="margin-bottom:12px;"><strong>${c.eventTitle}</strong><br/>
+        Código: <code style="font-size:18px;background:#222;padding:4px 10px;border-radius:6px;letter-spacing:2px;">${c.accessCode}</code>
+        <br/><a href="${APP_URL}/ingressos?email=${encodeURIComponent(params.to)}&code=${encodeURIComponent(c.accessCode)}" style="color:#22c55e;font-size:13px;">Abrir Meus Ingressos</a></li>`
+    )
+    .join('');
+
+  const html = `
+    <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #111; color: #eee;">
+      <h1 style="color:#fff;">Lorde Nelson Rest Pub</h1>
+      <h2>Seu código de acesso</h2>
+      <p>Olá ${params.buyerName || 'Cliente'},</p>
+      <p>Você solicitou o reenvio do(s) código(s) de acesso aos ingressos:</p>
+      <ul style="line-height:1.6;padding-left:18px;">${list}</ul>
+      <p style="font-size:13px;color:#888;margin-top:24px;">
+        Em Meus Ingressos use a aba <strong>Código</strong> e cole o LN-… Não compartilhe este e-mail.
+      </p>
+      <p style="margin-top:32px;font-size:12px;color:#555;">Lorde Nelson • Maceió/AL</p>
+    </div>
+  `;
+
+  try {
+    const result = await resend.emails.send({
+      from: from.includes('<') ? from : `Lorde Nelson <${from}>`,
+      to: params.to,
+      subject:
+        params.codes.length === 1
+          ? `Código de acesso ${params.codes[0].accessCode} — Lorde Nelson`
+          : `Seus códigos de acesso (${params.codes.length}) — Lorde Nelson`,
+      html,
+    });
+    if (result.error) {
+      console.error('[EMAIL] resend-code error', result.error);
+      return { ok: false, error: result.error.message || JSON.stringify(result.error) };
+    }
+    console.log('[EMAIL] access codes sent to', params.to, result.data?.id);
+    return { ok: true, id: result.data?.id };
+  } catch (e) {
+    console.error('[EMAIL] resend-code exception', e);
+    throw e;
+  }
+}
+
 export async function sendCancellationApproved(
   order: OrderWithDetails,
   refundAmountCents?: number

@@ -68,16 +68,46 @@ export async function POST(req: NextRequest) {
 
     const finalCpf = cleanCpf(buyer.cpf || '');
 
+    // Senha opcional na compra (cadastro leve)
+    let buyerPasswordHash: string | null = null;
+    const plainPass = typeof buyer?.password === 'string' ? buyer.password.trim() : '';
+    if (plainPass) {
+      if (plainPass.length < 6) {
+        return NextResponse.json(
+          { error: 'Senha deve ter no mínimo 6 caracteres (ou deixe em branco)' },
+          { status: 400 }
+        );
+      }
+      const { hashPassword } = await import('@/lib/auth');
+      buyerPasswordHash = await hashPassword(plainPass);
+    }
+
+    const buyerEmailNorm = String(buyer.email || '').trim().toLowerCase();
+
     await prisma.order.update({
       where: { id: orderId },
       data: {
         buyerName: buyer.name,
-        buyerEmail: buyer.email,
+        buyerEmail: buyerEmailNorm,
         buyerCpf: finalCpf || null,
         buyerPhone: finalPhone,
         accessCode,
+        ...(buyerPasswordHash ? { buyerPasswordHash } : {}),
       },
     });
+
+    // Propaga senha a outros pedidos do mesmo e-mail/CPF (login unificado)
+    if (buyerPasswordHash) {
+      const orClause: Array<{ buyerEmail?: string; buyerCpf?: string }> = [];
+      if (buyerEmailNorm) orClause.push({ buyerEmail: buyerEmailNorm });
+      if (finalCpf) orClause.push({ buyerCpf: finalCpf });
+      if (orClause.length) {
+        await prisma.order.updateMany({
+          where: { OR: orClause },
+          data: { buyerPasswordHash },
+        });
+      }
+    }
 
     // ============================================
     // MERCADO PAGO - PIX (recomendado no Brasil)

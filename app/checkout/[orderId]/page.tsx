@@ -21,7 +21,15 @@ export default function CheckoutPage() {
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [buyer, setBuyer] = useState({ name: '', email: '', cpf: '', phone: '' });
+  const [buyer, setBuyer] = useState({
+    name: '',
+    email: '',
+    cpf: '',
+    phone: '',
+    password: '',
+    password2: '',
+  });
+  const [wantPassword, setWantPassword] = useState(false);
 
   const [selectedMethod, setSelectedMethod] = useState<'pix' | 'card' | null>(null);
   const [processing, setProcessing] = useState(false);
