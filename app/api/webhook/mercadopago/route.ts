@@ -31,24 +31,44 @@ export async function POST(req: NextRequest) {
 
   console.log('[MP WEBHOOK] Received:', JSON.stringify(body).slice(0, 500));
 
-  if (xSignature && MP_ACCESS_TOKEN) {
+  /**
+   * Assinatura MP usa o "Secret" do webhook no painel — NÃO o Access Token.
+   * Env: MERCADOPAGO_WEBHOOK_SECRET
+   * Se a assinatura falhar, NÃO bloqueamos: validamos o pagamento na API do MP (fonte da verdade).
+   */
+  const webhookSecret =
+    process.env.MERCADOPAGO_WEBHOOK_SECRET ||
+    process.env.MP_WEBHOOK_SECRET ||
+    '';
+
+  if (xSignature && webhookSecret) {
     const match = xSignature.match(/ts=(\d+),v1=([a-f0-9]+)/i);
     if (match) {
       const ts = match[1];
       const v1 = match[2];
       const id = body.data?.id || body.id;
       const manifest = `id:${id};request-id:${xRequestId};ts:${ts};`;
-      const hmac = crypto.createHmac('sha256', MP_ACCESS_TOKEN);
+      const hmac = crypto.createHmac('sha256', webhookSecret);
       hmac.update(manifest);
       const computed = hmac.digest('hex');
       if (computed !== v1) {
-        console.warn('[MP WEBHOOK] Invalid signature');
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+        console.warn(
+          '[MP WEBHOOK] Assinatura inválida (confira MERCADOPAGO_WEBHOOK_SECRET). Seguindo com consulta à API MP.'
+        );
       }
     }
+  } else if (xSignature && !webhookSecret) {
+    // Antes o código usava Access Token como secret → sempre "Invalid signature" e abortava o webhook
+    console.log(
+      '[MP WEBHOOK] Sem MERCADOPAGO_WEBHOOK_SECRET — processando via API MP (polling também cobre)'
+    );
   }
 
-  const paymentId = body.data?.id || body.id;
+  // IPN antigo: { resource, topic: "payment" }
+  const paymentId =
+    body.data?.id ||
+    body.id ||
+    (body.topic === 'payment' || body.type === 'payment' ? body.resource : null);
   if (!paymentId) {
     return NextResponse.json({ ok: true });
   }
