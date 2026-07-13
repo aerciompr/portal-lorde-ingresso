@@ -4,7 +4,7 @@
  * permanecem no banco e só no GET admin autenticado / getAppSettings no servidor.
  */
 
-/** Branding + chaves publicáveis de gateway + taxas exibíveis */
+/** Branding + chaves publicáveis de gateway + taxas exibíveis + meios de pagamento (labels) */
 export const PUBLIC_SETTING_KEYS = new Set([
   'site_name',
   'logo_url',
@@ -28,6 +28,18 @@ export const PUBLIC_SETTING_KEYS = new Set([
   'mercadopago_public_key',
   'STRIPE_PUBLISHABLE_KEY',
   'MERCADOPAGO_PUBLIC_KEY',
+  // Meios de pagamento (labels + provider — sem secrets)
+  'pay_pix_enabled',
+  'pay_pix_label',
+  'pay_pix_hint',
+  'pay_pix_provider',
+  'pay_card_enabled',
+  'pay_card_label',
+  'pay_card_hint',
+  'pay_card_provider',
+  // Contato público
+  'whatsapp_display',
+  'whatsapp_e164',
 ]);
 
 /** Nunca devolver no GET público (mesmo se alguém listar) */

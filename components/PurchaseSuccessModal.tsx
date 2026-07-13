@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, Mail, QrCode, Ticket, UserX, X } from 'lucide-react';
+import { Check, Copy, Download, Mail, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 export type PurchaseModalVariant = 'pix-ready' | 'paid' | 'welcome';
@@ -13,18 +13,14 @@ type Props = {
   accessCode?: string | null;
   email?: string | null;
   eventTitle?: string | null;
+  /** IDs de tickets para download PDF (pós-pago) */
+  ticketIds?: string[];
+  orderAccessCode?: string | null;
   primaryLabel: string;
   onPrimary: () => void;
   secondaryLabel?: string;
   onSecondary?: () => void;
-  /** Auto redirect countdown (seconds) for variant=paid; 0 = off */
   autoRedirectSec?: number;
-};
-
-const TITLES: Record<PurchaseModalVariant, string> = {
-  'pix-ready': 'PIX gerado',
-  paid: 'Pagamento confirmado!',
-  welcome: 'Seu ingresso está pronto',
 };
 
 export default function PurchaseSuccessModal({
@@ -34,6 +30,8 @@ export default function PurchaseSuccessModal({
   accessCode,
   email,
   eventTitle,
+  ticketIds = [],
+  orderAccessCode,
   primaryLabel,
   onPrimary,
   secondaryLabel,
@@ -43,6 +41,7 @@ export default function PurchaseSuccessModal({
   const primaryRef = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState(false);
   const [left, setLeft] = useState(autoRedirectSec);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -53,24 +52,6 @@ export default function PurchaseSuccessModal({
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
-      }
-      // Tab cycle simples dentro do dialog
-      if (e.key === 'Tab') {
-        const root = document.getElementById('purchase-success-modal');
-        if (!root) return;
-        const focusable = root.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -101,26 +82,54 @@ export default function PurchaseSuccessModal({
 
   if (!open) return null;
 
+  // Modal de "PIX gerado" não deve distrair — só pós-pago / welcome
+  if (variant === 'pix-ready') return null;
+
   async function copyCode() {
     if (!accessCode) return;
     try {
       await navigator.clipboard.writeText(accessCode);
       setCopied(true);
-      toast.success('Código copiado!');
+      toast.success('Código de acesso copiado');
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.message(accessCode);
     }
   }
 
-  const emailLine =
-    variant === 'pix-ready'
-      ? email
-        ? `Após pagar, enviaremos o PDF e o código para ${email}.`
-        : 'Após pagar, enviaremos o PDF e o código por e-mail.'
-      : email
-        ? `Enviamos (ou enviaremos em instantes) o PDF para ${email}. Confira a caixa de entrada e o spam.`
-        : 'Enviamos o PDF por e-mail. Confira a caixa de entrada e o spam.';
+  async function downloadTickets() {
+    if (!ticketIds.length) {
+      toast.message('Abra Meus Ingressos para baixar o PDF');
+      onPrimary();
+      return;
+    }
+    setDownloading(true);
+    try {
+      for (const tid of ticketIds) {
+        const q = new URLSearchParams();
+        if (orderAccessCode) q.set('code', orderAccessCode);
+        const url = `/api/tickets/${tid}/pdf${q.toString() ? `?${q}` : ''}`;
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) throw new Error('Falha no download');
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `ingresso-${tid.slice(0, 8)}.pdf`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+      toast.success(ticketIds.length > 1 ? 'PDFs baixados' : 'PDF baixado');
+    } catch {
+      toast.error('Não foi possível baixar. Use Meus Ingressos.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  const title =
+    variant === 'paid' || variant === 'welcome'
+      ? 'Obrigado pela compra!'
+      : 'Pagamento confirmado!';
 
   return (
     <div
@@ -137,18 +146,12 @@ export default function PurchaseSuccessModal({
       >
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3 min-w-0">
-            <span
-              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ${
-                variant === 'pix-ready'
-                  ? 'bg-amber-500/15 text-amber-300 ring-amber-500/30'
-                  : 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30'
-              }`}
-            >
-              {variant === 'pix-ready' ? <Ticket size={22} /> : <Check size={22} />}
+            <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 bg-emerald-500/15 text-emerald-400 ring-emerald-500/30">
+              <Check size={22} />
             </span>
             <div className="min-w-0">
               <h2 id="purchase-modal-title" className="text-lg font-semibold text-white tracking-tight">
-                {TITLES[variant]}
+                {title}
               </h2>
               {eventTitle && (
                 <p className="text-xs text-zinc-500 truncate mt-0.5">{eventTitle}</p>
@@ -165,63 +168,51 @@ export default function PurchaseSuccessModal({
           </button>
         </div>
 
-        {/* Código em destaque */}
+        <p className="text-sm text-zinc-300 mb-4 leading-relaxed">
+          Seu pagamento foi confirmado. Guarde o código abaixo para acessar{' '}
+          <strong className="text-white">Meus Ingressos</strong>.
+        </p>
+
         {accessCode ? (
-          <div className="mb-4 rounded-2xl border border-emerald-500/40 bg-emerald-950/40 px-4 py-4 text-center">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-400/90 mb-2">
-              Seu código de acesso
+          <div className="mb-4 rounded-2xl border border-white/10 bg-zinc-950/70 px-4 py-3 text-center">
+            <div className="text-[10px] uppercase tracking-[0.15em] text-zinc-500 mb-1.5">
+              Código de acesso
             </div>
-            <div className="font-mono text-2xl sm:text-3xl font-semibold tracking-[0.18em] text-emerald-300 select-all">
+            <div className="font-mono text-xl font-semibold tracking-widest text-white select-all">
               {accessCode}
             </div>
             <button
               type="button"
               onClick={copyCode}
-              className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300 hover:text-white"
+              className="mt-2 inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white"
             >
               {copied ? <Check size={14} /> : <Copy size={14} />}
-              {copied ? 'Copiado' : 'Copiar código'}
+              {copied ? 'Copiado' : 'Copiar código de acesso'}
             </button>
-            <p className="text-[11px] text-zinc-400 mt-2 leading-relaxed">
-              Guarde este código. Use em <strong className="text-zinc-300">Meus Ingressos</strong> se
-              fechar a página.
-            </p>
           </div>
-        ) : (
-          <div className="mb-4 rounded-2xl border border-white/10 bg-zinc-950/60 px-4 py-3 text-xs text-zinc-400 text-center">
-            O código de acesso aparece assim que o pagamento for confirmado.
-          </div>
-        )}
+        ) : null}
 
-        <ul className="space-y-2.5 text-sm text-zinc-300 mb-5">
-          <li className="flex gap-2.5 items-start">
-            <UserX size={16} className="text-emerald-400 shrink-0 mt-0.5" />
-            <span>
-              <strong className="text-white">Não precisa criar conta.</strong> Use o código LN ou, se
-              quiser, crie senha depois em Meus Ingressos.
-            </span>
-          </li>
-          <li className="flex gap-2.5 items-start">
-            <Mail size={16} className="text-emerald-400 shrink-0 mt-0.5" />
-            <span>{emailLine}</span>
-          </li>
-          {(variant === 'paid' || variant === 'welcome') && (
-            <li className="flex gap-2.5 items-start">
-              <QrCode size={16} className="text-emerald-400 shrink-0 mt-0.5" />
-              <span>
-                Na entrada, toque em <strong className="text-white">Mostrar QR</strong> neste celular
-                (aumente o brilho se a portaria pedir).
-              </span>
-            </li>
-          )}
-          {variant === 'pix-ready' && (
-            <li className="flex gap-2.5 items-start text-zinc-400 text-xs leading-relaxed pl-6">
-              Após pagar o PIX, a confirmação é automática. Não precisa fazer nada além de pagar.
-            </li>
-          )}
-        </ul>
+        <div className="flex items-start gap-2 text-sm text-zinc-400 mb-5">
+          <Mail size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+          <span>
+            {email
+              ? `Enviamos o ingresso por e-mail para ${email}. Confira também a pasta de spam.`
+              : 'Enviamos o ingresso por e-mail. Confira a caixa de entrada e o spam.'}
+          </span>
+        </div>
 
         <div className="space-y-2">
+          {ticketIds.length > 0 && (
+            <button
+              type="button"
+              onClick={downloadTickets}
+              disabled={downloading}
+              className="w-full py-3 rounded-2xl border border-white/10 text-zinc-200 text-sm font-medium hover:bg-white/5 transition inline-flex items-center justify-center gap-2"
+            >
+              <Download size={16} />
+              {downloading ? 'Baixando…' : 'Baixar ingresso (PDF)'}
+            </button>
+          )}
           <button
             ref={primaryRef}
             type="button"
@@ -229,13 +220,13 @@ export default function PurchaseSuccessModal({
             className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition"
           >
             {primaryLabel}
-            {variant === 'paid' && left > 0 && autoRedirectSec > 0 ? ` (${left}s)` : ''}
+            {left > 0 && autoRedirectSec > 0 ? ` (${left}s)` : ''}
           </button>
           {secondaryLabel && onSecondary && (
             <button
               type="button"
               onClick={onSecondary}
-              className="w-full py-3 rounded-2xl border border-white/10 text-zinc-300 text-sm font-medium hover:bg-white/5 transition"
+              className="w-full py-3 rounded-2xl border border-white/10 text-zinc-400 text-sm hover:bg-white/5 transition"
             >
               {secondaryLabel}
             </button>

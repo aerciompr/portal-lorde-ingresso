@@ -57,7 +57,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ tick
       totalCents: ticket.order.totalCents,
       refundCents,
       ticketCodes: codes,
-      feeDetails: ticket.order.feeDetails,
+      // feeDetails só admin — não no PDF do cliente
     });
 
     return new NextResponse(Buffer.from(pdfBytes), {

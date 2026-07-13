@@ -7,6 +7,18 @@ import { getAppSettings } from "@/lib/settings";
 import { absoluteMediaUrl, mimeFromUrl } from "@/lib/media-url";
 import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from "@/lib/contact";
 
+/** Remove frases de dev/gateway que não devem ir ao público */
+function sanitizePublicFooter(text: string): string {
+  return (text || "")
+    .replace(/Pagamentos via Stripe e Mercado Pago\s*/gi, "")
+    .replace(/via Stripe e Mercado Pago\s*/gi, "")
+    .replace(/Stripe Connect[^\n]*/gi, "")
+    .replace(/ngrok[^\n]*/gi, "")
+    .replace(/localhost[^\n]*/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Texto do admin (com \\n e •) → HTML com quebras legíveis */
 function footerTextToHtml(text: string): string {
   const lines = (text || "")
@@ -97,8 +109,16 @@ export default async function RootLayout({
   const siteName = b.siteName || "Lorde Nelson";
 
   const year = new Date().getFullYear().toString();
-  const footerLeftRaw = (b.footerLeft || "").replace(/\{year\}/g, year).trim();
-  const footerRightRaw = (b.footerRight || "").replace(/\{year\}/g, year).trim();
+  const footerLeftRaw = sanitizePublicFooter(
+    (b.footerLeft || "").replace(/\{year\}/g, year).trim()
+  );
+  const footerRightRaw = sanitizePublicFooter(
+    (b.footerRight || "").replace(/\{year\}/g, year).trim()
+  );
+
+  const waDisplay = s.contact?.whatsappDisplay || WHATSAPP_DISPLAY;
+  const waDigits = (s.contact?.whatsappE164 || "").replace(/\D/g, "") || "5582996471998";
+  const waHref = `https://wa.me/${waDigits}`;
 
   const initialBranding = {
     siteName: b.siteName,
@@ -113,7 +133,11 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-200">
-        <Header initialBranding={initialBranding} />
+        <Header
+          initialBranding={initialBranding}
+          whatsappDisplay={waDisplay}
+          whatsappHref={waHref}
+        />
 
         <main className="flex-1">{children}</main>
 
@@ -157,24 +181,20 @@ export default async function RootLayout({
                     <br />
                     Portal moderno de ingressos.
                   </p>
-                  <p className="text-zinc-600">
-                    Pagamentos via Stripe e Mercado Pago
-                    <br />
-                    Check-in no local
-                  </p>
+                  <p className="text-zinc-600">Check-in no local</p>
                 </>
               )}
 
               <div className="pt-1 md:flex md:justify-end">
                 <a
-                  href={WHATSAPP_HREF}
+                  href={waHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2.5 text-sm text-[#25D366] hover:text-[#3be07a] transition"
-                  aria-label={`WhatsApp ${WHATSAPP_DISPLAY}`}
+                  aria-label={`WhatsApp ${waDisplay}`}
                 >
                   <i className="fa-brands fa-whatsapp text-xl leading-none" aria-hidden />
-                  <span className="text-zinc-400 hover:text-zinc-200">{WHATSAPP_DISPLAY}</span>
+                  <span className="text-zinc-400 hover:text-zinc-200">{waDisplay}</span>
                 </a>
               </div>
             </div>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-type Tab = 'taxas' | 'regras' | 'gateways' | 'visual';
+type Tab = 'taxas' | 'regras' | 'pagamentos' | 'gateways' | 'visual' | 'contato';
 
 export default function AdminConfiguracoes() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -83,7 +83,9 @@ export default function AdminConfiguracoes() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'taxas', label: 'Taxas' },
     { id: 'regras', label: 'Regras' },
+    { id: 'pagamentos', label: 'Meios de pagamento' },
     { id: 'gateways', label: 'Gateways' },
+    { id: 'contato', label: 'Contato' },
     { id: 'visual', label: 'Identidade Visual' },
   ];
 
@@ -260,6 +262,123 @@ export default function AdminConfiguracoes() {
               Cancelamentos são bloqueados após o prazo. A taxa é retida no reembolso.
               Pedidos pending (não pagos) são limpos automaticamente pelo cron a cada 15 min após o tempo acima (padrão 30 min), devolvendo o estoque.
             </p>
+          </section>
+        )}
+
+        {/* === TAB: MEIOS DE PAGAMENTO (labels públicos + provider) === */}
+        {activeTab === 'pagamentos' && (
+          <section className="max-w-3xl space-y-6">
+            <div>
+              <div className="font-semibold text-lg tracking-tight">Meios de pagamento (checkout)</div>
+              <div className="text-xs text-zinc-500 mt-1">
+                Textos que o <strong className="text-zinc-300">cliente</strong> vê. O provedor (Mercado Pago / Stripe) é só
+                técnico — chaves ficam em Gateways.
+              </div>
+            </div>
+
+            {(['pix', 'card'] as const).map((id) => {
+              const labelKey = `pay_${id}_label`;
+              const hintKey = `pay_${id}_hint`;
+              const enKey = `pay_${id}_enabled`;
+              const provKey = `pay_${id}_provider`;
+              const enabled = !['0', 'false', 'off'].includes(
+                String(settings[enKey] ?? '1').toLowerCase()
+              );
+              return (
+                <div key={id} className="rounded-2xl border border-white/10 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-medium capitalize">{id === 'pix' ? 'PIX' : 'Cartão'}</div>
+                    <label className="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enabled}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            [enKey]: e.target.checked ? '1' : '0',
+                          })
+                        }
+                      />
+                      Ativo no checkout
+                    </label>
+                  </div>
+                  <div>
+                    <div className="label">Nome exibido</div>
+                    <input
+                      className="input"
+                      placeholder={id === 'pix' ? 'PIX' : 'Cartão'}
+                      value={settings[labelKey] || ''}
+                      onChange={(e) => setSettings({ ...settings, [labelKey]: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <div className="label">Texto de apoio (opcional)</div>
+                    <input
+                      className="input"
+                      placeholder={id === 'pix' ? 'Aprovação na hora' : 'Crédito e débito'}
+                      value={settings[hintKey] || ''}
+                      onChange={(e) => setSettings({ ...settings, [hintKey]: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <div className="label">Provedor (técnico)</div>
+                    <select
+                      className="input"
+                      value={
+                        settings[provKey] ||
+                        (id === 'pix' ? 'mercadopago' : 'stripe')
+                      }
+                      onChange={(e) => setSettings({ ...settings, [provKey]: e.target.value })}
+                    >
+                      <option value="mercadopago">Mercado Pago</option>
+                      <option value="stripe">Stripe</option>
+                    </select>
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      Hoje PIX usa Mercado Pago e cartão usa Stripe na prática. Outras combinações
+                      exigem implementação no gateway.
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
+
+        {/* === TAB: CONTATO === */}
+        {activeTab === 'contato' && (
+          <section className="max-w-xl space-y-4">
+            <div>
+              <div className="font-semibold text-lg tracking-tight">WhatsApp (site)</div>
+              <div className="text-xs text-zinc-500 mt-1">
+                Aparece no menu, rodapé e áreas de contato do cliente.
+              </div>
+            </div>
+            <div>
+              <div className="label">Número exibido</div>
+              <input
+                className="input"
+                placeholder="(82) 99647-1998"
+                value={settings.whatsapp_display || ''}
+                onChange={(e) => setSettings({ ...settings, whatsapp_display: e.target.value })}
+              />
+            </div>
+            <div>
+              <div className="label">Número para o link (só dígitos, com 55)</div>
+              <input
+                className="input font-mono text-sm"
+                placeholder="5582996471998"
+                value={settings.whatsapp_e164 || ''}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    whatsapp_e164: e.target.value.replace(/\D/g, ''),
+                  })
+                }
+              />
+              <p className="text-[10px] text-zinc-500 mt-1">
+                Gera o link wa.me. Ex.: 55 + DDD + número.
+              </p>
+            </div>
           </section>
         )}
 

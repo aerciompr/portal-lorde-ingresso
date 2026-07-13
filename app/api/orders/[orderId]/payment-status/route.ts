@@ -33,10 +33,15 @@ export async function GET(
 
   // Já pago
   if (order.status === 'paid') {
+    const tickets = await prisma.ticket.findMany({
+      where: { orderId: order.id },
+      select: { id: true },
+    });
     return NextResponse.json({
       status: 'paid',
       accessCode: order.accessCode,
       buyerEmail: order.buyerEmail,
+      ticketIds: tickets.map((t) => t.id),
       message: 'Pagamento confirmado',
     });
   }
@@ -72,12 +77,18 @@ export async function GET(
           });
           const refreshed = await prisma.order.findUnique({
             where: { id: order.id },
-            select: { status: true, accessCode: true, buyerEmail: true },
+            select: {
+              status: true,
+              accessCode: true,
+              buyerEmail: true,
+              tickets: { select: { id: true } },
+            },
           });
           return NextResponse.json({
             status: 'paid',
             accessCode: refreshed?.accessCode,
             buyerEmail: refreshed?.buyerEmail,
+            ticketIds: (refreshed?.tickets || []).map((t) => t.id),
             message: 'Pagamento confirmado',
             synced: true,
           });

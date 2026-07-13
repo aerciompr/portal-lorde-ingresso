@@ -366,15 +366,7 @@ export async function generateRefundReceiptPDF(params: RefundReceiptParams) {
     }
   }
 
-  if (params.feeDetails) {
-    page.drawText(truncate(`Obs: ${params.feeDetails}`, 80), {
-      x: 32,
-      y: 36,
-      size: 8,
-      font,
-      color: rgb(0.45, 0.45, 0.45),
-    });
-  }
+  // feeDetails é só interno (admin/gateway) — nunca no PDF do cliente
 
   page.drawText('Documento informativo — sem valor para check-in.', {
     x: 32,

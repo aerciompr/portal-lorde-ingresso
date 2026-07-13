@@ -51,13 +51,45 @@ export default function CheckoutPage() {
   const [elements, setElements] = useState<StripeElements | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
 
-  // Modais de orientação pós-PIX / pós-pago
+  // Modal só após pagamento confirmado
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalVariant, setModalVariant] = useState<PurchaseModalVariant>('pix-ready');
+  const [modalVariant, setModalVariant] = useState<PurchaseModalVariant>('paid');
   const [paidAccessCode, setPaidAccessCode] = useState('');
+  const [paidTicketIds, setPaidTicketIds] = useState<string[]>([]);
   const [blockAutoRedirect, setBlockAutoRedirect] = useState(false);
 
+  type PayMethodUi = { id: 'pix' | 'card'; label: string; hint: string; enabled: boolean };
+  const [payMethods, setPayMethods] = useState<PayMethodUi[]>([
+    { id: 'pix', label: 'PIX', hint: 'Aprovação na hora', enabled: true },
+    { id: 'card', label: 'Cartão', hint: 'Crédito e débito', enabled: true },
+  ]);
+
   const orderId = params.orderId;
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (!s || typeof s !== 'object') return;
+        const pixOn = !['0', 'false', 'off'].includes(String(s.pay_pix_enabled ?? '1').toLowerCase());
+        const cardOn = !['0', 'false', 'off'].includes(String(s.pay_card_enabled ?? '1').toLowerCase());
+        setPayMethods([
+          {
+            id: 'pix',
+            label: (s.pay_pix_label || 'PIX').trim() || 'PIX',
+            hint: (s.pay_pix_hint || 'Aprovação na hora').trim(),
+            enabled: pixOn,
+          },
+          {
+            id: 'card',
+            label: (s.pay_card_label || 'Cartão').trim() || 'Cartão',
+            hint: (s.pay_card_hint || 'Crédito e débito').trim(),
+            enabled: cardOn,
+          },
+        ]);
+      })
+      .catch(() => {});
+  }, []);
 
   const goToIngressos = useCallback(
     (email: string, code: string) => {
@@ -135,13 +167,9 @@ export default function CheckoutPage() {
           }
           setPaymentStatus('paid');
           setPaidAccessCode(code);
-          setPaymentStatusMsg(
-            code
-              ? `Pagamento confirmado! Código ${code}`
-              : 'Pagamento confirmado!'
-          );
-          toast.success(code ? `PIX confirmado! Código: ${code}` : 'PIX confirmado!');
-          // Modal de sucesso (redirect via botão + countdown) — não some só com toast
+          if (Array.isArray(data.ticketIds)) setPaidTicketIds(data.ticketIds);
+          setPaymentStatusMsg('Pagamento confirmado!');
+          toast.success('Pagamento confirmado!');
           setModalVariant('paid');
           setModalOpen(true);
           setBlockAutoRedirect(true);
@@ -176,7 +204,6 @@ export default function CheckoutPage() {
     setPixData(null);
 
     if (!stripe) {
-      // Load publishable key from configurable settings (fallback to env)
       let pubKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
       try {
         const res = await fetch('/api/admin/settings');
@@ -184,7 +211,13 @@ export default function CheckoutPage() {
           const s = await res.json();
           if (s.stripe_publishable_key) pubKey = s.stripe_publishable_key;
         }
-      } catch {}
+      } catch {
+        /* ignore */
+      }
+      if (!pubKey) {
+        toast.error('Pagamento com cartão indisponível no momento');
+        return;
+      }
       const s = await loadStripe(pubKey);
       if (s) setStripe(s);
     }
@@ -222,56 +255,45 @@ export default function CheckoutPage() {
     }
 
     try {
-      const gateway = selectedMethod === 'pix' ? 'mercadopago' : 'stripe';
       const method = selectedMethod;
 
       const res = await fetch('/api/orders/pay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, buyer: buyerPayload, gateway, method }),
+        body: JSON.stringify({ orderId, buyer: buyerPayload, method }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro');
 
       if (data.type === 'pix' && data.qr_code) {
-        setPixData(data);
+        // accessCode fica só no state interno — não destacar até pagar
+        setPixData({
+          qr_code: data.qr_code,
+          qr_code_base64: data.qr_code_base64,
+          accessCode: data.accessCode,
+        });
         setPaymentStatus('waiting');
         if (data.accessCode) setPaidAccessCode(data.accessCode);
-        toast.success('QR PIX gerado');
-        // Modal na 1ª vez por pedido
-        try {
-          const key = `pixTipShown-${orderId}`;
-          if (!sessionStorage.getItem(key)) {
-            sessionStorage.setItem(key, '1');
-            setModalVariant('pix-ready');
-            setModalOpen(true);
-          }
-        } catch {
-          setModalVariant('pix-ready');
-          setModalOpen(true);
-        }
+        toast.success('PIX gerado — pague com o QR ou copia e cola');
+        // sem modal de “código de acesso” antes do pagamento
       } else if (data.type === 'stripe' && data.clientSecret) {
         setClientSecret(data.clientSecret);
         if (data.accessCode) {
           setPaidAccessCode(data.accessCode);
           try {
             sessionStorage.setItem(`orderCode-${orderId}`, data.accessCode);
-          } catch {}
+          } catch {
+            /* ignore */
+          }
         }
-        toast.info(
-          data.accessCode
-            ? `Cartão. Guarde o código: ${data.accessCode}`
-            : 'Preencha os dados do cartão'
-        );
+        toast.info('Preencha os dados do cartão abaixo');
 
-        // Initialize Stripe Elements (works for both direct keys and Connect account)
         if (stripe && data.clientSecret) {
           const el = stripe.elements({ clientSecret: data.clientSecret });
           setElements(el);
 
           const paymentElement = el.create('payment');
-          // Mount after render
           setTimeout(() => {
             const mountEl = document.getElementById('stripe-payment-element');
             if (mountEl) paymentElement.mount('#stripe-payment-element');
@@ -280,6 +302,7 @@ export default function CheckoutPage() {
       } else if (data.type === 'simulated') {
         const code = data.accessCode || '';
         setPaidAccessCode(code);
+        if (Array.isArray(data.ticketIds)) setPaidTicketIds(data.ticketIds);
         setModalVariant('paid');
         setModalOpen(true);
         toast.success(data.message || 'Pagamento confirmado');
@@ -425,63 +448,104 @@ export default function CheckoutPage() {
             Preencha nome completo, e-mail válido e CPF acima para habilitar as opções de pagamento.
           </div>
         )}
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <button
-            onClick={() => {
-              if (!basicValid) {
-                toast.error('Preencha nome, e-mail válido e CPF antes de escolher PIX');
-                return;
-              }
-              setSelectedMethod('pix'); setPixData(null); setClientSecret(null);
-            }}
-            className={`card p-5 text-left border ${selectedMethod === 'pix' ? 'border-emerald-500' : 'border-white/10'} ${!basicValid ? 'opacity-60' : ''}`}
-          >
-            <div className="font-semibold">PIX (Mercado Pago)</div>
-            <div className="text-xs text-emerald-400 mt-1">Aprovação instantânea • Mais rápido</div>
-          </button>
 
-          <button
-            onClick={selectCard}
-            className={`card p-5 text-left border ${selectedMethod === 'card' ? 'border-emerald-500' : 'border-white/10'} ${!basicValid ? 'opacity-60' : ''}`}
-          >
-            <div className="font-semibold">Cartão / Boleto (Stripe)</div>
-            <div className="text-xs text-zinc-400 mt-1">Métodos disponíveis na conta Stripe (incluindo via Connect OAuth)</div>
-          </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          {payMethods
+            .filter((m) => m.enabled)
+            .map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  if (!basicValid) {
+                    toast.error('Preencha nome, e-mail válido e CPF antes de escolher o pagamento');
+                    return;
+                  }
+                  if (m.id === 'card') {
+                    selectCard();
+                    return;
+                  }
+                  setSelectedMethod('pix');
+                  setPixData(null);
+                  setClientSecret(null);
+                }}
+                className={`card p-5 text-left border ${
+                  selectedMethod === m.id ? 'border-emerald-500' : 'border-white/10'
+                } ${!basicValid ? 'opacity-60' : ''}`}
+              >
+                <div className="font-semibold">{m.label}</div>
+                {m.hint ? (
+                  <div
+                    className={`text-xs mt-1 ${
+                      m.id === 'pix' ? 'text-emerald-400' : 'text-zinc-400'
+                    }`}
+                  >
+                    {m.hint}
+                  </div>
+                ) : null}
+              </button>
+            ))}
         </div>
 
         <button
           onClick={initiatePayment}
           disabled={processing || !isFormValid}
-          title={!isFormValid ? 'Preencha todos os dados obrigatórios e escolha uma forma de pagamento' : undefined}
+          title={
+            !isFormValid
+              ? 'Preencha todos os dados obrigatórios e escolha uma forma de pagamento'
+              : undefined
+          }
           className="btn btn-primary w-full text-base py-4 disabled:opacity-60"
         >
-          {processing ? 'Processando...' : selectedMethod === 'pix' ? 'Gerar QR Code Pix' : selectedMethod === 'card' ? 'Carregar formulário de Cartão' : 'Preencha os dados e escolha o pagamento'}
+          {processing
+            ? 'Processando...'
+            : selectedMethod === 'pix'
+              ? 'Gerar PIX'
+              : selectedMethod === 'card'
+                ? 'Continuar com cartão'
+                : 'Preencha os dados e escolha o pagamento'}
         </button>
       </div>
 
-      {/* PIX Result */}
+      {/* PIX Result — só QR + copia e cola do PIX (sem código de acesso) */}
       {pixData && (
         <div id="pix-qr-area" className="card p-6 mb-6 border-emerald-900/50">
-          <div className="text-emerald-400 text-sm mb-2">Pague com PIX</div>
-          
+          <div className="text-emerald-400 text-sm mb-2 font-medium">Pague com PIX</div>
+
           {pixData.qr_code_base64 && (
-            <img 
-              src={`data:image/png;base64,${pixData.qr_code_base64}`} 
-              className="mx-auto w-56 h-56 mb-4 bg-white p-3 rounded" 
-              alt="QR Code Pix" 
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`data:image/png;base64,${pixData.qr_code_base64}`}
+              className="mx-auto w-56 h-56 mb-4 bg-white p-3 rounded"
+              alt="QR Code PIX"
             />
           )}
 
           {pixData.qr_code && (
             <div className="mb-4">
-              <div className="text-xs mb-1 text-zinc-400">Código copia e cola:</div>
-              <code className="block p-3 bg-zinc-950 text-xs break-all rounded border border-white/10 select-all">{pixData.qr_code}</code>
+              <div className="text-xs mb-1 text-zinc-400">PIX copia e cola</div>
+              <code className="block p-3 bg-zinc-950 text-xs break-all rounded border border-white/10 select-all">
+                {pixData.qr_code}
+              </code>
+              <button
+                type="button"
+                className="btn btn-primary w-full mt-3 text-sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(pixData.qr_code || '');
+                    toast.success('Código PIX copiado!');
+                  } catch {
+                    toast.message('Selecione e copie o código PIX acima');
+                  }
+                }}
+              >
+                Copiar código PIX
+              </button>
             </div>
           )}
 
           <div
-            className={`mt-4 p-3 rounded-xl text-sm border ${
+            className={`mt-2 p-3 rounded-xl text-sm border ${
               paymentStatus === 'paid'
                 ? 'border-emerald-500/50 bg-emerald-950/40 text-emerald-300'
                 : paymentStatus === 'failed'
@@ -494,83 +558,53 @@ export default function CheckoutPage() {
                 <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
               )}
               {paymentStatus === 'paid' && <span className="text-emerald-400">✓</span>}
-              <span>{paymentStatusMsg || 'Aguardando confirmação do PIX…'}</span>
+              <span>
+                {paymentStatusMsg ||
+                  'Aguardando pagamento… A confirmação é automática após pagar.'}
+              </span>
             </div>
-            <p className="text-[10px] text-zinc-500 mt-1.5">
-              Confirmação automática via webhook + verificação a cada 3s no Mercado Pago. Não precisa fazer nada após pagar.
-            </p>
           </div>
 
-          {/* Código de acesso — principal forma de ver ingressos (sem cadastro/senha) */}
-          <div className="mt-4 p-4 rounded-2xl border border-emerald-500/40 bg-emerald-950/40">
-            <div className="text-xs uppercase tracking-widest text-emerald-400/90 mb-2 text-center">
-              Seu código de acesso (sem senha)
-            </div>
-            <div className="font-mono text-emerald-300 text-center text-2xl sm:text-3xl tracking-[0.2em] font-semibold select-all">
-              {pixData.accessCode || '—'}
-            </div>
-            <p className="text-[11px] text-zinc-400 text-center mt-2 leading-relaxed">
-              Não precisa criar conta. Após o pagamento você é levado a{' '}
-              <strong className="text-zinc-300">Meus Ingressos</strong> com este código.
-              Anote-o se fechar a página.
-            </p>
-            {pixData.accessCode && (
-              <button
-                type="button"
-                className="btn btn-secondary w-full mt-3 text-sm"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(pixData.accessCode || '');
-                    toast.success('Código copiado!');
-                  } catch {
-                    toast.message(pixData.accessCode || '');
-                  }
-                }}
-              >
-                Copiar código
-              </button>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              router.push(
-                `/ingressos?email=${encodeURIComponent(buyer.email)}&code=${encodeURIComponent(pixData.accessCode || '')}&success=1`
-              )
-            }
-            className="btn btn-primary w-full mt-4"
-            disabled={!pixData.accessCode && paymentStatus !== 'paid'}
-          >
-            {paymentStatus === 'paid'
-              ? 'Ver meus ingressos agora'
-              : 'Já paguei — ver ingressos com este código'}
-          </button>
+          {paymentStatus === 'paid' && (
+            <button
+              type="button"
+              onClick={() =>
+                goToIngressos(buyer.email, paidAccessCode || pixData.accessCode || '')
+              }
+              className="btn btn-primary w-full mt-4"
+            >
+              Ver meus ingressos
+            </button>
+          )}
         </div>
       )}
 
-      {/* Stripe Card Form */}
+      {/* Card form */}
       {clientSecret && (
         <div className="card p-6 mb-6">
-          <div className="mb-4 text-sm">Pagamento com cartão via Stripe (ambiente seguro)</div>
-          
-          <div id="stripe-payment-element" className="mb-6 min-h-[120px] bg-zinc-950 rounded-xl p-4 border border-white/10" />
+          <div className="mb-4 text-sm text-zinc-300">Dados do cartão</div>
 
-          <button 
-            onClick={confirmStripePayment} 
-            disabled={processing} 
+          <div
+            id="stripe-payment-element"
+            className="mb-6 min-h-[120px] bg-zinc-950 rounded-xl p-4 border border-white/10"
+          />
+
+          <button
+            onClick={confirmStripePayment}
+            disabled={processing}
             className="btn btn-primary w-full text-base"
           >
-            {processing ? 'Confirmando pagamento...' : 'Confirmar Pagamento com Cartão'}
+            {processing ? 'Confirmando…' : 'Pagar com cartão'}
           </button>
 
-          <p className="text-[10px] text-center mt-3 text-zinc-500">Seus dados de cartão são processados diretamente pelo Stripe (nunca passam pelo nosso servidor).</p>
+          <p className="text-[10px] text-center mt-3 text-zinc-500">
+            Pagamento processado de forma segura. Não armazenamos os dados do cartão.
+          </p>
         </div>
       )}
 
       <div className="text-xs text-center text-zinc-500 mt-8">
-        Ambiente seguro. Webhooks garantem a atualização automática do status.
-        <br />PIX MP: use chaves TEST-... para localhost. Para produção configure "URL Pública" + ngrok em Admin &gt; Configurações &gt; Gateways.
+        Ambiente seguro. Após o pagamento, o ingresso é enviado por e-mail.
       </div>
 
       <PurchaseSuccessModal
@@ -580,50 +614,27 @@ export default function CheckoutPage() {
           setBlockAutoRedirect(false);
         }}
         variant={modalVariant}
-        accessCode={paidAccessCode || pixData?.accessCode || ''}
+        accessCode={paymentStatus === 'paid' || modalVariant === 'paid' ? paidAccessCode || pixData?.accessCode || '' : ''}
         email={buyer.email}
         eventTitle={order?.event?.title}
-        autoRedirectSec={modalVariant === 'paid' ? 5 : 0}
-        primaryLabel={
-          modalVariant === 'pix-ready'
-            ? 'Copiar código e ver PIX'
-            : 'Ver meus ingressos'
-        }
+        ticketIds={paidTicketIds}
+        orderAccessCode={paidAccessCode || pixData?.accessCode || ''}
+        autoRedirectSec={modalVariant === 'paid' ? 12 : 0}
+        primaryLabel="Ver meus ingressos"
         onPrimary={() => {
-          if (modalVariant === 'pix-ready') {
-            const code = paidAccessCode || pixData?.accessCode || '';
-            if (code) {
-              navigator.clipboard?.writeText(code).then(
-                () => toast.success('Código copiado!'),
-                () => toast.message(code)
-              );
-            }
-            setModalOpen(false);
-            // foca área do QR se existir
-            document.getElementById('pix-qr-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            return;
-          }
           const email = buyer.email || '';
           const code = paidAccessCode || pixData?.accessCode || '';
           setModalOpen(false);
           goToIngressos(email, code);
         }}
-        secondaryLabel={
-          modalVariant === 'pix-ready'
-            ? 'Entendi — ver QR PIX'
-            : modalVariant === 'paid'
-              ? 'Fechar'
-              : undefined
-        }
+        secondaryLabel={modalVariant === 'paid' ? 'Fechar' : undefined}
         onSecondary={
-          modalVariant === 'pix-ready'
+          modalVariant === 'paid'
             ? () => {
                 setModalOpen(false);
-                document.getElementById('pix-qr-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setBlockAutoRedirect(false);
               }
-            : modalVariant === 'paid'
-              ? () => setModalOpen(false)
-              : undefined
+            : undefined
         }
       />
     </div>

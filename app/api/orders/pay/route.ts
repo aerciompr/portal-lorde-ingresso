@@ -30,11 +30,27 @@ async function getPaymentClients() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { orderId, buyer, gateway, method } = await req.json();
+    const body = await req.json();
+    const { orderId, buyer } = body;
+    const method: string = body.method === 'card' ? 'card' : 'pix';
 
     const s = await getAppSettings();
     const { stripe, mpClient, STRIPE_ACCOUNT_ID, MP_ACCESS_TOKEN } = await getPaymentClients();
     const STRIPE_PUBLISHABLE = s.payment.stripePublishableKey || process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY || '';
+
+    // Provedor vem do admin (labels/meios), não do cliente
+    const settingRows = await prisma.setting.findMany();
+    const rawSettings: Record<string, string> = {};
+    settingRows.forEach((r) => {
+      rawSettings[r.key] = r.value;
+    });
+    const { resolvePayGateway, paymentMethodsFromRaw } = await import('@/lib/payment-methods');
+    const methodsCfg = paymentMethodsFromRaw(rawSettings);
+    const methodCfg = methodsCfg.find((m) => m.id === method);
+    if (methodCfg && !methodCfg.enabled) {
+      return NextResponse.json({ error: 'Forma de pagamento indisponível' }, { status: 400 });
+    }
+    const gateway = resolvePayGateway(method, rawSettings);
 
     // Prefer public URL configured in Admin (useful for ngrok / production)
     const rawAppUrl = s.publicUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

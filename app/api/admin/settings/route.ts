@@ -36,7 +36,17 @@ export async function GET() {
       footer_left:
         'Lorde Nelson Rest Pub\nRua Silvério Jorge, 241\nJaraguá — Maceió/AL\n\nQui a Sáb\n20h às 02h',
       footer_right:
-        '© {year} Lorde Nelson\nPortal moderno de ingressos.\n\nPagamentos via Stripe e Mercado Pago\nCheck-in no local',
+        '© {year} Lorde Nelson\nPortal de ingressos.\n\nCheck-in no local',
+      pay_pix_enabled: '1',
+      pay_pix_label: 'PIX',
+      pay_pix_hint: 'Aprovação na hora',
+      pay_pix_provider: 'mercadopago',
+      pay_card_enabled: '1',
+      pay_card_label: 'Cartão',
+      pay_card_hint: 'Crédito e débito',
+      pay_card_provider: 'stripe',
+      whatsapp_display: '(82) 99647-1998',
+      whatsapp_e164: '5582996471998',
     };
     for (const [k, v] of Object.entries(defaults)) {
       await prisma.setting.upsert({

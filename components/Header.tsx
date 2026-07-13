@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
-import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from '@/lib/contact';
+import { WHATSAPP_DISPLAY as DEFAULT_WA_DISPLAY, WHATSAPP_HREF as DEFAULT_WA_HREF } from '@/lib/contact';
 
 /** Logo empacotada no app — sempre existe no deploy */
 const STATIC_FALLBACK_LOGO = '/logo-lordenelson.jpg';
@@ -20,38 +20,26 @@ function uniqueUrls(...candidates: (string | undefined | null)[]) {
   return out;
 }
 
-function WhatsAppIconLink({ className = '' }: { className?: string }) {
-  return (
-    <a
-      href={WHATSAPP_HREF}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={className}
-      aria-label={`WhatsApp ${WHATSAPP_DISPLAY}`}
-      title={`WhatsApp ${WHATSAPP_DISPLAY}`}
-    >
-      <i className="fa-brands fa-whatsapp" aria-hidden />
-    </a>
-  );
-}
-
 export default function Header({
   initialBranding = {},
+  whatsappDisplay,
+  whatsappHref,
 }: {
   initialBranding?: { siteName?: string; logoUrl?: string; faviconUrl?: string };
+  whatsappDisplay?: string;
+  whatsappHref?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [siteName, setSiteName] = useState(initialBranding.siteName || 'Lorde Nelson');
   const [remoteLogo, setRemoteLogo] = useState((initialBranding.logoUrl || '').trim());
   const [remoteFavicon, setRemoteFavicon] = useState((initialBranding.faviconUrl || '').trim());
   const [candidateIndex, setCandidateIndex] = useState(0);
+  const [waDisplay, setWaDisplay] = useState(whatsappDisplay || DEFAULT_WA_DISPLAY);
+  const [waHref, setWaHref] = useState(whatsappHref || DEFAULT_WA_HREF);
 
   // Se o SSR veio sem logo (cache / falha de DB), busca nas configs públicas
   useEffect(() => {
     let cancelled = false;
-    const needFetch = !(initialBranding.logoUrl || '').trim();
-    if (!needFetch) return;
-
     fetch('/api/admin/settings')
       .then((r) => r.json())
       .then((data) => {
@@ -62,13 +50,33 @@ export default function Header({
           setCandidateIndex(0);
         }
         if (data.favicon_url) setRemoteFavicon(String(data.favicon_url).trim());
+        if (data.whatsapp_display) setWaDisplay(String(data.whatsapp_display));
+        if (data.whatsapp_e164) {
+          const digits = String(data.whatsapp_e164).replace(/\D/g, '');
+          if (digits) setWaHref(`https://wa.me/${digits}`);
+        }
       })
       .catch(() => {});
 
     return () => {
       cancelled = true;
     };
-  }, [initialBranding.logoUrl]);
+  }, []);
+
+  function WhatsAppIconLink({ className = '' }: { className?: string }) {
+    return (
+      <a
+        href={waHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+        aria-label={`WhatsApp ${waDisplay}`}
+        title={`WhatsApp ${waDisplay}`}
+      >
+        <i className="fa-brands fa-whatsapp" aria-hidden />
+      </a>
+    );
+  }
 
   const candidates = useMemo(
     () =>
@@ -148,14 +156,14 @@ export default function Header({
             </Link>
           ))}
           <a
-            href={WHATSAPP_HREF}
+            href={waHref}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 normal-case tracking-normal text-[#25D366]"
             onClick={() => setOpen(false)}
           >
             <i className="fa-brands fa-whatsapp text-xl" aria-hidden />
-            <span className="text-zinc-300 text-sm font-medium">{WHATSAPP_DISPLAY}</span>
+            <span className="text-zinc-300 text-sm font-medium">{waDisplay}</span>
           </a>
         </nav>
       )}

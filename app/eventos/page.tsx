@@ -19,55 +19,52 @@ export default async function Programacao() {
       <h1 className="section-title mb-2">Programação Completa</h1>
       <p className="text-zinc-400 mb-10">Todos os eventos. Escolha o seu e garanta seu lugar.</p>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {events.map((event: any) => {
           const minPrice = event.ticketTypes.length ? Math.min(...event.ticketTypes.map((t: any) => t.priceCents)) : 0;
           const available = event.ticketTypes.reduce((s: number, t: any) => s + (t.totalQty - t.sold), 0);
           return (
-            <div key={event.id} className="card flex flex-col md:flex-row gap-6 p-6">
-              <div className="w-full md:w-72 h-48 bg-zinc-800 rounded-xl overflow-hidden flex-shrink-0">
+            <div
+              key={event.id}
+              className="card flex flex-col overflow-hidden p-0 border border-white/10"
+            >
+              <div className="relative w-full aspect-[9/16] max-h-[220px] sm:max-h-[280px] bg-zinc-800 overflow-hidden">
                 {event.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={event.imageUrl} alt="" className="w-full h-full object-contain bg-zinc-800" />
-                ) : <div className="flex h-full items-center justify-center text-6xl opacity-30">🎫</div>}
+                  <img
+                    src={event.imageUrl}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-4xl opacity-30">🎫</div>
+                )}
               </div>
 
-              <div className="flex-1 flex flex-col">
-                <div className="flex-1">
-                  <div className="flex justify-between items-start gap-4">
-                    <div>
-                      <h2 className="text-2xl font-semibold tracking-tight mb-1">{event.title}</h2>
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-sm font-semibold">
-                          <Calendar size={15} /> {formatDate(event.date)}
-                        </span>
-                        <span className="flex items-center gap-1.5 text-sm text-zinc-400">
-                          <Clock size={15} /> {event.openTime}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right text-sm font-mono text-emerald-400">{formatPrice(minPrice)}</div>
-                  </div>
-
-                  <div className="text-zinc-400 text-sm leading-relaxed mb-4 line-clamp-3" dangerouslySetInnerHTML={{ __html: event.description || '' }} />
-
-                  <div className="flex items-center text-xs text-zinc-500 gap-2 mb-4">
-                    <MapPin size={14} /> {event.address}
-                  </div>
+              <div className="flex flex-col flex-1 p-3 sm:p-4">
+                <h2 className="text-sm sm:text-lg font-semibold tracking-tight mb-1.5 line-clamp-2">
+                  {event.title}
+                </h2>
+                <div className="flex flex-wrap items-center gap-1.5 mb-2 text-[10px] sm:text-xs">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-semibold">
+                    <Calendar size={12} /> {formatDate(event.date)}
+                  </span>
+                  <span className="flex items-center gap-1 text-zinc-500">
+                    <Clock size={12} /> {event.openTime}
+                  </span>
                 </div>
-
-                <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                  <div className="text-sm">
-                    {available < 1 ? (
-                      <span className="text-red-400">Esgotado</span>
-                    ) : null}
-                  </div>
-                  <Link
-                    href={`/evento/${event.slug}`}
-                    className={`btn btn-primary ${available < 1 ? 'pointer-events-none opacity-50' : ''}`}
-                  >
-                    {available < 1 ? 'Esgotado' : 'Comprar Ingressos'}
-                  </Link>
+                <div className="hidden sm:flex items-center text-xs text-zinc-500 gap-1.5 mb-3 line-clamp-1">
+                  <MapPin size={12} /> {event.address}
+                </div>
+                <div className="mt-auto flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+                  <div className="font-mono text-sm text-emerald-400">{formatPrice(minPrice)}</div>
+                  {available < 1 ? (
+                    <span className="text-xs text-red-400">Esgotado</span>
+                  ) : (
+                    <Link href={`/evento/${event.slug}`} className="btn btn-primary text-xs sm:text-sm px-3 py-2">
+                      Comprar
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
