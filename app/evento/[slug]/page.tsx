@@ -35,11 +35,17 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
       <div className="mt-6 grid lg:grid-cols-5 gap-8">
         {/* Image / info */}
         <div className="lg:col-span-3">
-          <div className="aspect-video rounded-3xl overflow-hidden bg-zinc-900 mb-6 border border-white/10">
+          <div className="aspect-[3/4] sm:aspect-[4/5] max-h-[min(70vh,520px)] mx-auto sm:mx-0 rounded-3xl overflow-hidden bg-zinc-950 mb-6 border border-white/10">
             {event.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={event.imageUrl} alt={event.title} className="w-full h-full object-contain bg-zinc-800" />
-            ) : <div className="h-full flex items-center justify-center text-7xl">🎟️</div>}
+              <img
+                src={event.imageUrl}
+                alt={event.title}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-7xl">🎟️</div>
+            )}
           </div>
 
           <h1 className="text-4xl font-semibold tracking-[-1.5px] mb-3">{event.title}</h1>

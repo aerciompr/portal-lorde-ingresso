@@ -11,18 +11,23 @@ import {
   uploadStorageMode,
 } from '@/lib/uploads';
 import { requireAdminMutation } from '@/lib/request-security';
+import { parseImagePurpose, processUploadImage } from '@/lib/image-process';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+function baseName(originalName: string, ext: string): string {
+  const raw = (originalName || 'image').replace(/\.[^.]+$/, '');
+  const safe = raw.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'image';
+  return `${safe}.${ext}`;
+}
 
 async function saveToDatabase(
   buffer: Buffer,
   mime: string,
   originalName: string
 ): Promise<{ url: string; storage: 'db'; id: string }> {
-  const safeName = (originalName || 'image')
-    .replace(/[^a-zA-Z0-9._-]/g, '_')
-    .slice(0, 120);
+  const safeName = baseName(originalName, mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg');
 
   const row = await prisma.mediaFile.create({
     data: {
@@ -42,13 +47,11 @@ async function saveToDatabase(
 
 async function saveToDisk(
   buffer: Buffer,
-  originalName: string
+  originalName: string,
+  ext: string
 ): Promise<{ url: string; storage: 'disk'; filename: string }> {
   const uploadDir = await ensureUploadsDir();
-  const safeName = (originalName || 'image')
-    .replace(/[^a-zA-Z0-9._-]/g, '_')
-    .slice(0, 120);
-  const filename = `${Date.now()}-${safeName}`;
+  const filename = `${Date.now()}-${baseName(originalName, ext)}`;
   await writeFile(path.join(uploadDir, filename), buffer);
   return {
     url: publicUrlForUpload(filename),
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    let buffer = Buffer.from(bytes);
     if (buffer.length > max) {
       return NextResponse.json(
         { error: `Arquivo muito grande (máx. ${Math.round(max / 1024 / 1024)} MB)` },
@@ -91,37 +94,69 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const purpose = parseImagePurpose(
+      formData.get('purpose') || formData.get('key') || formData.get('field')
+    );
+
+    let outMime = mime;
+    let outExt = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+    let processedMeta: { width?: number; height?: number; bytesIn: number; bytesOut: number } | null =
+      null;
+
+    try {
+      const processed = await processUploadImage(buffer, purpose);
+      buffer = Buffer.from(processed.buffer);
+      outMime = processed.mime;
+      outExt = processed.ext;
+      processedMeta = {
+        width: processed.width,
+        height: processed.height,
+        bytesIn: processed.bytesIn,
+        bytesOut: processed.bytesOut,
+      };
+    } catch (e) {
+      // Se sharp falhar, grava original (não bloqueia admin)
+      console.warn('[upload] processImage falhou, salvando original:', (e as Error).message);
+    }
+
     const mode = uploadStorageMode();
     let result: { url: string; storage: string; id?: string; filename?: string };
+    const origName = file.name || 'image';
 
     if (mode === 'db') {
-      result = await saveToDatabase(buffer, mime, file.name || 'image');
+      result = await saveToDatabase(buffer, outMime, origName);
     } else if (mode === 's3') {
-      const safeName = (file.name || 'image')
-        .replace(/[^a-zA-Z0-9._-]/g, '_')
-        .slice(0, 120);
-      const filename = `${Date.now()}-${safeName}`;
-      const s3 = await saveBufferToS3(buffer, filename, mime);
+      const filename = `${Date.now()}-${baseName(origName, outExt)}`;
+      const s3 = await saveBufferToS3(buffer, filename, outMime);
       result = { url: s3.url, storage: 's3', filename: s3.key };
     } else if (mode === 'disk') {
-      result = await saveToDisk(buffer, file.name || 'image');
+      result = await saveToDisk(buffer, origName, outExt);
     } else {
-      // auto: disco se possível, senão MySQL
       try {
-        result = await saveToDisk(buffer, file.name || 'image');
+        result = await saveToDisk(buffer, origName, outExt);
       } catch (e) {
         console.warn('[upload] disk falhou, usando MySQL:', (e as Error).message);
-        result = await saveToDatabase(buffer, mime, file.name || 'image');
+        result = await saveToDatabase(buffer, outMime, origName);
       }
     }
 
-    console.log('[upload] ok', { storage: result.storage, url: result.url, bytes: buffer.length });
+    console.log('[upload] ok', {
+      storage: result.storage,
+      url: result.url,
+      purpose,
+      ...processedMeta,
+    });
 
     return NextResponse.json({
       success: true,
       url: result.url,
       storage: result.storage,
       originalName: file.name,
+      purpose,
+      optimized: Boolean(processedMeta),
+      bytes: processedMeta?.bytesOut ?? buffer.length,
+      width: processedMeta?.width,
+      height: processedMeta?.height,
     });
   } catch (error) {
     const err = error as NodeJS.ErrnoException & { code?: string };

@@ -33,6 +33,9 @@ export default function AdminConfiguracoes() {
 
     const formData = new FormData();
     formData.append('file', file);
+    // purpose no servidor: logo | favicon | banner | generic
+    formData.append('purpose', key);
+    formData.append('key', key);
 
     try {
       const res = await fetch('/api/admin/upload', {

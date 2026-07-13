@@ -121,51 +121,23 @@ export default function EditEventPage() {
     } catch {}
   }
 
-  async function resizeImage(file: File, maxWidth = 1200, maxHeight = 800): Promise<File> {
-    return new Promise<File>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          let width = img.width;
-          let height = img.height;
-          const ratio = Math.min(maxWidth / width, maxHeight / height, 1);
-          if (ratio < 1) {
-            width = Math.round(width * ratio);
-            height = Math.round(height * ratio);
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const resized = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
-              resolve(resized);
-            } else {
-              resolve(file);
-            }
-          }, 'image/jpeg', 0.92);
-        };
-        img.src = (e.target?.result as string) || '';
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
   async function handleImageUpload(file: File) {
     if (!file) return;
     setUploadingImage(true);
     try {
-      const resizedFile = await resizeImage(file);
       const fd = new FormData();
-      fd.append('file', resizedFile);
-      const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+      fd.append('file', file);
+      fd.append('purpose', 'event');
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
       const data = await res.json();
       if (res.ok && data.url) {
         updateForm('imageUrl', data.url);
-        toast.success('Imagem enviada e redimensionada');
+        const kb = data.bytes ? ` · ${Math.round(data.bytes / 1024)} KB` : '';
+        toast.success(`Imagem otimizada e enviada${kb}`);
       } else {
         toast.error(data.error || 'Falha no upload');
       }

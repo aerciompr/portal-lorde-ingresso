@@ -62,7 +62,7 @@ export default async function Home() {
           <div className="text-center py-12 text-zinc-400">Nenhum evento futuro no momento. Volte em breve!</div>
         ) : (
           <>
-            {/* Grid 2 colunas: posters 9:16 compactos — sem faixas vazias laterais */}
+            {/* Grid 2 col: cartaz 3:4 com object-contain (arte inteira, sem crop agressivo) */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {events.map((event) => {
                 const minPrice = Math.min(...event.ticketTypes.map(t => t.priceCents));
@@ -72,10 +72,10 @@ export default async function Home() {
                     href={`/evento/${event.slug}`}
                     className="group flex flex-col rounded-2xl border border-white/10 bg-zinc-900 overflow-hidden hover:border-emerald-500/30 hover:bg-zinc-800/50 transition-all"
                   >
-                    <div className="relative w-full aspect-[9/16] max-h-[220px] sm:max-h-[260px] bg-zinc-800 overflow-hidden">
+                    <div className="relative w-full aspect-[3/4] bg-zinc-950 overflow-hidden">
                       <EventImage
                         src={event.imageUrl}
-                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className="absolute inset-0 w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-300"
                       />
                     </div>
                     <div className="flex flex-col flex-1 p-3 sm:p-4 min-h-0">

@@ -28,13 +28,13 @@ export default async function Programacao() {
               key={event.id}
               className="card flex flex-col overflow-hidden p-0 border border-white/10"
             >
-              <div className="relative w-full aspect-[9/16] max-h-[220px] sm:max-h-[280px] bg-zinc-800 overflow-hidden">
+              <div className="relative w-full aspect-[3/4] bg-zinc-950 overflow-hidden">
                 {event.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={event.imageUrl}
                     alt=""
-                    className="absolute inset-0 w-full h-full object-cover"
+                    className="absolute inset-0 w-full h-full object-contain"
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center text-4xl opacity-30">🎫</div>
