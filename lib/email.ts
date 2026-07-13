@@ -252,6 +252,65 @@ export async function sendAccessCodesEmail(params: {
   }
 }
 
+/** Formulário público /contato → e-mail do pub */
+export async function sendContactFormMessage(params: {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  to: string;
+}) {
+  const apiKey = getResendKey();
+  if (!apiKey) {
+    console.log('[EMAIL] RESEND_API_KEY ausente — contato não enviado');
+    return { ok: false, skipped: true, error: 'E-mail não configurado no servidor' };
+  }
+
+  const to = (params.to || '').trim();
+  if (!to.includes('@')) {
+    return { ok: false, error: 'Destino de contato inválido' };
+  }
+
+  const resend = new Resend(apiKey);
+  const from = getFromEmail();
+  const safeName = params.name.replace(/[<>]/g, '').slice(0, 120);
+  const safeSubject = params.subject.replace(/[<>]/g, '').slice(0, 120);
+  const safeMsg = params.message
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br/>');
+
+  const html = `
+    <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #222;">
+      <h2 style="margin:0 0 12px;">Contato pelo site</h2>
+      <p style="margin:0 0 8px;"><strong>De:</strong> ${safeName} &lt;${params.email}&gt;</p>
+      <p style="margin:0 0 8px;"><strong>Assunto:</strong> ${safeSubject}</p>
+      <hr style="border:none;border-top:1px solid #ddd;margin:16px 0;" />
+      <div style="line-height:1.5;">${safeMsg}</div>
+      <p style="margin-top:24px;font-size:12px;color:#888;">Enviado pelo formulário de contato do portal.</p>
+    </div>
+  `;
+
+  try {
+    const result = await resend.emails.send({
+      from: from.includes('<') ? from : `Lorde Nelson Portal <${from}>`,
+      to,
+      replyTo: params.email,
+      subject: `[Site] ${safeSubject} — ${safeName}`,
+      html,
+    });
+    if (result.error) {
+      console.error('[EMAIL] contact Resend error', result.error);
+      return { ok: false, error: result.error.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error('[EMAIL] contact exception', e);
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 export async function sendCancellationApproved(
   order: OrderWithDetails,
   refundAmountCents?: number

@@ -94,6 +94,7 @@ export default function Header({
   const links: { href: string; label: string; className?: string }[] = [
     { href: '/eventos', label: 'Programação' },
     { href: '/ingressos', label: 'Meus Ingressos' },
+    { href: '/contato', label: 'Contato' },
   ];
 
   return (

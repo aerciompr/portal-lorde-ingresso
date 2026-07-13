@@ -40,6 +40,9 @@ export const PUBLIC_SETTING_KEYS = new Set([
   // Contato público
   'whatsapp_display',
   'whatsapp_e164',
+  'contact_email',
+  'instagram_url',
+  'contact_note',
 ]);
 
 /** Nunca devolver no GET público (mesmo se alguém listar) */

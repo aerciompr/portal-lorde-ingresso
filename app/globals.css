@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
-/* Font Awesome brands (WhatsApp no header/rodapé) */
+/* Font Awesome: brands (WA/IG) + solid leve (envelope, location) */
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/fontawesome.min.css");
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/brands.min.css");
+@import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/solid.min.css");
 
 :root {
   --font-sans: var(--font-geist-sans);

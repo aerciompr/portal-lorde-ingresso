@@ -119,6 +119,14 @@ export default async function RootLayout({
   const waDisplay = s.contact?.whatsappDisplay || WHATSAPP_DISPLAY;
   const waDigits = (s.contact?.whatsappE164 || "").replace(/\D/g, "") || "5582996471998";
   const waHref = `https://wa.me/${waDigits}`;
+  const contactEmail =
+    s.contact?.contactEmail || "contato@lordenelson.com.br";
+  const instagramUrl = (s.contact?.instagramUrl || "").trim();
+  const igHref = instagramUrl
+    ? instagramUrl.startsWith("http")
+      ? instagramUrl
+      : `https://instagram.com/${instagramUrl.replace(/^@/, "")}`
+    : "";
 
   const initialBranding = {
     siteName: b.siteName,
@@ -185,16 +193,45 @@ export default async function RootLayout({
                 </>
               )}
 
-              <div className="pt-1 md:flex md:justify-end">
+              <div className="pt-1 flex flex-wrap items-center gap-4 md:justify-end text-lg">
                 <a
                   href={waHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2.5 text-sm text-[#25D366] hover:text-[#3be07a] transition"
+                  className="inline-flex items-center gap-2 text-sm text-[#25D366] hover:text-[#3be07a] transition"
                   aria-label={`WhatsApp ${waDisplay}`}
+                  title={waDisplay}
                 >
                   <i className="fa-brands fa-whatsapp text-xl leading-none" aria-hidden />
-                  <span className="text-zinc-400 hover:text-zinc-200">{waDisplay}</span>
+                  <span className="text-zinc-400 hover:text-zinc-200 hidden sm:inline">
+                    {waDisplay}
+                  </span>
+                </a>
+                {igHref ? (
+                  <a
+                    href={igHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-pink-400/90 hover:text-pink-300 transition"
+                    aria-label="Instagram"
+                    title="Instagram"
+                  >
+                    <i className="fa-brands fa-instagram text-xl leading-none" aria-hidden />
+                  </a>
+                ) : null}
+                <a
+                  href="/contato"
+                  className="text-emerald-400/90 hover:text-emerald-300 transition"
+                  aria-label="Contato por e-mail"
+                  title="Contato"
+                >
+                  <i className="fa-solid fa-envelope text-lg leading-none" aria-hidden />
+                </a>
+                <a
+                  href={`mailto:${contactEmail}`}
+                  className="text-zinc-500 hover:text-zinc-300 text-xs sm:text-sm transition hidden md:inline"
+                >
+                  {contactEmail}
                 </a>
               </div>
             </div>

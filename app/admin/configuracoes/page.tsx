@@ -349,38 +349,83 @@ export default function AdminConfiguracoes() {
 
         {/* === TAB: CONTATO === */}
         {activeTab === 'contato' && (
-          <section className="max-w-xl space-y-4">
+          <section className="max-w-xl space-y-6">
             <div>
-              <div className="font-semibold text-lg tracking-tight">WhatsApp (site)</div>
+              <div className="font-semibold text-lg tracking-tight">Contato no site</div>
               <div className="text-xs text-zinc-500 mt-1">
-                Aparece no menu, rodapé e áreas de contato do cliente.
+                WhatsApp, e-mail do formulário /contato, Instagram. Aparecem no menu e rodapé.
               </div>
             </div>
-            <div>
-              <div className="label">Número exibido</div>
-              <input
-                className="input"
-                placeholder="(82) 99647-1998"
-                value={settings.whatsapp_display || ''}
-                onChange={(e) => setSettings({ ...settings, whatsapp_display: e.target.value })}
-              />
+
+            <div className="space-y-3 rounded-2xl border border-white/10 p-4">
+              <div className="text-sm font-medium text-zinc-300">WhatsApp</div>
+              <div>
+                <div className="label">Número exibido</div>
+                <input
+                  className="input"
+                  placeholder="(82) 99647-1998"
+                  value={settings.whatsapp_display || ''}
+                  onChange={(e) => setSettings({ ...settings, whatsapp_display: e.target.value })}
+                />
+              </div>
+              <div>
+                <div className="label">Número para o link (só dígitos, com 55)</div>
+                <input
+                  className="input font-mono text-sm"
+                  placeholder="5582996471998"
+                  value={settings.whatsapp_e164 || ''}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      whatsapp_e164: e.target.value.replace(/\D/g, ''),
+                    })
+                  }
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">Gera wa.me — ex.: 55 + DDD + número.</p>
+              </div>
             </div>
-            <div>
-              <div className="label">Número para o link (só dígitos, com 55)</div>
-              <input
-                className="input font-mono text-sm"
-                placeholder="5582996471998"
-                value={settings.whatsapp_e164 || ''}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    whatsapp_e164: e.target.value.replace(/\D/g, ''),
-                  })
-                }
-              />
-              <p className="text-[10px] text-zinc-500 mt-1">
-                Gera o link wa.me. Ex.: 55 + DDD + número.
-              </p>
+
+            <div className="space-y-3 rounded-2xl border border-white/10 p-4">
+              <div className="text-sm font-medium text-zinc-300">E-mail</div>
+              <div>
+                <div className="label">E-mail de contato (destino do formulário)</div>
+                <input
+                  className="input"
+                  type="email"
+                  placeholder="contato@lordenelson.com.br"
+                  value={settings.contact_email || ''}
+                  onChange={(e) => setSettings({ ...settings, contact_email: e.target.value })}
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Mensagens de /contato chegam aqui via Resend. Deve ser domínio verificado no Resend
+                  ou o mesmo FROM_EMAIL.
+                </p>
+              </div>
+              <div>
+                <div className="label">Texto de apoio (página Contato)</div>
+                <textarea
+                  className="input min-h-[72px]"
+                  placeholder="Respondemos em horário comercial…"
+                  value={settings.contact_note || ''}
+                  onChange={(e) => setSettings({ ...settings, contact_note: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-white/10 p-4">
+              <div className="text-sm font-medium text-zinc-300">Instagram (opcional)</div>
+              <div>
+                <div className="label">URL ou @usuário</div>
+                <input
+                  className="input"
+                  placeholder="https://instagram.com/lordenelson ou @lordenelson"
+                  value={settings.instagram_url || ''}
+                  onChange={(e) => setSettings({ ...settings, instagram_url: e.target.value })}
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Vazio = ícone Instagram não aparece no site.
+                </p>
+              </div>
             </div>
           </section>
         )}
