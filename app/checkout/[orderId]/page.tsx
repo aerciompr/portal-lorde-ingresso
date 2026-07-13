@@ -610,8 +610,12 @@ export default function CheckoutPage() {
       <PurchaseSuccessModal
         open={modalOpen}
         onClose={() => {
+          // Fechar (X, overlay, Esc) → Meus Ingressos com e-mail + código
+          const email = buyer.email || '';
+          const code = paidAccessCode || pixData?.accessCode || '';
           setModalOpen(false);
           setBlockAutoRedirect(false);
+          goToIngressos(email, code);
         }}
         variant={modalVariant}
         accessCode={paymentStatus === 'paid' || modalVariant === 'paid' ? paidAccessCode || pixData?.accessCode || '' : ''}
@@ -627,12 +631,15 @@ export default function CheckoutPage() {
           setModalOpen(false);
           goToIngressos(email, code);
         }}
-        secondaryLabel={modalVariant === 'paid' ? 'Fechar' : undefined}
+        secondaryLabel={modalVariant === 'paid' ? 'Ir para Meus Ingressos' : undefined}
         onSecondary={
           modalVariant === 'paid'
             ? () => {
+                const email = buyer.email || '';
+                const code = paidAccessCode || pixData?.accessCode || '';
                 setModalOpen(false);
                 setBlockAutoRedirect(false);
+                goToIngressos(email, code);
               }
             : undefined
         }
