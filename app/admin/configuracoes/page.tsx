@@ -70,17 +70,24 @@ export default function AdminConfiguracoes() {
     }
   }
 
-  // Helpers para exibir taxas fixas em Reais (mas salvar como centavos) — padrão BR
-  const toReais = (cents?: string) =>
-    ((parseInt(cents || '0') || 0) / 100).toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  const fromReais = (reais: string) => {
+  /**
+   * Taxas fixas: no banco = centavos (ex. 49 = R$ 0,49).
+   * type=number exige ponto no value — NÃO usar toLocaleString('pt-BR') no value
+   * (vírgula faz o input ficar vazio / não aceitar digitação).
+   */
+  const centsToNumberInput = (cents?: string) => {
+    const n = parseInt(String(cents ?? '0'), 10);
+    const safe = Number.isFinite(n) ? Math.max(0, n) : 0;
+    return (safe / 100).toFixed(2); // "0.49"
+  };
+  const numberInputToCents = (reais: string) => {
     let s = String(reais || '').trim().replace(/[R$\s]/gi, '');
+    // aceita 0,49 ou 0.49 ou 1.234,56
     if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
     else if (s.includes(',')) s = s.replace(',', '.');
-    return String(Math.round((parseFloat(s) || 0) * 100));
+    const n = parseFloat(s);
+    if (!Number.isFinite(n) || n < 0) return '0';
+    return String(Math.round(n * 100));
   };
 
   const tabs: { id: Tab; label: string }[] = [
@@ -187,35 +194,89 @@ export default function AdminConfiguracoes() {
               <div>
                 <div className="label">PIX — Percentual</div>
                 <div className="flex items-center gap-2">
-                  <input className="input" type="number" step="0.01" value={settings.pix_fee_percent || '1.99'} onChange={e => setSettings({...settings, pix_fee_percent: e.target.value})} />
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={settings.pix_fee_percent ?? '1.99'}
+                    onChange={(e) =>
+                      setSettings({ ...settings, pix_fee_percent: e.target.value })
+                    }
+                  />
                   <span className="text-xs text-zinc-500 w-8">%</span>
                 </div>
               </div>
               <div>
                 <div className="label">PIX — Taxa fixa (R$)</div>
                 <div className="flex items-center gap-2">
-                  <input className="input" type="number" step="0.01" value={toReais(settings.pix_fee_fixed_cents)} onChange={e => setSettings({...settings, pix_fee_fixed_cents: fromReais(e.target.value)})} />
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={centsToNumberInput(settings.pix_fee_fixed_cents)}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        pix_fee_fixed_cents: numberInputToCents(e.target.value),
+                      })
+                    }
+                  />
                   <span className="text-xs text-zinc-500 w-8">R$</span>
                 </div>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Use ponto: <strong className="text-zinc-400">0.00</strong> se não houver taxa fixa
+                </p>
               </div>
 
               <div>
                 <div className="label">Cartão — Percentual</div>
                 <div className="flex items-center gap-2">
-                  <input className="input" type="number" step="0.01" value={settings.card_fee_percent || '3.99'} onChange={e => setSettings({...settings, card_fee_percent: e.target.value})} />
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={settings.card_fee_percent ?? '3.99'}
+                    onChange={(e) =>
+                      setSettings({ ...settings, card_fee_percent: e.target.value })
+                    }
+                  />
                   <span className="text-xs text-zinc-500 w-8">%</span>
                 </div>
               </div>
               <div>
                 <div className="label">Cartão — Taxa fixa (R$)</div>
                 <div className="flex items-center gap-2">
-                  <input className="input" type="number" step="0.01" value={toReais(settings.card_fee_fixed_cents)} onChange={e => setSettings({...settings, card_fee_fixed_cents: fromReais(e.target.value)})} />
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={centsToNumberInput(settings.card_fee_fixed_cents)}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        card_fee_fixed_cents: numberInputToCents(e.target.value),
+                      })
+                    }
+                  />
                   <span className="text-xs text-zinc-500 w-8">R$</span>
                 </div>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Stripe típico: digite <strong className="text-zinc-400">0.49</strong> (= R$ 0,49 /
+                  49 centavos)
+                </p>
               </div>
             </div>
 
-            <p className="text-[10px] text-zinc-500 mt-4">Ex: 1.99% + R$ 0,00 no PIX. Os valores são convertidos automaticamente para centavos no banco.</p>
+            <p className="text-[10px] text-zinc-500 mt-4">
+              Ex.: cartão 3,99% + R$ 0,49 → preencha percentual <code className="text-zinc-400">3.99</code>{' '}
+              e fixa <code className="text-zinc-400">0.49</code>. No banco a fixa vira centavos (49).
+            </p>
           </section>
         )}
 
