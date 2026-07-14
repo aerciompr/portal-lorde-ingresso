@@ -22,6 +22,7 @@ export default function NovoEventoPage() {
     location: 'Lorde Nelson Rest Pub',
     salesDeadline: '',
     footerNotice: '',
+    hidden: false,
     allowCancel: true,
     cancelHoursBefore: 24,
     cancelFeePercent: 10,
@@ -94,6 +95,7 @@ export default function NovoEventoPage() {
           location: form.location || null,
           salesDeadline: form.salesDeadline || null,
           footerNotice: form.footerNotice.trim() || null,
+          hidden: form.hidden,
           allowCancel: form.allowCancel,
           cancelHoursBefore: form.cancelHoursBefore,
           cancelFeePercent: form.cancelFeePercent,
@@ -359,6 +361,22 @@ export default function NovoEventoPage() {
               Em branco = texto padrão: &quot;{DEFAULT_EVENT_FOOTER_NOTICE}&quot;
             </div>
           </div>
+
+          <label className="mt-5 flex items-start gap-3 cursor-pointer rounded-xl border border-white/10 bg-zinc-950/40 p-4">
+            <input
+              type="checkbox"
+              className="mt-1 rounded border-white/20"
+              checked={form.hidden}
+              onChange={(e) => updateForm('hidden', e.target.checked)}
+            />
+            <span>
+              <span className="text-sm font-medium text-zinc-200">Evento oculto (exclusivo)</span>
+              <span className="block text-[11px] text-zinc-500 mt-0.5">
+                Não aparece na home nem em Programação. Só quem tiver o link direto
+                (/evento/…) consegue comprar — ideal para listas privadas ou cortesia.
+              </span>
+            </span>
+          </label>
 
           <div className="mt-5 flex justify-end gap-3">
             <Link href="/admin/eventos" className="btn btn-secondary px-6 py-2 text-sm">

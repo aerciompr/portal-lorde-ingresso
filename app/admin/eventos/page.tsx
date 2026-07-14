@@ -16,6 +16,7 @@ interface Event {
   address?: string;
   location?: string;
   footerNotice?: string | null;
+  hidden?: boolean;
   cancelHoursBefore?: number;
   cancelFeePercent?: number;
   ticketTypes: { id: string; name: string; priceCents: number; totalQty: number; sold: number }[];
@@ -130,8 +131,28 @@ export default function AdminEventos() {
             <div key={ev.id} className="card p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
-                  <div className="font-semibold text-lg tracking-tight truncate">{ev.title}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-semibold text-lg tracking-tight truncate">{ev.title}</div>
+                    {ev.hidden && (
+                      <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-950/60 text-amber-300 border border-amber-500/30">
+                        Oculto
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-zinc-400 mt-0.5">{formatDate(ev.date)}</div>
+                  {ev.hidden && (
+                    <button
+                      type="button"
+                      className="text-[11px] text-emerald-400 hover:underline mt-1"
+                      onClick={() => {
+                        const url = `${window.location.origin}/evento/${ev.slug}`;
+                        void navigator.clipboard.writeText(url);
+                        toast.success('Link exclusivo copiado');
+                      }}
+                    >
+                      Copiar link de venda
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">

@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { upcomingEventsWhere, startOfLocalDay } from '@/lib/events-public';
+import {
+  upcomingEventsWhere,
+  startOfLocalDay,
+  publicListEventsWhere,
+} from '@/lib/events-public';
 import EventCard from '@/components/EventCard';
 
 export const dynamic = 'force-dynamic';
@@ -24,9 +28,9 @@ export default async function Programacao() {
       },
       orderBy: { date: 'asc' },
     }),
-    // últimos 6 encerrados (ajuda a “achar” o site e ver histórico)
+    // últimos 6 encerrados (públicos) — ajuda a “achar” o site
     prisma.event.findMany({
-      where: { date: { lt: cutoff } },
+      where: publicListEventsWhere({ date: { lt: cutoff } }),
       include: {
         ticketTypes: true,
         lotes: true,

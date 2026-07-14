@@ -23,6 +23,11 @@ model Event {
   imageUrl          String?   @db.Text
   salesDeadline     DateTime?
   footerNotice      String?   @db.Text
+  /**
+   * true = não aparece na home / programação pública.
+   * Continua acessível pelo link direto /evento/[slug] (exclusivo / convite).
+   */
+  hidden            Boolean   @default(false)
   allowCancel       Boolean   @default(true)
   cancelHoursBefore Int       @default(24)
   cancelFeePercent  Float     @default(10.0)

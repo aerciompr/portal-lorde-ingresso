@@ -18,12 +18,21 @@ export function endOfLocalDay(d = new Date()): Date {
 }
 
 /**
- * Prisma where: eventos “em cartaz” = data do evento >= início de hoje.
- * (Não usa `new Date()` na hora, senão um show às 20h some às 21h no mesmo dia
- * se a data no banco for meia-noite ou o fuso atrapalhar.)
+ * Prisma where: eventos “em cartaz” na home / programação.
+ * - data >= início de hoje
+ * - hidden = false (exclusivos só por link direto)
  */
 export function upcomingEventsWhere() {
   return {
     date: { gte: startOfLocalDay() },
+    hidden: false,
+  };
+}
+
+/** Eventos públicos (listagem) — inclui filtro de ocultos */
+export function publicListEventsWhere(extra?: Record<string, unknown>) {
+  return {
+    hidden: false,
+    ...extra,
   };
 }

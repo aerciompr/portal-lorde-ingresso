@@ -122,6 +122,7 @@ export async function POST(req: NextRequest) {
         location: body.location ? String(body.location) : null,
         salesDeadline,
         footerNotice: body.footerNotice?.trim() || null,
+        hidden: body.hidden === true || body.hidden === '1' || body.hidden === 1,
         allowCancel: body.allowCancel !== false,
         cancelHoursBefore: parseInt(String(body.cancelHoursBefore || 24), 10) || 24,
         cancelFeePercent: parseFloat(String(body.cancelFeePercent ?? 10)) || 10,
@@ -231,6 +232,10 @@ export async function PUT(req: NextRequest) {
       data.salesDeadline = body.salesDeadline
         ? parseEventDate(String(body.salesDeadline))
         : null;
+    }
+    if (body.hidden !== undefined) {
+      data.hidden =
+        body.hidden === true || body.hidden === '1' || body.hidden === 1;
     }
     if (body.allowCancel !== undefined) data.allowCancel = !!body.allowCancel;
     if (body.cancelHoursBefore != null) {

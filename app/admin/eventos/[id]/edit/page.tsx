@@ -20,6 +20,7 @@ interface EventData {
   location: string | null;
   salesDeadline: string | null;
   footerNotice: string | null;
+  hidden?: boolean;
   allowCancel: boolean;
   cancelHoursBefore: number;
   cancelFeePercent: number;
@@ -50,6 +51,7 @@ export default function EditEventPage() {
     location: '',
     salesDeadline: '',
     footerNotice: '',
+    hidden: false,
     allowCancel: true,
     cancelHoursBefore: 24,
     cancelFeePercent: 10,
@@ -89,6 +91,7 @@ export default function EditEventPage() {
           location: found.location || '',
           salesDeadline: salesStr,
           footerNotice: found.footerNotice || '',
+          hidden: found.hidden === true,
           allowCancel: found.allowCancel ?? true,
           cancelHoursBefore: found.cancelHoursBefore ?? 24,
           cancelFeePercent: found.cancelFeePercent ?? 10,
@@ -213,6 +216,7 @@ export default function EditEventPage() {
         location: form.location,
         salesDeadline: form.salesDeadline || null,
         footerNotice: form.footerNotice.trim() || null,
+        hidden: form.hidden,
         allowCancel: form.allowCancel,
         cancelHoursBefore: form.cancelHoursBefore,
         cancelFeePercent: form.cancelFeePercent,
@@ -485,6 +489,35 @@ export default function EditEventPage() {
               Se deixar em branco, o site exibe o texto padrão: &quot;{DEFAULT_EVENT_FOOTER_NOTICE}&quot;
             </div>
           </div>
+
+          <label className="mt-5 flex items-start gap-3 cursor-pointer rounded-xl border border-amber-500/20 bg-amber-950/15 p-4">
+            <input
+              type="checkbox"
+              className="mt-1 rounded border-white/20"
+              checked={form.hidden}
+              onChange={(e) => updateForm('hidden', e.target.checked)}
+            />
+            <span>
+              <span className="text-sm font-medium text-amber-200">Evento oculto (exclusivo)</span>
+              <span className="block text-[11px] text-zinc-500 mt-0.5">
+                Não lista na home nem em Programação. Venda só pelo link direto (compartilhe com o
+                público convidado). Check-in e admin continuam normais.
+              </span>
+              {event?.slug && form.hidden && (
+                <button
+                  type="button"
+                  className="mt-2 text-xs text-emerald-400 hover:underline"
+                  onClick={() => {
+                    const url = `${window.location.origin}/evento/${event.slug}`;
+                    void navigator.clipboard.writeText(url);
+                    toast.success('Link copiado');
+                  }}
+                >
+                  Copiar link: /evento/{event.slug}
+                </button>
+              )}
+            </span>
+          </label>
 
           <div className="mt-5 flex justify-end">
             <button onClick={handleSave} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-2 rounded-xl text-sm font-medium shadow-sm transition disabled:opacity-60">Salvar Alterações</button>
