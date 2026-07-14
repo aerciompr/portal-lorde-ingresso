@@ -288,24 +288,79 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Só passa stripeAccount no modo Connect real (ver getPaymentClients)
+      const stripeAccount = STRIPE_ACCOUNT_ID || undefined;
+      const stripeOpts = stripeAccount ? { stripeAccount } : undefined;
+
+      // Cliente no Stripe (aparece na coluna "Cliente" do dashboard)
+      const buyerEmail = String(buyer.email || '').trim().toLowerCase();
+      const buyerName = String(buyer.name || '').trim();
+      let customerId: string | undefined;
+      if (buyerEmail) {
+        try {
+          const existing = await stripe.customers.list(
+            { email: buyerEmail, limit: 1 },
+            stripeOpts
+          );
+          if (existing.data[0]?.id) {
+            customerId = existing.data[0].id;
+            await stripe.customers.update(
+              customerId,
+              {
+                name: buyerName || undefined,
+                phone: finalPhone || undefined,
+                metadata: {
+                  cpf: finalCpf || '',
+                  source: 'portal-lorde-nelson',
+                },
+              },
+              stripeOpts
+            );
+          } else {
+            const created = await stripe.customers.create(
+              {
+                email: buyerEmail,
+                name: buyerName || undefined,
+                phone: finalPhone || undefined,
+                metadata: {
+                  cpf: finalCpf || '',
+                  source: 'portal-lorde-nelson',
+                },
+              },
+              stripeOpts
+            );
+            customerId = created.id;
+          }
+        } catch (custErr) {
+          console.warn(
+            '[STRIPE] customers create/list falhou (segue sem customer):',
+            (custErr as Error).message
+          );
+        }
+      }
+
       const createOptions: Stripe.PaymentIntentCreateParams = {
         amount: order.totalCents,
         currency: 'brl',
         automatic_payment_methods: { enabled: true },
         description: `Ingressos ${order.event.title}`.slice(0, 500),
-        metadata: { orderId },
-        receipt_email: buyer.email || undefined,
+        statement_descriptor_suffix: 'LORDE NELSON'.slice(0, 22),
+        receipt_email: buyerEmail || undefined,
+        ...(customerId ? { customer: customerId } : {}),
+        metadata: {
+          orderId,
+          buyer_name: buyerName.slice(0, 500),
+          buyer_email: buyerEmail.slice(0, 500),
+          buyer_cpf: (finalCpf || '').slice(0, 32),
+          buyer_phone: (finalPhone || '').slice(0, 32),
+          event_title: String(order.event.title || '').slice(0, 500),
+          access_code: accessCode.slice(0, 64),
+        },
       };
-
-      // Só passa stripeAccount no modo Connect real (ver getPaymentClients)
-      const stripeAccount = STRIPE_ACCOUNT_ID || undefined;
 
       let paymentIntent: Stripe.PaymentIntent;
       try {
-        paymentIntent = await stripe.paymentIntents.create(
-          createOptions,
-          stripeAccount ? { stripeAccount } : undefined
-        );
+        paymentIntent = await stripe.paymentIntents.create(createOptions, stripeOpts);
       } catch (stripeErr: unknown) {
         const se = stripeErr as { message?: string; raw?: { message?: string } };
         const msg = se?.message || se?.raw?.message || String(stripeErr);
@@ -321,6 +376,7 @@ export async function POST(req: NextRequest) {
       console.log('[STRIPE] PaymentIntent criado', {
         id: paymentIntent.id,
         amount: paymentIntent.amount,
+        customer: customerId || null,
         mode: STRIPE_PUBLISHABLE.startsWith('pk_live') ? 'live' : 'test',
         connect: Boolean(stripeAccount),
       });

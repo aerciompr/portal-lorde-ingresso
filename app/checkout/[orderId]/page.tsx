@@ -304,9 +304,28 @@ export default function CheckoutPage() {
           }
         }
         if (s && data.clientSecret) {
-          const el = s.elements({ clientSecret: data.clientSecret });
+          const el = s.elements({
+            clientSecret: data.clientSecret,
+            appearance: { theme: 'night' },
+          });
           setElements(el);
-          const paymentElement = el.create('payment');
+          // Prefill e-mail/nome do formulário do checkout (coluna Cliente no Stripe)
+          const paymentElement = el.create('payment', {
+            defaultValues: {
+              billingDetails: {
+                name: buyer.name.trim(),
+                email: buyer.email.trim(),
+                phone: buyer.phone ? cleanPhone(buyer.phone) : undefined,
+              },
+            },
+            fields: {
+              billingDetails: {
+                name: 'auto',
+                email: 'auto',
+                phone: 'auto',
+              },
+            },
+          });
           setTimeout(() => {
             const mountEl = document.getElementById('stripe-payment-element');
             if (mountEl) {
@@ -347,6 +366,14 @@ export default function CheckoutPage() {
       elements,
       confirmParams: {
         return_url: `${window.location.origin}/ingressos?email=${encodeURIComponent(buyer.email)}${codeQ}&success=1`,
+        payment_method_data: {
+          billing_details: {
+            name: buyer.name.trim(),
+            email: buyer.email.trim(),
+            phone: buyer.phone ? cleanPhone(buyer.phone) : undefined,
+          },
+        },
+        receipt_email: buyer.email.trim() || undefined,
       },
       redirect: 'always',
     });
