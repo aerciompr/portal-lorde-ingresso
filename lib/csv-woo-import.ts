@@ -58,37 +58,75 @@ function detectDelimiter(headerLine: string): string {
   return semis > commas ? ';' : ',';
 }
 
-/** CSV simples com aspas opcionais */
+/**
+ * CSV RFC-style: aspas, "" escape, e quebras de linha DENTRO de campos entre aspas
+ * (phpMyAdmin exporta description HTML com newlines — não pode dar split em \n cego).
+ */
 export function parseCsv(text: string): string[][] {
   const raw = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const lines = raw.split('\n').filter((l) => l.trim().length > 0);
-  if (!lines.length) return [];
-  const delim = detectDelimiter(lines[0]);
-  const rows: string[][] = [];
-  for (const line of lines) {
-    rows.push(splitCsvLine(line, delim));
-  }
-  return rows;
-}
+  if (!raw.trim()) return [];
 
-function splitCsvLine(line: string, delim: string): string[] {
-  const out: string[] = [];
-  let cur = '';
+  // Delimitador: olha o cabeçalho (até o 1º \n fora de aspas)
+  let headerEnd = raw.length;
   let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
     if (c === '"') {
-      if (inQ && line[i + 1] === '"') {
-        cur += '"';
+      if (inQ && raw[i + 1] === '"') {
         i++;
       } else inQ = !inQ;
-    } else if (c === delim && !inQ) {
-      out.push(cur.trim());
-      cur = '';
-    } else cur += c;
+    } else if (c === '\n' && !inQ) {
+      headerEnd = i;
+      break;
+    }
   }
-  out.push(cur.trim());
-  return out;
+  const headerLine = raw.slice(0, headerEnd);
+  const delim = detectDelimiter(headerLine);
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cur = '';
+  inQ = false;
+
+  const pushCell = () => {
+    row.push(cur.trim());
+    cur = '';
+  };
+  const pushRow = () => {
+    // ignora linhas totalmente vazias
+    if (row.some((c) => c.length > 0)) rows.push(row);
+    row = [];
+  };
+
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (c === '"') {
+      if (inQ && raw[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQ = !inQ;
+      }
+      continue;
+    }
+    if (!inQ && c === delim) {
+      pushCell();
+      continue;
+    }
+    if (!inQ && c === '\n') {
+      pushCell();
+      pushRow();
+      continue;
+    }
+    cur += c;
+  }
+  // última célula/linha (arquivo sem \n final)
+  if (cur.length > 0 || row.length > 0) {
+    pushCell();
+    pushRow();
+  }
+
+  return rows;
 }
 
 function normHeader(h: string): string {

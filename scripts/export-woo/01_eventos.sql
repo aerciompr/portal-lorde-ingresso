@@ -19,7 +19,11 @@ SELECT
   e.start_date AS date,
   TIME_FORMAT(STR_TO_DATE(e.start_date, '%Y-%m-%d %H:%i:%s'), '%H:%i') AS open_time,
   'Lorde Nelson Rest Pub — Maceió/AL' AS address,
-  LEFT(COALESCE(p.post_content, ''), 2000) AS description,
+  -- Sem quebras de linha no CSV (o portal aceita multi-linha, mas export fica mais estável)
+  LEFT(
+    REPLACE(REPLACE(REPLACE(COALESCE(p.post_content, ''), '\r', ' '), '\n', ' '), '\t', ' '),
+    2000
+  ) AS description,
   COALESCE(
     att.guid,
     IF(
