@@ -3,48 +3,11 @@ import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import Header from "@/components/Header";
+import SiteFooter from "@/components/SiteFooter";
 import { getAppSettings } from "@/lib/settings";
 import { absoluteMediaUrl, mimeFromUrl } from "@/lib/media-url";
 import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from "@/lib/contact";
-
-/** Remove frases de dev/gateway que não devem ir ao público */
-function sanitizePublicFooter(text: string): string {
-  return (text || "")
-    .replace(/Pagamentos via Stripe e Mercado Pago\s*/gi, "")
-    .replace(/via Stripe e Mercado Pago\s*/gi, "")
-    .replace(/Stripe Connect[^\n]*/gi, "")
-    .replace(/ngrok[^\n]*/gi, "")
-    .replace(/localhost[^\n]*/gi, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-/** Texto do admin (com \\n e •) → HTML com quebras legíveis */
-function footerTextToHtml(text: string): string {
-  const lines = (text || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n")
-    // bullets viram linha nova (textos antigos “tudo junto com •”)
-    .replace(/\s*[•·]\s*/g, "\n")
-    .split("\n")
-    .map((line) => line.trim());
-
-  const parts: string[] = [];
-  let blankRun = 0;
-  for (const line of lines) {
-    if (!line) {
-      blankRun += 1;
-      continue;
-    }
-    if (parts.length > 0) {
-      // linha em branco no texto → espaço extra entre blocos
-      parts.push(blankRun >= 1 ? '<br /><span class="block h-2"></span>' : "<br />");
-    }
-    blankRun = 0;
-    parts.push(line);
-  }
-  return parts.join("");
-}
+import { parseFooterLayout } from "@/lib/footer-layout";
 
 /** Branding (logo) vem do banco — não cachear layout vazio sem logo */
 export const dynamic = "force-dynamic";
@@ -75,7 +38,6 @@ export async function generateMetadata(): Promise<Metadata> {
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://portal.lordenelson.com.br";
 
-  // Preferência: favicon admin → logo admin → logo estática do app
   const faviconRaw = (
     s.branding.faviconUrl ||
     s.branding.logoUrl ||
@@ -107,30 +69,25 @@ export default async function RootLayout({
   const s = await getAppSettings();
   const b = s.branding;
   const siteName = b.siteName || "Lorde Nelson";
-
   const year = new Date().getFullYear().toString();
-  const footerLeftRaw = sanitizePublicFooter(
-    (b.footerLeft || "").replace(/\{year\}/g, year).trim()
-  );
-  const footerRightRaw = sanitizePublicFooter(
-    (b.footerRight || "").replace(/\{year\}/g, year).trim()
-  );
 
   const waDisplay = s.contact?.whatsappDisplay || WHATSAPP_DISPLAY;
-  const waDigits = (s.contact?.whatsappE164 || "").replace(/\D/g, "") || "5582996471998";
+  const waDigits =
+    (s.contact?.whatsappE164 || "").replace(/\D/g, "") || "5582996471998";
   const waHref = `https://wa.me/${waDigits}`;
   const contactEmail =
     s.contact?.contactEmail || "contato@lordenelson.com.br";
   const instagramUrl = (s.contact?.instagramUrl || "").trim();
-  const igHref = instagramUrl
-    ? instagramUrl.startsWith("http")
-      ? instagramUrl
-      : `https://instagram.com/${instagramUrl.replace(/^@/, "")}`
-    : "";
+
+  const footerLayout = parseFooterLayout(b.footerLayout, {
+    left: b.footerLeft,
+    right: b.footerRight,
+    year,
+    siteName,
+  });
 
   const initialBranding = {
     siteName: b.siteName,
-    // Sempre envia algo: admin → fallback estático (nunca some o topo)
     logoUrl: (b.logoUrl || "").trim() || "/logo-lordenelson.jpg",
     faviconUrl: (b.faviconUrl || "").trim(),
   };
@@ -149,94 +106,18 @@ export default async function RootLayout({
 
         <main className="flex-1">{children}</main>
 
-        <footer className="border-t border-white/10 py-12 text-sm text-zinc-500">
-          <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-10 md:gap-12 items-start">
-            {/* Local / horário */}
-            <div className="space-y-3 leading-relaxed">
-              {footerLeftRaw ? (
-                <div
-                  className="space-y-1 [&>br]:block [&>br]:content-[''] [&>br]:mb-1.5"
-                  dangerouslySetInnerHTML={{ __html: footerTextToHtml(footerLeftRaw) }}
-                />
-              ) : (
-                <>
-                  <p className="text-zinc-300 font-medium tracking-tight">{siteName} Rest Pub</p>
-                  <p>
-                    Rua Silvério Jorge, 241
-                    <br />
-                    Jaraguá — Maceió/AL
-                  </p>
-                  <p className="pt-1 text-zinc-500">
-                    Qui a Sáb
-                    <br />
-                    20h às 02h
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* Direitos + WhatsApp */}
-            <div className="md:text-right space-y-4 leading-relaxed">
-              {footerRightRaw ? (
-                <div
-                  className="space-y-1 [&>br]:block [&>br]:content-[''] [&>br]:mb-1.5"
-                  dangerouslySetInnerHTML={{ __html: footerTextToHtml(footerRightRaw) }}
-                />
-              ) : (
-                <>
-                  <p>
-                    © {year} {siteName}
-                    <br />
-                    Portal moderno de ingressos.
-                  </p>
-                  <p className="text-zinc-600">Check-in no local</p>
-                </>
-              )}
-
-              <div className="pt-1 flex flex-wrap items-center gap-4 md:justify-end text-lg">
-                <a
-                  href={waHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-[#25D366] hover:text-[#3be07a] transition"
-                  aria-label={`WhatsApp ${waDisplay}`}
-                  title={waDisplay}
-                >
-                  <i className="fa-brands fa-whatsapp text-xl leading-none" aria-hidden />
-                  <span className="text-zinc-400 hover:text-zinc-200 hidden sm:inline">
-                    {waDisplay}
-                  </span>
-                </a>
-                {igHref ? (
-                  <a
-                    href={igHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-pink-400/90 hover:text-pink-300 transition"
-                    aria-label="Instagram"
-                    title="Instagram"
-                  >
-                    <i className="fa-brands fa-instagram text-xl leading-none" aria-hidden />
-                  </a>
-                ) : null}
-                <a
-                  href="/contato"
-                  className="text-emerald-400/90 hover:text-emerald-300 transition"
-                  aria-label="Contato por e-mail"
-                  title="Contato"
-                >
-                  <i className="fa-solid fa-envelope text-lg leading-none" aria-hidden />
-                </a>
-                <a
-                  href={`mailto:${contactEmail}`}
-                  className="text-zinc-500 hover:text-zinc-300 text-xs sm:text-sm transition hidden md:inline"
-                >
-                  {contactEmail}
-                </a>
-              </div>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter
+          layout={footerLayout}
+          contact={{
+            siteName,
+            logoUrl: (b.logoUrl || "").trim() || "/logo-lordenelson.jpg",
+            year,
+            whatsappDisplay: waDisplay,
+            whatsappHref: waHref || WHATSAPP_HREF,
+            instagramUrl,
+            contactEmail,
+          }}
+        />
 
         <Toaster position="top-center" richColors closeButton />
       </body>

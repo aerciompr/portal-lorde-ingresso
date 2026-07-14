@@ -14,6 +14,7 @@ export const PUBLIC_SETTING_KEYS = new Set([
   'banner_subtitle',
   'footer_left',
   'footer_right',
+  'footer_layout',
   'public_url',
   'from_email',
   'cancel_hours',

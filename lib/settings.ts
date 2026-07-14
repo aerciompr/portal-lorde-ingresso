@@ -38,6 +38,8 @@ export type AppSettings = {
     bannerSubtitle: string;
     footerLeft: string;
     footerRight: string;
+    /** JSON widgets do rodapé (opcional) */
+    footerLayout: string;
   };
   contact: {
     whatsappDisplay: string;
@@ -86,6 +88,7 @@ const DEFAULTS: AppSettings = {
       'Lorde Nelson Rest Pub\nRua Silvério Jorge, 241\nJaraguá — Maceió/AL\n\nQui a Sáb\n20h às 02h',
     footerRight:
       '© {year} Lorde Nelson\nPortal de ingressos.\n\nCheck-in no local',
+    footerLayout: '',
   },
   contact: {
     whatsappDisplay: '(82) 99647-1998',
@@ -157,6 +160,7 @@ export async function getAppSettings(force = false): Promise<AppSettings> {
       bannerSubtitle: raw.banner_subtitle || raw.BANNER_SUBTITLE || DEFAULTS.branding.bannerSubtitle,
       footerLeft: raw.footer_left || raw.FOOTER_LEFT || DEFAULTS.branding.footerLeft,
       footerRight: raw.footer_right || raw.FOOTER_RIGHT || DEFAULTS.branding.footerRight,
+      footerLayout: raw.footer_layout || raw.FOOTER_LAYOUT || DEFAULTS.branding.footerLayout,
     },
     contact: {
       whatsappDisplay:

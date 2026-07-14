@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import FooterLayoutEditor from '@/components/admin/FooterLayoutEditor';
 
 type Tab = 'taxas' | 'regras' | 'pagamentos' | 'gateways' | 'visual' | 'contato';
+type VisualSub = 'marca' | 'banner' | 'rodape';
 
 export default function AdminConfiguracoes() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<Tab>('visual');
+  const [visualSub, setVisualSub] = useState<VisualSub>('marca');
   const [uploading, setUploading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -603,70 +606,106 @@ export default function AdminConfiguracoes() {
           </section>
         )}
 
-        {/* === TAB: IDENTIDADE VISUAL (com uploads) === */}
+        {/* === TAB: IDENTIDADE VISUAL === */}
         {activeTab === 'visual' && (
           <section>
-            <div className="mb-6">
+            <div className="mb-4">
               <div className="font-semibold text-lg tracking-tight">Identidade Visual</div>
-              <div className="text-xs text-zinc-500">Envie arquivos de imagem ou cole URLs. As imagens são salvas no servidor.</div>
+              <div className="text-xs text-zinc-500">
+                Marca, banner da home e rodapé em widgets (editor de texto avançado).
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
-              {renderImageField(
-                'Logo do Site', 
-                'logo_url', 
-                'Aparece no topo do portal. Recomendado PNG ou SVG com fundo transparente.'
-              )}
+            <div className="flex flex-wrap gap-2 mb-6">
+              {(
+                [
+                  { id: 'marca' as VisualSub, label: '1. Logo e marca' },
+                  { id: 'banner' as VisualSub, label: '2. Banner home' },
+                  { id: 'rodape' as VisualSub, label: '3. Rodapé' },
+                ] as const
+              ).map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setVisualSub(s.id)}
+                  className={`text-xs sm:text-sm px-3 py-1.5 rounded-full border transition ${
+                    visualSub === s.id
+                      ? 'border-emerald-500/50 bg-emerald-950/40 text-emerald-300'
+                      : 'border-white/10 text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
 
-              {renderImageField(
-                'Favicon',
-                'favicon_url',
-                'Ícone da aba do navegador. PNG quadrado (32×32 ou 64×64) ou .ico. Após enviar, use Ctrl+F5 (cache do browser).'
-              )}
-
-              <div className="md:col-span-2">
-                <div className="label mb-1">Nome do Site</div>
-                <input className="input max-w-md" placeholder="Lorde Nelson" value={settings.site_name || ''} onChange={e => setSettings({...settings, site_name: e.target.value})} />
-                <div className="text-[10px] text-zinc-500 mt-1">Usado em títulos, header e metadados.</div>
-              </div>
-
-              <div className="md:col-span-2 border-t border-white/10 pt-6 mt-2">
-                <div className="font-medium text-emerald-400 mb-4">Banner Principal da Home</div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {renderImageField(
-                    'Imagem do Banner', 
-                    'banner_image_url', 
-                    'Imagem grande de fundo no hero da página inicial. Deixe vazio para usar o gradiente padrão.'
-                  )}
-
-                  <div className="space-y-4">
-                    <div>
-                      <div className="label mb-1">Título do Banner</div>
-                      <input className="input" placeholder="LORDE NELSON" value={settings.banner_title || ''} onChange={e => setSettings({...settings, banner_title: e.target.value})} />
-                    </div>
-                    <div>
-                      <div className="label mb-1">Subtítulo / Texto (suporta HTML)</div>
-                      <textarea className="input min-h-[90px]" placeholder="Rest Pub • Shows, forró e grandes jogos..." value={settings.banner_subtitle || ''} onChange={e => setSettings({...settings, banner_subtitle: e.target.value})} />
-                    </div>
+            {visualSub === 'marca' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
+                {renderImageField(
+                  'Logo do Site',
+                  'logo_url',
+                  'Aparece no topo do portal e opcionalmente no rodapé. PNG/SVG com fundo transparente.'
+                )}
+                {renderImageField(
+                  'Favicon',
+                  'favicon_url',
+                  'Ícone da aba do navegador. PNG 32×32 ou 64×64. Após enviar: Ctrl+F5.'
+                )}
+                <div className="md:col-span-2">
+                  <div className="label mb-1">Nome do Site</div>
+                  <input
+                    className="input max-w-md"
+                    placeholder="Lorde Nelson"
+                    value={settings.site_name || ''}
+                    onChange={(e) => setSettings({ ...settings, site_name: e.target.value })}
+                  />
+                  <div className="text-[10px] text-zinc-500 mt-1">
+                    Usado em títulos, header, copyright e metadados.
                   </div>
                 </div>
               </div>
+            )}
 
-              <div className="md:col-span-2 border-t border-white/10 pt-6 mt-2">
-                <div className="font-medium text-emerald-400 mb-4">Rodapé</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {visualSub === 'banner' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {renderImageField(
+                  'Imagem do Banner',
+                  'banner_image_url',
+                  'Fundo do hero na home. Vazio = gradiente padrão.'
+                )}
+                <div className="space-y-4">
                   <div>
-                    <div className="label mb-1">Texto esquerdo (suporta HTML)</div>
-                    <textarea className="input min-h-[90px]" value={settings.footer_left || ''} onChange={e => setSettings({...settings, footer_left: e.target.value})} />
+                    <div className="label mb-1">Título do Banner</div>
+                    <input
+                      className="input"
+                      placeholder="LORDE NELSON"
+                      value={settings.banner_title || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, banner_title: e.target.value })
+                      }
+                    />
                   </div>
                   <div>
-                    <div className="label mb-1">Texto direito (suporta HTML)</div>
-                    <textarea className="input min-h-[90px]" value={settings.footer_right || ''} onChange={e => setSettings({...settings, footer_right: e.target.value})} />
-                    <div className="text-[10px] text-zinc-500 mt-1">Use {"{year}"} para inserir o ano atual automaticamente.</div>
+                    <div className="label mb-1">Subtítulo</div>
+                    <textarea
+                      className="input min-h-[90px]"
+                      placeholder="Rest Pub • Shows, forró e grandes jogos..."
+                      value={settings.banner_subtitle || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, banner_subtitle: e.target.value })
+                      }
+                    />
                   </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {visualSub === 'rodape' && (
+              <FooterLayoutEditor
+                settings={settings}
+                onChange={(patch) => setSettings({ ...settings, ...patch })}
+              />
+            )}
           </section>
         )}
 
