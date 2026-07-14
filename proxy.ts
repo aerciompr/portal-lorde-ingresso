@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifyAdminSessionCookie } from '@/lib/auth-edge';
+import { parseAdminSessionCookie } from '@/lib/auth-edge';
 
 /**
  * Next.js 16: arquivo de borda é `proxy.ts` (não `middleware.ts`).
@@ -17,12 +17,21 @@ export async function proxy(request: NextRequest) {
   if (!needsAuth) return NextResponse.next();
 
   const session = request.cookies.get('admin_session')?.value;
-  if (!(await verifyAdminSessionCookie(session))) {
+  const parsed = await parseAdminSessionCookie(session);
+
+  if (!parsed.ok) {
     const loginUrl = new URL('/admin/login', request.url);
     if (pathname.startsWith('/checkin')) {
       loginUrl.searchParams.set('redirect', '/checkin');
     }
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Check-in only: bloqueia painel admin
+  if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
+    if (parsed.role === 'checkin') {
+      return NextResponse.redirect(new URL('/checkin', request.url));
+    }
   }
 
   return NextResponse.next();

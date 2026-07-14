@@ -175,3 +175,24 @@ model Lote {
 
   @@index([eventId])
 }
+
+/**
+ * Usuários de staff (admin / check-in).
+ * superadmin = login via ADMIN_EMAIL + ADMIN_PASSWORD no .env (não fica nesta tabela).
+ * role: admin = painel admin básico; checkin = só app de check-in.
+ */
+model StaffUser {
+  id           String    @id @default(cuid())
+  email        String    @unique @db.VarChar(191)
+  name         String    @db.VarChar(255)
+  passwordHash String    @db.VarChar(255)
+  /** admin | checkin */
+  role         String    @default("checkin") @db.VarChar(32)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+
+  @@index([role])
+  @@index([active])
+}

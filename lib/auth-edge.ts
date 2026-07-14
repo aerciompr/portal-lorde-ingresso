@@ -3,6 +3,12 @@
  * Espelha lib/auth.ts (HMAC-SHA256 + payload base64url).
  */
 
+export type EdgeSession = {
+  ok: boolean;
+  email?: string;
+  role?: 'superadmin' | 'admin' | 'checkin';
+};
+
 function sessionSecret(): string {
   return (
     process.env.ADMIN_SESSION_SECRET ||
@@ -36,18 +42,20 @@ function timingSafeEqualStr(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export async function verifyAdminSessionCookie(
+export async function parseAdminSessionCookie(
   token: string | undefined | null
-): Promise<boolean> {
-  if (!token) return false;
+): Promise<EdgeSession> {
+  if (!token) return { ok: false };
 
-  // Cookie legado "1" só fora de produção
   if (token === '1') {
-    return process.env.NODE_ENV !== 'production';
+    if (process.env.NODE_ENV !== 'production') {
+      return { ok: true, email: 'admin', role: 'superadmin' };
+    }
+    return { ok: false };
   }
 
   const parts = token.split('.');
-  if (parts.length !== 2) return false;
+  if (parts.length !== 2) return { ok: false };
   const [payload, sig] = parts;
 
   try {
@@ -60,13 +68,24 @@ export async function verifyAdminSessionCookie(
     );
     const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
     const expected = uint8ToBase64Url(mac);
-    if (!timingSafeEqualStr(sig, expected)) return false;
+    if (!timingSafeEqualStr(sig, expected)) return { ok: false };
 
     const json = new TextDecoder().decode(base64UrlToUint8Array(payload));
-    const data = JSON.parse(json) as { exp?: number };
-    if (!data.exp || Date.now() > data.exp) return false;
-    return true;
+    const data = JSON.parse(json) as { exp?: number; e?: string; r?: string };
+    if (!data.exp || Date.now() > data.exp) return { ok: false };
+    const role =
+      data.r === 'checkin' || data.r === 'admin' || data.r === 'superadmin'
+        ? data.r
+        : 'admin';
+    return { ok: true, email: data.e, role };
   } catch {
-    return false;
+    return { ok: false };
   }
+}
+
+export async function verifyAdminSessionCookie(
+  token: string | undefined | null
+): Promise<boolean> {
+  const s = await parseAdminSessionCookie(token);
+  return s.ok;
 }

@@ -29,12 +29,15 @@ export default function AdminLogin() {
       body: JSON.stringify({ email, password }),
     });
     if (res.ok) {
-      // Read redirect reliably at login time
+      const data = await res.json().catch(() => ({}));
       const params = new URLSearchParams(window.location.search);
-      const r = params.get('redirect') || '/admin';
-      window.location.href = r;  // force full navigation to ensure cookie and remount
+      // Check-in only → sempre /checkin; senão redirect da URL ou padrão da API
+      let r = params.get('redirect') || data.redirect || '/admin';
+      if (data.role === 'checkin') r = '/checkin';
+      window.location.href = r;
     } else {
-      toast.error('Credenciais inválidas');
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || 'Credenciais inválidas');
     }
     setLoading(false);
   }
@@ -63,7 +66,11 @@ export default function AdminLogin() {
           onChange={e => setPassword(e.target.value)}
         />
         <button disabled={loading} className="btn btn-primary w-full">Entrar</button>
-        <p className="text-[10px] text-center mt-4 text-zinc-500">Use o email e senha configurados em ADMIN_EMAIL / ADMIN_PASSWORD no .env</p>
+        <p className="text-[10px] text-center mt-4 text-zinc-500">
+          Super admin: ADMIN_EMAIL / ADMIN_PASSWORD no servidor.
+          <br />
+          Equipe: usuários cadastrados em Admin → Usuários (check-in ou administração).
+        </p>
       </form>
     </div>
   );
