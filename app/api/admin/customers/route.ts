@@ -1,0 +1,242 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { isAdmin } from '@/lib/auth';
+
+type Agg = {
+  key: string;
+  name: string;
+  email: string;
+  cpf: string | null;
+  phone: string | null;
+  zip: string | null;
+  street: string | null;
+  number: string | null;
+  complement: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
+  ordersCount: number;
+  paidCount: number;
+  refundedCount: number;
+  pendingCount: number;
+  cancelledCount: number;
+  totalSpentCents: number;
+  totalTickets: number;
+  firstOrderAt: string | null;
+  lastOrderAt: string | null;
+  hasPassword: boolean;
+  sources: string[];
+  recentOrders: {
+    id: string;
+    status: string;
+    totalCents: number;
+    createdAt: string;
+    paidAt: string | null;
+    accessCode: string | null;
+    eventTitle: string;
+    ticketCount: number;
+  }[];
+};
+
+function customerKey(email: string | null | undefined, cpf: string | null | undefined): string | null {
+  const e = (email || '').trim().toLowerCase();
+  if (e && e.includes('@') && e !== 'checkout@pending.local') return `email:${e}`;
+  const c = (cpf || '').replace(/\D/g, '');
+  if (c.length >= 11) return `cpf:${c}`;
+  return null;
+}
+
+/**
+ * GET /api/admin/customers
+ * Agrega compradores a partir de pedidos (e-mail ou CPF).
+ * ?q=  &page=1&limit=50&sort=recent|spent|orders|name
+ */
+export async function GET(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const q = (searchParams.get('q') || '').trim().toLowerCase();
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50));
+  const sort = (searchParams.get('sort') || 'recent').toLowerCase();
+
+  const orders = await prisma.order.findMany({
+    select: {
+      id: true,
+      buyerName: true,
+      buyerEmail: true,
+      buyerCpf: true,
+      buyerPhone: true,
+      buyerZip: true,
+      buyerStreet: true,
+      buyerNumber: true,
+      buyerComplement: true,
+      buyerNeighborhood: true,
+      buyerCity: true,
+      buyerState: true,
+      buyerPasswordHash: true,
+      status: true,
+      totalCents: true,
+      accessCode: true,
+      createdAt: true,
+      paidAt: true,
+      source: true,
+      event: { select: { title: true } },
+      tickets: { select: { id: true, status: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const map = new Map<string, Agg>();
+
+  for (const o of orders) {
+    const key = customerKey(o.buyerEmail, o.buyerCpf);
+    if (!key) continue;
+
+    const email = (o.buyerEmail || '').trim().toLowerCase();
+    const status = (o.status || '').toLowerCase();
+    const ticketCount = (o.tickets || []).filter((t) => t.status !== 'cancelled').length;
+    const createdIso = o.createdAt.toISOString();
+    const paidIso = o.paidAt ? o.paidAt.toISOString() : null;
+
+    let row = map.get(key);
+    if (!row) {
+      row = {
+        key,
+        name: (o.buyerName || '').trim() || '—',
+        email: email.includes('@') ? email : '',
+        cpf: o.buyerCpf || null,
+        phone: o.buyerPhone || null,
+        zip: o.buyerZip || null,
+        street: o.buyerStreet || null,
+        number: o.buyerNumber || null,
+        complement: o.buyerComplement || null,
+        neighborhood: o.buyerNeighborhood || null,
+        city: o.buyerCity || null,
+        state: o.buyerState || null,
+        ordersCount: 0,
+        paidCount: 0,
+        refundedCount: 0,
+        pendingCount: 0,
+        cancelledCount: 0,
+        totalSpentCents: 0,
+        totalTickets: 0,
+        firstOrderAt: createdIso,
+        lastOrderAt: createdIso,
+        hasPassword: Boolean(o.buyerPasswordHash),
+        sources: [],
+        recentOrders: [],
+      };
+      map.set(key, row);
+    }
+
+    row.ordersCount += 1;
+    if (status === 'paid') {
+      row.paidCount += 1;
+      row.totalSpentCents += o.totalCents || 0;
+      row.totalTickets += ticketCount;
+    } else if (status === 'refunded') {
+      row.refundedCount += 1;
+    } else if (status === 'pending') {
+      row.pendingCount += 1;
+    } else if (status === 'cancelled' || status === 'canceled') {
+      row.cancelledCount += 1;
+    }
+
+    if (o.buyerPasswordHash) row.hasPassword = true;
+    if (o.source && !row.sources.includes(o.source)) row.sources.push(o.source);
+
+    // Preferir dados do pedido mais recente (lista já vem desc)
+    if (row.ordersCount === 1 || (row.lastOrderAt && createdIso >= row.lastOrderAt)) {
+      if ((o.buyerName || '').trim() && o.buyerName !== 'Checkout em andamento') {
+        row.name = o.buyerName.trim();
+      }
+      if (email.includes('@')) row.email = email;
+      if (o.buyerCpf) row.cpf = o.buyerCpf;
+      if (o.buyerPhone) row.phone = o.buyerPhone;
+      if (o.buyerZip) row.zip = o.buyerZip;
+      if (o.buyerStreet) row.street = o.buyerStreet;
+      if (o.buyerNumber) row.number = o.buyerNumber;
+      if (o.buyerComplement) row.complement = o.buyerComplement;
+      if (o.buyerNeighborhood) row.neighborhood = o.buyerNeighborhood;
+      if (o.buyerCity) row.city = o.buyerCity;
+      if (o.buyerState) row.state = o.buyerState;
+      row.lastOrderAt = createdIso;
+    }
+    if (!row.firstOrderAt || createdIso < row.firstOrderAt) {
+      row.firstOrderAt = createdIso;
+    }
+
+    if (row.recentOrders.length < 8) {
+      row.recentOrders.push({
+        id: o.id,
+        status: o.status,
+        totalCents: o.totalCents,
+        createdAt: createdIso,
+        paidAt: paidIso,
+        accessCode: o.accessCode,
+        eventTitle: o.event?.title || '—',
+        ticketCount,
+      });
+    }
+  }
+
+  let list = Array.from(map.values());
+
+  // Esconde placeholders sem compra real e sem dados úteis
+  list = list.filter((c) => {
+    if (c.name === 'Checkout em andamento' && c.paidCount === 0 && c.ordersCount <= 1) {
+      return false;
+    }
+    return true;
+  });
+
+  if (q) {
+    const qDigits = q.replace(/\D/g, '');
+    list = list.filter((c) => {
+      if (c.name.toLowerCase().includes(q)) return true;
+      if (c.email.includes(q)) return true;
+      if (c.phone && c.phone.includes(qDigits || q)) return true;
+      if (c.cpf && qDigits && c.cpf.replace(/\D/g, '').includes(qDigits)) return true;
+      if (c.city && c.city.toLowerCase().includes(q)) return true;
+      if (c.recentOrders.some((o) => o.eventTitle.toLowerCase().includes(q))) return true;
+      if (c.recentOrders.some((o) => o.accessCode && o.accessCode.toLowerCase().includes(q))) return true;
+      return false;
+    });
+  }
+
+  if (sort === 'spent') {
+    list.sort((a, b) => b.totalSpentCents - a.totalSpentCents || b.ordersCount - a.ordersCount);
+  } else if (sort === 'orders') {
+    list.sort((a, b) => b.ordersCount - a.ordersCount || b.totalSpentCents - a.totalSpentCents);
+  } else if (sort === 'name') {
+    list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  } else {
+    // recent
+    list.sort((a, b) => (b.lastOrderAt || '').localeCompare(a.lastOrderAt || ''));
+  }
+
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const pageSafe = Math.min(page, totalPages);
+  const slice = list.slice((pageSafe - 1) * limit, pageSafe * limit);
+
+  const summary = {
+    totalCustomers: total,
+    withPaidOrders: list.filter((c) => c.paidCount > 0).length,
+    totalSpentCents: list.reduce((s, c) => s + c.totalSpentCents, 0),
+    totalPaidOrders: list.reduce((s, c) => s + c.paidCount, 0),
+  };
+
+  // Nunca vazar hash de senha
+  return NextResponse.json({
+    customers: slice,
+    page: pageSafe,
+    limit,
+    total,
+    totalPages,
+    summary,
+  });
+}

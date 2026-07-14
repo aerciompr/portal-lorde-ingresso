@@ -46,6 +46,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin', label: 'Dashboard', icon: '📊' },
     { href: '/admin/eventos', label: 'Eventos', icon: '🎟️' },
     { href: '/admin/pedidos', label: 'Pedidos', icon: '📋' },
+    { href: '/admin/clientes', label: 'Clientes', icon: '👥' },
     { href: '/admin/cancelamentos', label: 'Cancelamentos', icon: '↩️' },
     { href: '/admin/importacao', label: 'Importação CSV', icon: '📥' },
     { href: '/admin/ferramentas', label: 'Ferramentas', icon: '🛠️' },
@@ -85,7 +86,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="p-4 space-y-1 text-sm">
           {navItems.map((item) => {
             const isActive =
-              pathname === item.href || (item.href.includes('#') && pathname === '/admin');
+              item.href === '/admin'
+                ? pathname === '/admin'
+                : pathname === item.href ||
+                  (item.href !== '/checkin' && Boolean(pathname?.startsWith(item.href + '/')));
             return (
               <a
                 key={item.href}
