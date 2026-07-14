@@ -104,22 +104,20 @@ export default function Header({
           href="/"
           className="flex items-center gap-2.5 font-semibold tracking-tight text-xl hover:opacity-90 transition min-w-0"
         >
-          {/* Fundo claro leve: logos pretas/circulares não “somem” no header escuro */}
-          <span className="inline-flex items-center justify-center shrink-0 h-11 max-w-[min(200px,48vw)] rounded-xl bg-white/95 px-2 py-1 shadow-sm ring-1 ring-white/20">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              key={logoSrc}
-              src={logoSrc}
-              alt={siteName}
-              className="h-9 w-auto max-w-full object-contain"
-              onError={() => {
-                setCandidateIndex((i) => {
-                  if (i + 1 < candidates.length) return i + 1;
-                  return i;
-                });
-              }}
-            />
-          </span>
+          {/* Logo no formato natural (redonda se for selo); sem caixa branca retangular */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={logoSrc}
+            src={logoSrc}
+            alt={siteName}
+            className="h-10 w-10 sm:h-11 sm:w-11 shrink-0 rounded-full object-cover ring-1 ring-white/15"
+            onError={() => {
+              setCandidateIndex((i) => {
+                if (i + 1 < candidates.length) return i + 1;
+                return i;
+              });
+            }}
+          />
         </Link>
 
         <nav className="hidden md:flex items-center gap-8 text-[13px] font-semibold uppercase tracking-[2.5px] font-[family-name:var(--font-space-grotesk)]">

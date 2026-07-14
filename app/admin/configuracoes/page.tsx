@@ -131,12 +131,17 @@ export default function AdminConfiguracoes() {
             />
           </div>
           {value && (
-            <div className="mt-1 p-2 border border-white/10 rounded bg-zinc-950 flex items-center gap-3">
-              <img 
-                src={value} 
-                alt={label} 
-                className="max-h-12 max-w-[160px] object-contain rounded" 
-                onError={(e) => (e.currentTarget.style.display = 'none')} 
+            <div className="mt-1 p-2 border border-white/10 rounded-xl bg-zinc-950/80 flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={value}
+                alt={label}
+                className={
+                  key === 'logo_url' || key === 'favicon_url'
+                    ? 'h-12 w-12 object-cover rounded-full ring-1 ring-white/15'
+                    : 'max-h-12 max-w-[160px] object-contain rounded'
+                }
+                onError={(e) => (e.currentTarget.style.display = 'none')}
               />
               <button 
                 onClick={() => setSettings({ ...settings, [key]: '' })}

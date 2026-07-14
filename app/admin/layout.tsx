@@ -70,15 +70,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       >
         <div className="p-6 border-b border-white/10">
           <Link href="/admin" className="flex items-center gap-3 min-w-0">
-            <span className="inline-flex items-center justify-center rounded-xl bg-white/95 px-2 py-1 ring-1 ring-white/15">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={logoFailed ? '/logo-lordenelson.jpg' : logoUrl}
-                alt={siteName}
-                className="h-9 w-auto max-w-[150px] object-contain"
-                onError={() => setLogoFailed(true)}
-              />
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoFailed ? '/logo-lordenelson.jpg' : logoUrl}
+              alt={siteName}
+              className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-white/15"
+              onError={() => setLogoFailed(true)}
+            />
           </Link>
           <div className="text-[10px] text-zinc-500 mt-2">Portal Admin</div>
         </div>
