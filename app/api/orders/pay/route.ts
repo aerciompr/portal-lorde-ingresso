@@ -7,25 +7,43 @@ import { signCode } from '@/lib/validate-ticket';
 import { getFeeForMethod, getAppSettings } from '@/lib/settings';
 import { isValidCpf, isValidPhone, cleanCpf, cleanPhone } from '@/lib/masks';
 
-// Load keys preferring DB settings (configurable in admin) over .env
+/**
+ * Stripe: modo padrão = chaves diretas (sk_ + pk_).
+ * Connect só se houver access_token OAuth real (não vazio e diferente do secret).
+ * Evita: stripe_account_id “sobrando” e cobrança não aparecer na conta das chaves.
+ */
 async function getPaymentClients() {
   const s = await getAppSettings();
-  const STRIPE_SECRET = s.payment.stripeSecretKey || process.env.STRIPE_SECRET_KEY || '';
-  const STRIPE_ACCOUNT_ID = s.payment.stripeAccountId || '';
-  const STRIPE_ACCESS_TOKEN = s.payment.stripeAccessToken || STRIPE_SECRET; // prefer OAuth token if present
+  const STRIPE_SECRET = (
+    s.payment.stripeSecretKey ||
+    process.env.STRIPE_SECRET_KEY ||
+    ''
+  ).trim();
+  const STRIPE_ACCOUNT_ID = (s.payment.stripeAccountId || '').trim();
+  const oauthToken = (s.payment.stripeAccessToken || '').trim();
+  const useConnect = Boolean(
+    oauthToken && STRIPE_ACCOUNT_ID && oauthToken !== STRIPE_SECRET
+  );
+  const stripeApiKey = useConnect ? oauthToken : STRIPE_SECRET;
 
   const MP_ACCESS_TOKEN = s.payment.mpAccessToken || process.env.MERCADOPAGO_ACCESS_TOKEN || '';
   const STRIPE_CLIENT_ID = s.payment.stripeClientId || process.env.STRIPE_CLIENT_ID || '';
 
   let stripe: Stripe | null = null;
-  if (STRIPE_ACCESS_TOKEN) {
-    stripe = new Stripe(STRIPE_ACCESS_TOKEN, {
-      // When using Connect OAuth, pass { stripeAccount: STRIPE_ACCOUNT_ID } in individual calls
-    });
+  if (stripeApiKey) {
+    stripe = new Stripe(stripeApiKey);
   }
 
   const mpClient = MP_ACCESS_TOKEN ? new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN }) : null;
-  return { stripe, mpClient, STRIPE_SECRET, MP_ACCESS_TOKEN, STRIPE_ACCOUNT_ID, STRIPE_CLIENT_ID };
+  return {
+    stripe,
+    mpClient,
+    STRIPE_SECRET,
+    MP_ACCESS_TOKEN,
+    STRIPE_ACCOUNT_ID: useConnect ? STRIPE_ACCOUNT_ID : '',
+    STRIPE_CLIENT_ID,
+    useConnect,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -242,23 +260,70 @@ export async function POST(req: NextRequest) {
     // ============================================
     if (gateway === 'stripe' && method === 'card') {
       if (!stripe) {
-        return NextResponse.json({ error: 'Stripe não configurado. Adicione Publishable + Secret Key (ou use o botão Conectar Stripe OAuth) em Admin > Configurações > Gateways.' }, { status: 400 });
+        return NextResponse.json(
+          {
+            error:
+              'Stripe não configurado. Em Admin → Configurações → Gateways, preencha Publishable Key (pk_) e Secret Key (sk_) e salve. Redeploy se as chaves estiverem só no Environment do EasyPanel.',
+          },
+          { status: 400 }
+        );
       }
-      const createOptions: any = {
+      if (!STRIPE_PUBLISHABLE || !STRIPE_PUBLISHABLE.startsWith('pk_')) {
+        return NextResponse.json(
+          {
+            error:
+              'Falta a Publishable Key (pk_live_… ou pk_test_…). Cole em Admin → Gateways ou NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.',
+          },
+          { status: 400 }
+        );
+      }
+      // Stripe BRL: mínimo R$ 0,50 (50 centavos)
+      if (order.totalCents < 50) {
+        return NextResponse.json(
+          {
+            error:
+              'Valor mínimo no Stripe (BRL) é R$ 0,50. Ajuste o preço do ingresso/lote.',
+          },
+          { status: 400 }
+        );
+      }
+
+      const createOptions: Stripe.PaymentIntentCreateParams = {
         amount: order.totalCents,
         currency: 'brl',
         automatic_payment_methods: { enabled: true },
-        description: `Ingressos ${order.event.title}`,
+        description: `Ingressos ${order.event.title}`.slice(0, 500),
         metadata: { orderId },
+        receipt_email: buyer.email || undefined,
       };
 
-      // If Stripe Connect (OAuth) is configured, pass the account id
+      // Só passa stripeAccount no modo Connect real (ver getPaymentClients)
       const stripeAccount = STRIPE_ACCOUNT_ID || undefined;
 
-      const paymentIntent = await stripe.paymentIntents.create(
-        createOptions,
-        stripeAccount ? { stripeAccount } : undefined
-      );
+      let paymentIntent: Stripe.PaymentIntent;
+      try {
+        paymentIntent = await stripe.paymentIntents.create(
+          createOptions,
+          stripeAccount ? { stripeAccount } : undefined
+        );
+      } catch (stripeErr: unknown) {
+        const se = stripeErr as { message?: string; raw?: { message?: string } };
+        const msg = se?.message || se?.raw?.message || String(stripeErr);
+        console.error('[STRIPE] paymentIntents.create falhou:', msg);
+        return NextResponse.json(
+          {
+            error: `Stripe recusou criar o pagamento: ${msg}`,
+          },
+          { status: 400 }
+        );
+      }
+
+      console.log('[STRIPE] PaymentIntent criado', {
+        id: paymentIntent.id,
+        amount: paymentIntent.amount,
+        mode: STRIPE_PUBLISHABLE.startsWith('pk_live') ? 'live' : 'test',
+        connect: Boolean(stripeAccount),
+      });
 
       await prisma.order.update({
         where: { id: orderId },
@@ -274,9 +339,9 @@ export async function POST(req: NextRequest) {
         type: 'stripe',
         clientSecret: paymentIntent.client_secret,
         publishableKey: STRIPE_PUBLISHABLE,
-        stripeAccountId: stripeAccount,
+        stripeAccountId: stripeAccount || null,
         accessCode,
-        message: 'Confirme o cartão. Guarde seu código de acesso.',
+        message: 'Confirme o cartão no formulário.',
       });
     }
 

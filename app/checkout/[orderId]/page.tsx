@@ -289,17 +289,36 @@ export default function CheckoutPage() {
         }
         toast.info('Preencha os dados do cartão abaixo');
 
-        if (stripe && data.clientSecret) {
-          const el = stripe.elements({ clientSecret: data.clientSecret });
+        // Garante Stripe.js com a pk_ retornada pela API (admin/env)
+        let s = stripe;
+        if (!s) {
+          const pub =
+            data.publishableKey ||
+            process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+            '';
+          if (!pub) {
+            toast.error('Publishable Key do Stripe ausente');
+          } else {
+            s = await loadStripe(pub);
+            if (s) setStripe(s);
+          }
+        }
+        if (s && data.clientSecret) {
+          const el = s.elements({ clientSecret: data.clientSecret });
           setElements(el);
-
           const paymentElement = el.create('payment');
           setTimeout(() => {
             const mountEl = document.getElementById('stripe-payment-element');
-            if (mountEl) paymentElement.mount('#stripe-payment-element');
+            if (mountEl) {
+              mountEl.innerHTML = '';
+              paymentElement.mount('#stripe-payment-element');
+            }
           }, 100);
         }
       } else if (data.type === 'simulated') {
+        toast.error(
+          'Pagamento simulado: Stripe não está com chaves válidas em produção. Configure sk_/pk_ no admin.'
+        );
         const code = data.accessCode || '';
         setPaidAccessCode(code);
         if (Array.isArray(data.ticketIds)) setPaidTicketIds(data.ticketIds);

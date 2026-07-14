@@ -542,34 +542,47 @@ export default function AdminConfiguracoes() {
                     <div className="text-[10px] text-zinc-500 mt-0.5">STRIPE_SECRET_KEY</div>
                   </div>
 
-                  {/* Stripe Connect (OAuth) */}
+                  <p className="text-[10px] text-zinc-500 leading-relaxed">
+                    <strong className="text-zinc-400">Modo recomendado: chaves diretas</strong> (pk_ + sk_ da
+                    mesma conta e mesmo modo test/live). Valor mínimo BRL no Stripe: R$ 0,50.
+                    Webhook produção:{' '}
+                    <code className="text-zinc-400">https://portal.lordenelson.com.br/api/webhook/stripe</code>
+                    {' '}
+                    + env <code className="text-zinc-400">STRIPE_WEBHOOK_SECRET</code>.
+                  </p>
+
+                  {/* Connect opcional — se account_id ficar sem token OAuth, o código ignora e usa sk_ */}
                   <div className="pt-3 border-t border-white/10">
-                    <div className="label">Stripe Connect (Login OAuth - recomendado)</div>
+                    <div className="label">Stripe Connect (opcional — não precisa)</div>
                     <div className="text-[10px] text-zinc-400 mb-2">
-                      Conecte via login na sua conta Stripe para descobrir meios de pagamento disponíveis (cartão, boleto etc) sem expor chaves secretas.
+                      Só se usar OAuth. Com chaves diretas, deixe desconectado.
                     </div>
-                    <input className="input font-mono text-xs mb-2" placeholder="ca_... (Client ID do Connect)" value={settings.stripe_client_id || ''} onChange={e => setSettings({...settings, stripe_client_id: e.target.value})} />
-                    
                     {settings.stripe_account_id ? (
-                      <div className="text-emerald-400 text-xs">
-                        ✓ Conectado: {settings.stripe_account_id}
-                        <br />
-                        <span className="text-[10px] text-zinc-400">Meios de pagamento: configure no dashboard Stripe da conta (Payment methods). O checkout usará automatic_payment_methods.</span>
-                        <button 
-                          onClick={() => setSettings({...settings, stripe_account_id: '', stripe_access_token: '', stripe_refresh_token: ''})} 
-                          className="ml-2 text-red-400 hover:underline"
+                      <div className="text-amber-300 text-xs space-y-1">
+                        <div>
+                          Conta Connect salva: {settings.stripe_account_id}
+                          {settings.stripe_access_token
+                            ? ' (com token OAuth)'
+                            : ' (sem token — cobranças usam a Secret Key)'}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSettings({
+                              ...settings,
+                              stripe_account_id: '',
+                              stripe_access_token: '',
+                              stripe_refresh_token: '',
+                              stripe_client_id: '',
+                            })
+                          }
+                          className="text-red-400 hover:underline"
                         >
-                          Desconectar
+                          Limpar Connect (usar só pk_/sk_)
                         </button>
                       </div>
                     ) : (
-                      <a 
-                        href="/api/stripe/connect/authorize" 
-                        className="btn btn-secondary text-xs px-4 py-1.5"
-                        target="_self"
-                      >
-                        Conectar conta Stripe (OAuth)
-                      </a>
+                      <div className="text-[10px] text-zinc-600">Connect não configurado — ok para chaves.</div>
                     )}
                   </div>
                 </div>
