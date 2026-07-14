@@ -339,22 +339,28 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Descrição no Dashboard Stripe: evento + código do pedido (LN / accessCode)
+      const orderCodeLabel = accessCode || orderId;
+      const stripeDescription =
+        `Ingressos ${order.event.title} · Pedido ${orderCodeLabel}`.slice(0, 1000);
+
       const createOptions: Stripe.PaymentIntentCreateParams = {
         amount: order.totalCents,
         currency: 'brl',
         automatic_payment_methods: { enabled: true },
-        description: `Ingressos ${order.event.title}`.slice(0, 500),
+        description: stripeDescription,
         statement_descriptor_suffix: 'LORDE NELSON'.slice(0, 22),
         receipt_email: buyerEmail || undefined,
         ...(customerId ? { customer: customerId } : {}),
         metadata: {
           orderId,
+          access_code: accessCode.slice(0, 64),
+          order_code: orderCodeLabel.slice(0, 64),
           buyer_name: buyerName.slice(0, 500),
           buyer_email: buyerEmail.slice(0, 500),
           buyer_cpf: (finalCpf || '').slice(0, 32),
           buyer_phone: (finalPhone || '').slice(0, 32),
           event_title: String(order.event.title || '').slice(0, 500),
-          access_code: accessCode.slice(0, 64),
         },
       };
 
