@@ -47,6 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/eventos', label: 'Eventos', icon: '🎟️' },
     { href: '/admin/pedidos', label: 'Pedidos', icon: '📋' },
     { href: '/admin/cancelamentos', label: 'Cancelamentos', icon: '↩️' },
+    { href: '/admin/importacao', label: 'Importação CSV', icon: '📥' },
     { href: '/admin/ferramentas', label: 'Ferramentas', icon: '🛠️' },
     { href: '/admin/ingresso-preview', label: 'Layout ingresso', icon: '🎫' },
     { href: '/admin/reports', label: 'Relatórios', icon: '📈' },

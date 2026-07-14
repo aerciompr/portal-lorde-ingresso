@@ -1,5 +1,9 @@
 # Migração WooCommerce → Portal Lorde Nelson
 
+> **Forma recomendada agora:** exportar **CSV** com as queries em  
+> [`MIGRACAO_CSV_WOOCOMMERCE.md`](./MIGRACAO_CSV_WOOCOMMERCE.md) e importar em  
+> **Admin → Importação CSV** (pré-visualiza todos os dados antes de gravar; eventos primeiro, depois pedidos).
+
 ## O que há no dump `lord9962_home.sql` (~131 MB)
 
 | Sistema | Uso |
