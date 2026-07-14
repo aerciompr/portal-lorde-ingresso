@@ -8,6 +8,7 @@ import { getAppSettings } from "@/lib/settings";
 import { absoluteMediaUrl, mimeFromUrl } from "@/lib/media-url";
 import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from "@/lib/contact";
 import { parseFooterLayout } from "@/lib/footer-layout";
+import SiteTracking from "@/components/SiteTracking";
 
 /** Branding (logo) vem do banco — não cachear layout vazio sem logo */
 export const dynamic = "force-dynamic";
@@ -120,6 +121,9 @@ export default async function RootLayout({
         />
 
         <Toaster position="top-center" richColors closeButton />
+
+        {/* Pixels + scripts (Admin → Configurações → Marketing) */}
+        <SiteTracking tracking={s.tracking} />
       </body>
     </html>
   );

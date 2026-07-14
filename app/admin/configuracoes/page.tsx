@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import FooterLayoutEditor from '@/components/admin/FooterLayoutEditor';
 
-type Tab = 'taxas' | 'regras' | 'pagamentos' | 'gateways' | 'visual' | 'contato';
+type Tab = 'taxas' | 'regras' | 'pagamentos' | 'gateways' | 'visual' | 'contato' | 'marketing';
 type VisualSub = 'marca' | 'banner' | 'rodape';
 
 export default function AdminConfiguracoes() {
@@ -100,6 +100,7 @@ export default function AdminConfiguracoes() {
     { id: 'gateways', label: 'Gateways' },
     { id: 'contato', label: 'Contato' },
     { id: 'visual', label: 'Identidade Visual' },
+    { id: 'marketing', label: 'Marketing / Pixel' },
   ];
 
   const renderImageField = (label: string, key: string, note: string) => {
@@ -724,6 +725,137 @@ export default function AdminConfiguracoes() {
                 onChange={(patch) => setSettings({ ...settings, ...patch })}
               />
             )}
+          </section>
+        )}
+
+        {/* === TAB: MARKETING / PIXEL / SCRIPTS === */}
+        {activeTab === 'marketing' && (
+          <section className="max-w-3xl space-y-8">
+            <div>
+              <div className="font-semibold text-lg tracking-tight">Marketing · Pixel e scripts</div>
+              <p className="text-xs text-zinc-500 mt-1">
+                Meta Pixel, Google Analytics, Tag Manager e HTML livre no &lt;head&gt; ou no fim do
+                body. Só administradores editam. Scripts customizados executam em todas as páginas
+                públicas.
+              </p>
+            </div>
+
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 rounded border-white/20"
+                checked={!['0', 'false', 'off'].includes(String(settings.tracking_enabled ?? '1').toLowerCase())}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    tracking_enabled: e.target.checked ? '1' : '0',
+                  })
+                }
+              />
+              <span>
+                <span className="text-sm font-medium text-zinc-200">Ativar tracking / pixels</span>
+                <span className="block text-[11px] text-zinc-500 mt-0.5">
+                  Desmarque para desligar tudo de uma vez (útil em testes).
+                </span>
+              </span>
+            </label>
+
+            <div className="space-y-4 border-t border-white/10 pt-6">
+              <div className="text-sm font-medium text-zinc-300">Pixels prontos (só o ID)</div>
+
+              <div>
+                <div className="label mb-1">Meta / Facebook Pixel ID</div>
+                <input
+                  className="input font-mono text-sm"
+                  placeholder="Ex: 123456789012345"
+                  value={settings.meta_pixel_id || ''}
+                  onChange={(e) =>
+                    setSettings({ ...settings, meta_pixel_id: e.target.value.replace(/\D/g, '').slice(0, 32) })
+                  }
+                  inputMode="numeric"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Events Manager → Pixel → ID (somente números). Injeta PageView automático.
+                </p>
+              </div>
+
+              <div>
+                <div className="label mb-1">Google Analytics 4 (Measurement ID)</div>
+                <input
+                  className="input font-mono text-sm"
+                  placeholder="Ex: G-XXXXXXXXXX"
+                  value={settings.google_analytics_id || ''}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      google_analytics_id: e.target.value.trim().toUpperCase().slice(0, 32),
+                    })
+                  }
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">Formato G-… (também aceita AW-… / GT-…).</p>
+              </div>
+
+              <div>
+                <div className="label mb-1">Google Tag Manager ID</div>
+                <input
+                  className="input font-mono text-sm"
+                  placeholder="Ex: GTM-XXXXXXX"
+                  value={settings.google_tag_manager_id || ''}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      google_tag_manager_id: e.target.value.trim().toUpperCase().slice(0, 24),
+                    })
+                  }
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Se usar GTM, em geral não precisa colar GA/Meta aqui — configure tags dentro do GTM.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 border-t border-white/10 pt-6">
+              <div className="text-sm font-medium text-zinc-300">Scripts / HTML customizado</div>
+              <p className="text-[11px] text-zinc-500">
+                Cole o trecho completo (&lt;script&gt;…&lt;/script&gt;, noscript, etc.). Use com
+                cuidado: código malicioso afeta o site inteiro.
+              </p>
+
+              <div>
+                <div className="label mb-1">HTML / scripts no &lt;head&gt;</div>
+                <textarea
+                  className="input min-h-[140px] font-mono text-xs leading-relaxed"
+                  placeholder={'<!-- Ex: verificação de domínio, outro pixel -->\n<script>...</script>'}
+                  value={settings.head_scripts_html || ''}
+                  onChange={(e) =>
+                    setSettings({ ...settings, head_scripts_html: e.target.value })
+                  }
+                  spellCheck={false}
+                />
+              </div>
+
+              <div>
+                <div className="label mb-1">HTML / scripts no fim do &lt;body&gt;</div>
+                <textarea
+                  className="input min-h-[140px] font-mono text-xs leading-relaxed"
+                  placeholder={'<!-- Ex: chat, heatmap, outro snippet -->\n<script>...</script>'}
+                  value={settings.body_scripts_html || ''}
+                  onChange={(e) =>
+                    setSettings({ ...settings, body_scripts_html: e.target.value })
+                  }
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-3 text-[11px] text-amber-200/90 space-y-1">
+              <p className="font-medium text-amber-300">Dicas</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-amber-200/80">
+                <li>Salve e faça hard refresh (Ctrl+F5) no site público para testar.</li>
+                <li>Meta Pixel Helper / Tag Assistant validam se o pixel disparou.</li>
+                <li>Não cole secret keys ou tokens de API aqui — só códigos de tracking públicos.</li>
+              </ul>
+            </div>
           </section>
         )}
 

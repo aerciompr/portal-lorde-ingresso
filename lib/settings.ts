@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { trackingFromRaw, TRACKING_DEFAULTS, type TrackingSettings } from './tracking';
 
 export type GatewayFees = {
   pixPercent: number;
@@ -49,6 +50,8 @@ export type AppSettings = {
     instagramUrl: string;
     contactNote: string;
   };
+  /** Pixels (Meta/GA/GTM) + HTML custom no head/body */
+  tracking: TrackingSettings;
 };
 
 // Default values (safe fallbacks)
@@ -97,6 +100,7 @@ const DEFAULTS: AppSettings = {
     instagramUrl: '',
     contactNote: 'Respondemos em horário comercial. Para ingressos, use também Meus Ingressos.',
   },
+  tracking: { ...TRACKING_DEFAULTS },
 };
 
 let cachedSettings: AppSettings | null = null;
@@ -178,6 +182,7 @@ export async function getAppSettings(force = false): Promise<AppSettings> {
       instagramUrl: (raw.instagram_url || raw.INSTAGRAM_URL || DEFAULTS.contact.instagramUrl).trim(),
       contactNote: raw.contact_note || DEFAULTS.contact.contactNote,
     },
+    tracking: trackingFromRaw(raw),
   };
 
   cachedSettings = settings;
