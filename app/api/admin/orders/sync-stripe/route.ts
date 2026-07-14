@@ -41,10 +41,12 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     ...batch,
-    message:
-      batch.finalized > 0
-        ? `${batch.finalized} pedido(s) confirmado(s) via Stripe (${batch.checked} verificados)`
-        : `Nenhum novo pago. Verificados: ${batch.checked}`,
+    message: [
+      `${batch.finalized} pago(s)`,
+      `${batch.cancelled} cancelado(s)`,
+      `${batch.feesUpdated} taxa(s) real(is) atualizada(s)`,
+      `${batch.checked} pending verificados`,
+    ].join(' · '),
   });
 }
 
@@ -56,9 +58,10 @@ export async function GET() {
   return NextResponse.json({
     success: true,
     ...batch,
-    message:
-      batch.finalized > 0
-        ? `${batch.finalized} pedido(s) confirmado(s)`
-        : `Nenhum novo. Verificados: ${batch.checked}`,
+    message: [
+      `${batch.finalized} pago(s)`,
+      `${batch.cancelled} cancelado(s)`,
+      `${batch.feesUpdated} taxas atualizadas`,
+    ].join(' · '),
   });
 }

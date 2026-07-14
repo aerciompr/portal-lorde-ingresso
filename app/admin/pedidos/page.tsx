@@ -25,6 +25,7 @@ interface Order {
   grossCents?: number;
   netCents?: number;
   feeCents?: number;
+  feeDetails?: string | null;
   event: { title: string };
   lote?: { nome: string } | null;
   tickets?: TicketRow[];
@@ -43,6 +44,7 @@ export default function AdminPedidos() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [syncingStripe, setSyncingStripe] = useState(false);
+  const [runningCrons, setRunningCrons] = useState(false);
   const limit = 50;
 
   const load = useCallback(async () => {
@@ -196,7 +198,7 @@ export default function AdminPedidos() {
           type="button"
           disabled={syncingStripe}
           className="btn btn-secondary text-sm disabled:opacity-50"
-          title="Consulta Stripe e marca pending já cobrados como pagos"
+          title="Consulta Stripe: pagos, cancelados e taxas reais (líquido)"
           onClick={async () => {
             setSyncingStripe(true);
             try {
@@ -208,7 +210,10 @@ export default function AdminPedidos() {
               });
               const data = await res.json();
               if (!res.ok) throw new Error(data.error || 'Falha');
-              toast.success(data.message || 'Sincronizado');
+              toast.success(
+                data.message ||
+                  `OK: ${data.finalized ?? 0} pagos · ${data.cancelled ?? 0} cancel. · ${data.feesUpdated ?? 0} taxas`
+              );
               load();
             } catch (e) {
               toast.error((e as Error).message);
@@ -218,6 +223,40 @@ export default function AdminPedidos() {
           }}
         >
           {syncingStripe ? 'Sincronizando…' : 'Sincronizar Stripe'}
+        </button>
+        <button
+          type="button"
+          disabled={runningCrons}
+          className="btn btn-secondary text-sm disabled:opacity-50"
+          title="Roda sync Stripe + PIX + limpeza de pendentes + viradas (substitui cron externo)"
+          onClick={async () => {
+            if (
+              !confirm(
+                'Rodar sincronização completa agora?\n\n• Stripe / PIX\n• Cancelar pending abandonados\n• Viradas de lote'
+              )
+            ) {
+              return;
+            }
+            setRunningCrons(true);
+            try {
+              const res = await fetch('/api/admin/orders/run-crons', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'Falha nos crons');
+              toast.success(data.message || 'Crons executados');
+              load();
+            } catch (e) {
+              toast.error((e as Error).message);
+            } finally {
+              setRunningCrons(false);
+            }
+          }}
+        >
+          {runningCrons ? 'Rodando…' : 'Rodar crons agora'}
         </button>
         <a href="/admin/ingresso-preview" className="btn btn-secondary text-sm inline-flex items-center gap-1.5">
           <FileText size={14} /> Layout + PDF exemplo
@@ -278,7 +317,29 @@ export default function AdminPedidos() {
                     <td>{o.event.title}</td>
                     <td className="text-xs">{o.lote?.nome || '—'}</td>
                     <td>{formatPrice(o.grossCents || o.totalCents)}</td>
-                    <td className="text-emerald-400">{formatPrice(o.netCents || 0)}</td>
+                    <td>
+                      <span
+                        className={
+                          (o.netCents ?? 0) < 0
+                            ? 'text-red-400 font-medium'
+                            : (o.netCents ?? 0) > 0
+                              ? 'text-emerald-400'
+                              : 'text-zinc-400'
+                        }
+                        title={
+                          o.feeCents != null
+                            ? `Taxa retida: ${formatPrice(o.feeCents)}${o.feeDetails ? ` · ${o.feeDetails}` : ''}`
+                            : o.feeDetails || 'Líquido após taxas do gateway'
+                        }
+                      >
+                        {formatPrice(o.netCents ?? 0)}
+                      </span>
+                      {(o.feeCents ?? 0) > 0 && (
+                        <div className="text-[10px] text-zinc-500">
+                          taxa {formatPrice(o.feeCents || 0)}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <StatusBadge status={o.status} />
                     </td>

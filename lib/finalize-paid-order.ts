@@ -16,6 +16,11 @@ export async function finalizePaidOrder(
     paymentId?: string;
     paymentMethod?: 'pix' | 'card' | string;
     paymentGateway?: string;
+    /** Quando informado (ex. balance_transaction Stripe), sobrescreve estimativa de taxas */
+    grossCents?: number;
+    feeCents?: number;
+    netCents?: number;
+    feeDetails?: string;
   }
 ): Promise<{ ok: boolean; alreadyPaid?: boolean; error?: string }> {
   const order = await prisma.order.findUnique({
@@ -31,15 +36,29 @@ export async function finalizePaidOrder(
 
   const method = options?.paymentMethod || order.paymentMethod || 'pix';
   const feeInfo = await getFeeForMethod(method === 'card' ? 'card' : 'pix');
-  const fee = Math.round(order.totalCents * feeInfo.percent / 100) + feeInfo.fixedCents;
+  const estimatedFee =
+    Math.round((order.totalCents * feeInfo.percent) / 100) + feeInfo.fixedCents;
+
+  // Preferência: valores reais do gateway (Stripe balance_transaction)
+  const grossCents =
+    typeof options?.grossCents === 'number' ? options.grossCents : order.totalCents;
+  const fee =
+    typeof options?.feeCents === 'number' ? options.feeCents : estimatedFee;
+  const netCents =
+    typeof options?.netCents === 'number'
+      ? options.netCents
+      : grossCents - fee;
+  const feeDetails =
+    options?.feeDetails ||
+    `${feeInfo.details}${typeof options?.netCents === 'number' ? '' : ' (estimado)'}`;
 
   const updateData: Record<string, unknown> = {
     status: 'paid',
     paidAt: new Date(),
-    grossCents: order.totalCents,
-    netCents: order.totalCents - fee,
+    grossCents,
+    netCents,
     feeCents: fee,
-    feeDetails: feeInfo.details,
+    feeDetails: String(feeDetails).slice(0, 250),
   };
 
   if (options?.paymentId) updateData.paymentId = String(options.paymentId);

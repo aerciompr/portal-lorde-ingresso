@@ -166,6 +166,33 @@ export default function AdminDashboard() {
     }
   }
 
+  async function runAllCrons() {
+    if (
+      !confirm(
+        'Rodar crons agora (Stripe, PIX, limpar pendentes, viradas)?\n\nNão depende de CRON_SECRET externo.'
+      )
+    ) {
+      return;
+    }
+    setSyncingStripe(true);
+    try {
+      const res = await fetch('/api/admin/orders/run-crons', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha');
+      toast.success(data.message || 'Crons ok');
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncingStripe(false);
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -218,9 +245,18 @@ export default function AdminDashboard() {
             disabled={syncingStripe}
             onClick={syncStripePendings}
             className="text-xs px-3 py-2 rounded-xl border border-sky-500/30 text-sky-300 hover:bg-sky-950/40 disabled:opacity-50"
-            title="Consulta o Stripe e marca como pagos os pending já cobrados"
+            title="Consulta o Stripe: pagos, cancelados e líquido real"
           >
             {syncingStripe ? 'Sincronizando Stripe…' : 'Sincronizar cartão (Stripe)'}
+          </button>
+          <button
+            type="button"
+            disabled={syncingStripe}
+            onClick={runAllCrons}
+            className="text-xs px-3 py-2 rounded-xl border border-violet-500/30 text-violet-300 hover:bg-violet-950/40 disabled:opacity-50"
+            title="Executa sync + limpeza como se o cron tivesse rodado"
+          >
+            Rodar crons agora
           </button>
           {dash.pendingCount > 0 && (
             <button

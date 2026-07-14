@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 import { getAppSettings } from '@/lib/settings';
-import { finalizePaidOrder } from '@/lib/finalize-paid-order';
 import { reconcileByPaymentIntent } from '@/lib/stripe-reconcile';
 
 async function getStripeAndSecret() {
@@ -27,25 +26,23 @@ async function getStripeAndSecret() {
 }
 
 async function markPaidFromIntent(paymentIntent: Stripe.PaymentIntent) {
+  // Sempre via reconcile (aplica taxa/líquido reais da balance_transaction)
   const orderId = String(paymentIntent.metadata?.orderId || '').trim();
   if (orderId) {
-    const result = await finalizePaidOrder(orderId, {
-      paymentId: paymentIntent.id,
-      paymentMethod: 'card',
-      paymentGateway: 'stripe',
+    const { reconcileStripeOrder } = await import('@/lib/stripe-reconcile');
+    const result = await reconcileStripeOrder(orderId, {
+      paymentIntentId: paymentIntent.id,
     });
     if (result.ok) {
       console.log(
-        `[STRIPE] paid ${orderId}${result.alreadyPaid ? ' (already)' : ''}`
+        `[STRIPE] paid ${orderId} status=${result.status}${result.alreadyPaid ? ' (already)' : ''}`
       );
     } else {
       console.warn(`[STRIPE] finalize failed ${orderId}:`, result.error);
-      // Fallback: achar por paymentId
       await reconcileByPaymentIntent(paymentIntent.id);
     }
     return;
   }
-  // Sem metadata — reconcilia pelo id do PI
   const r = await reconcileByPaymentIntent(paymentIntent.id);
   console.log('[STRIPE] reconcile by PI', paymentIntent.id, r);
 }
