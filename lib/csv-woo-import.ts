@@ -10,6 +10,24 @@ export type CsvEventRow = {
   open_time: string;
   address: string;
   description: string;
+  /** URL da imagem no site antigo (baixada no import) */
+  image_url: string;
+  _row: number;
+  _errors: string[];
+};
+
+/** Lote / tipo de ingresso (produto Tribe) */
+export type CsvLoteRow = {
+  product_external_id: string;
+  event_external_id: string;
+  nome: string;
+  price: string;
+  capacity: string;
+  stock: string;
+  stock_status: string;
+  sold_out: string;
+  sold: string;
+  product_status: string;
   _row: number;
   _errors: string[];
 };
@@ -123,6 +141,7 @@ export function parseEventsCsv(text: string): {
       open_time: o.open_time || o.opentime || o.hora || '',
       address: o.address || o.endereco || 'Lorde Nelson Rest Pub — Maceió/AL',
       description: o.description || o.descricao || '',
+      image_url: o.image_url || o.image || o.imagem || o.thumb || '',
       _row: i + 1,
       _errors: errors,
     };
@@ -197,6 +216,71 @@ export function parseOrdersCsv(text: string): {
     rows.push(row);
   }
   return { rows, headers, validCount, errorCount, orderCount: orderIds.size };
+}
+
+export function parseLotesCsv(text: string): {
+  rows: CsvLoteRow[];
+  headers: string[];
+  validCount: number;
+  errorCount: number;
+  soldOutCount: number;
+} {
+  const table = parseCsv(text);
+  if (table.length < 2) {
+    return { rows: [], headers: [], validCount: 0, errorCount: 0, soldOutCount: 0 };
+  }
+  const headers = table[0].map(normHeader);
+  const rows: CsvLoteRow[] = [];
+  let validCount = 0;
+  let errorCount = 0;
+  let soldOutCount = 0;
+
+  for (let i = 1; i < table.length; i++) {
+    const o = rowToObj(headers, table[i]);
+    const product_external_id =
+      o.product_external_id || o.product_id || o.external_id || '';
+    const event_external_id = o.event_external_id || o.event_id || '';
+    const nome = o.nome || o.name || o.ticket_name || o.title || '';
+    const price = o.price || o.preco || '0';
+    const capacity = o.capacity || o.total_qty || o.total || '0';
+    const stock = o.stock || o.estoque || '0';
+    const stock_status = (o.stock_status || '').toLowerCase();
+    const sold = o.sold || o.vendidos || '';
+    const sold_out =
+      o.sold_out === '1' ||
+      o.sold_out === 'true' ||
+      stock_status === 'outofstock' ||
+      o.esgotado === '1'
+        ? '1'
+        : '0';
+
+    const errors: string[] = [];
+    if (!product_external_id) errors.push('product_external_id vazio');
+    if (!event_external_id) errors.push('event_external_id vazio');
+    if (!nome) errors.push('nome vazio');
+
+    const row: CsvLoteRow = {
+      product_external_id,
+      event_external_id,
+      nome,
+      price,
+      capacity,
+      stock,
+      stock_status,
+      sold_out,
+      sold,
+      product_status: o.product_status || '',
+      _row: i + 1,
+      _errors: errors,
+    };
+    if (errors.length) errorCount += 1;
+    else {
+      validCount += 1;
+      if (sold_out === '1') soldOutCount += 1;
+    }
+    rows.push(row);
+  }
+  return { rows, headers, validCount, errorCount, soldOutCount };
 }
 
 export function moneyToCents(v: string): number {

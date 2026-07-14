@@ -1,67 +1,32 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { toast } from 'sonner';
 
-type Step = 'events' | 'orders';
-
-type PreviewEvents = {
-  total: number;
-  validCount: number;
-  errorCount: number;
-  fileName: string;
-  rows: Array<{
-    external_id: string;
-    title: string;
-    date: string;
-    open_time: string;
-    address: string;
-    _row: number;
-    _errors: string[];
-  }>;
-};
-
-type PreviewOrders = {
-  total: number;
-  validCount: number;
-  errorCount: number;
-  orderCount: number;
-  eventsMatched: number;
-  eventsReferenced: number;
-  fileName: string;
-  truncated?: boolean;
-  rows: Array<{
-    external_id: string;
-    event_external_id: string;
-    ticket_name: string;
-    price: string;
-    qty: string;
-    buyer_name: string;
-    buyer_email: string;
-    status: string;
-    _row: number;
-    _errors: string[];
-  }>;
-};
+type Step = 'events' | 'lotes' | 'orders';
 
 export default function AdminImportacaoPage() {
   const [step, setStep] = useState<Step>('events');
   const [file, setFile] = useState<File | null>(null);
   const [replace, setReplace] = useState(false);
+  const [downloadImages, setDownloadImages] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [previewEvents, setPreviewEvents] = useState<PreviewEvents | null>(null);
-  const [previewOrders, setPreviewOrders] = useState<PreviewOrders | null>(null);
+  const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
+
+  function endpoint() {
+    if (step === 'events') return '/api/admin/import/events';
+    if (step === 'lotes') return '/api/admin/import/lotes';
+    return '/api/admin/import/orders';
+  }
 
   function onPick(f: File | null) {
     setFile(f);
-    setPreviewEvents(null);
-    setPreviewOrders(null);
+    setPreview(null);
     setResult(null);
   }
 
-  async function preview() {
+  async function previewCsv() {
     if (!file) {
       toast.error('Escolha um CSV');
       return;
@@ -72,19 +37,15 @@ export default function AdminImportacaoPage() {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('action', 'preview');
-      const url =
-        step === 'events' ? '/api/admin/import/events' : '/api/admin/import/orders';
-      const res = await fetch(url, { method: 'POST', credentials: 'include', body: fd });
+      const res = await fetch(endpoint(), {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha no preview');
-      if (step === 'events') {
-        setPreviewEvents(data);
-        setPreviewOrders(null);
-      } else {
-        setPreviewOrders(data);
-        setPreviewEvents(null);
-      }
-      toast.success('Pré-visualização pronta — confira a tabela abaixo');
+      setPreview(data);
+      toast.success('Pré-visualização pronta — confira a tabela');
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -93,28 +54,38 @@ export default function AdminImportacaoPage() {
   }
 
   async function doImport() {
-    if (!file) return;
-    const msg =
-      step === 'events'
-        ? `Importar ${previewEvents?.validCount ?? 0} eventos válidos?`
-        : `Importar ${previewOrders?.orderCount ?? 0} pedidos válidos? (cancelamento self-service desligado)`;
-    if (!confirm(msg)) return;
+    if (!file || !preview) return;
+    const valid = Number(preview.validCount || 0);
+    if (!valid) {
+      toast.error('Nenhuma linha válida para importar');
+      return;
+    }
+    const labels = {
+      events: 'eventos',
+      lotes: 'lotes',
+      orders: 'pedidos',
+    };
+    if (!confirm(`Importar ${valid} linhas de ${labels[step]}?`)) return;
     setLoading(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('action', 'import');
       fd.append('replace', replace ? '1' : '0');
-      const url =
-        step === 'events' ? '/api/admin/import/events' : '/api/admin/import/orders';
-      const res = await fetch(url, { method: 'POST', credentials: 'include', body: fd });
+      if (step === 'events') {
+        fd.append('download_images', downloadImages ? '1' : '0');
+      }
+      const res = await fetch(endpoint(), {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha na importação');
       setResult(data);
       toast.success(
-        step === 'events'
-          ? `Eventos: +${data.created} criados, ${data.skipped} ignorados`
-          : `Pedidos: +${data.created} criados, ${data.skipped} ignorados`
+        `OK: +${data.created ?? 0} criados · ${data.skipped ?? 0} ignorados` +
+          (data.imagesOk != null ? ` · fotos ${data.imagesOk}` : '')
       );
     } catch (e) {
       toast.error((e as Error).message);
@@ -123,234 +94,264 @@ export default function AdminImportacaoPage() {
     }
   }
 
+  const rows = (preview?.rows as Array<Record<string, unknown>>) || [];
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Importação WooCommerce (CSV)</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          1) Eventos → 2) Pedidos. Antes de gravar, o sistema mostra os dados para conferência.
-          Queries SQL:{' '}
-          <Link href="/docs/MIGRACAO_CSV_WOOCOMMERCE.md" className="text-emerald-400 hover:underline">
-            docs/MIGRACAO_CSV_WOOCOMMERCE.md
-          </Link>{' '}
-          (arquivo no repositório).
+          Ordem: <strong className="text-zinc-300">1. Eventos</strong> (com fotos) →{' '}
+          <strong className="text-zinc-300">2. Lotes</strong> (preços, estoque, esgotados) →{' '}
+          <strong className="text-zinc-300">3. Pedidos</strong>. Sempre pré-visualize antes de gravar.
+        </p>
+        <p className="text-xs text-zinc-600 mt-1">
+          SQL no repo: <code className="text-zinc-400">scripts/export-woo/</code> · Doc:{' '}
+          <code className="text-zinc-400">docs/MIGRACAO_CSV_WOOCOMMERCE.md</code>
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setStep('events');
-            onPick(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-sm border transition ${
-            step === 'events'
-              ? 'border-emerald-500/50 bg-emerald-950/40 text-emerald-300'
-              : 'border-white/10 text-zinc-400'
-          }`}
-        >
-          1. Eventos
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setStep('orders');
-            onPick(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-sm border transition ${
-            step === 'orders'
-              ? 'border-emerald-500/50 bg-emerald-950/40 text-emerald-300'
-              : 'border-white/10 text-zinc-400'
-          }`}
-        >
-          2. Pedidos vendidos
-        </button>
+        {(
+          [
+            { id: 'events' as Step, label: '1. Eventos + fotos' },
+            { id: 'lotes' as Step, label: '2. Lotes / preços' },
+            { id: 'orders' as Step, label: '3. Pedidos vendidos' },
+          ] as const
+        ).map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => {
+              setStep(s.id);
+              onPick(null);
+            }}
+            className={`px-4 py-2 rounded-xl text-sm border transition ${
+              step === s.id
+                ? 'border-emerald-500/50 bg-emerald-950/40 text-emerald-300'
+                : 'border-white/10 text-zinc-400'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
       </div>
 
       <div className="card p-5 space-y-4">
         <div className="text-sm text-zinc-400">
-          {step === 'events' ? (
+          {step === 'events' && (
             <>
-              Exporte <code className="text-zinc-300">eventos.csv</code> com a query da seção 1 do
-              doc e envie aqui.
+              CSV de <code className="text-zinc-300">01_eventos.sql</code> (colunas include{' '}
+              <code className="text-zinc-300">image_url</code>). O import pode baixar as imagens
+              para o storage do portal.
             </>
-          ) : (
+          )}
+          {step === 'lotes' && (
             <>
-              Exporte <code className="text-zinc-300">pedidos.csv</code> (seção 2). Importe{' '}
-              <strong className="text-zinc-300">eventos primeiro</strong>, senão linhas sem evento
-              caem no fallback “Importado Woo”.
+              CSV de <code className="text-zinc-300">01b_lotes.sql</code>: preço real, capacity,
+              stock, sold, sold_out. Cria <strong className="text-zinc-300">Lote</strong> +{' '}
+              <strong className="text-zinc-300">TicketType</strong>. Esgotados ficam com{' '}
+              <code className="text-zinc-300">ativo=false</code>.
+            </>
+          )}
+          {step === 'orders' && (
+            <>
+              CSV de <code className="text-zinc-300">02_pedidos.sql</code>. Liga ao lote/produto via{' '}
+              <code className="text-zinc-300">product_external_id</code>. Sem cancelamento
+              self-service.
             </>
           )}
         </div>
 
-        <div>
-          <input
-            type="file"
-            accept=".csv,text/csv,text/plain"
-            className="text-sm text-zinc-300"
-            onChange={(e) => onPick(e.target.files?.[0] || null)}
-          />
-          {file && (
-            <div className="text-xs text-zinc-500 mt-1">
-              Arquivo: {file.name} ({Math.round(file.size / 1024)} KB)
-            </div>
+        <input
+          type="file"
+          accept=".csv,text/csv,text/plain"
+          className="text-sm text-zinc-300"
+          onChange={(e) => onPick(e.target.files?.[0] || null)}
+        />
+        {file && (
+          <div className="text-xs text-zinc-500">
+            {file.name} ({Math.round(file.size / 1024)} KB)
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-4 text-sm text-zinc-400">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={replace}
+              onChange={(e) => setReplace(e.target.checked)}
+            />
+            Substituir já importados
+          </label>
+          {step === 'events' && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={downloadImages}
+                onChange={(e) => setDownloadImages(e.target.checked)}
+              />
+              Baixar fotos dos eventos
+            </label>
           )}
         </div>
-
-        <label className="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={replace}
-            onChange={(e) => setReplace(e.target.checked)}
-          />
-          Substituir registros já importados (mesmo external_id)
-        </label>
 
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             disabled={!file || loading}
-            onClick={preview}
+            onClick={previewCsv}
             className="btn btn-secondary disabled:opacity-50"
           >
-            {loading ? '…' : 'Pré-visualizar dados'}
+            {loading ? '…' : 'Pré-visualizar todos os dados'}
           </button>
           <button
             type="button"
-            disabled={
-              loading ||
-              !file ||
-              (step === 'events' ? !previewEvents?.validCount : !previewOrders?.validCount)
-            }
+            disabled={loading || !preview || !Number(preview.validCount || 0)}
             onClick={doImport}
             className="btn btn-primary disabled:opacity-50"
           >
-            {step === 'events' ? 'Importar eventos' : 'Importar pedidos'}
+            Confirmar importação
           </button>
         </div>
       </div>
 
-      {/* Preview eventos */}
-      {previewEvents && (
+      {preview && (
         <div className="space-y-3">
-          <div className="flex flex-wrap gap-3 text-sm">
-            <span className="px-3 py-1 rounded-full bg-zinc-800 text-zinc-300">
-              {previewEvents.total} linhas
-            </span>
-            <span className="px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400">
-              {previewEvents.validCount} válidas
-            </span>
-            <span className="px-3 py-1 rounded-full bg-red-500/15 text-red-400">
-              {previewEvents.errorCount} com erro
-            </span>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <Chip>{String(preview.total)} linhas</Chip>
+            <Chip tone="ok">{String(preview.validCount)} válidas</Chip>
+            <Chip tone="bad">{String(preview.errorCount)} erros</Chip>
+            {preview.orderCount != null && (
+              <Chip tone="sky">{String(preview.orderCount)} pedidos</Chip>
+            )}
+            {preview.soldOutCount != null && (
+              <Chip tone="amber">{String(preview.soldOutCount)} esgotados</Chip>
+            )}
+            {preview.withImageUrl != null && (
+              <Chip tone="sky">{String(preview.withImageUrl)} com foto</Chip>
+            )}
+            {preview.eventsMatched != null && (
+              <Chip tone="amber">
+                eventos CSV {String(preview.eventsReferenced)} · no portal{' '}
+                {String(preview.eventsMatched)}
+              </Chip>
+            )}
           </div>
-          <div className="overflow-x-auto rounded-2xl border border-white/10 max-h-[480px] overflow-y-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="sticky top-0 bg-zinc-900 text-zinc-400">
-                <tr>
-                  <th className="p-2">#</th>
-                  <th className="p-2">external_id</th>
-                  <th className="p-2">title</th>
-                  <th className="p-2">date</th>
-                  <th className="p-2">hora</th>
-                  <th className="p-2">erros</th>
-                </tr>
-              </thead>
-              <tbody>
-                {previewEvents.rows.map((r) => (
-                  <tr
-                    key={r._row}
-                    className={
-                      r._errors.length
-                        ? 'bg-red-950/20 border-t border-white/5'
-                        : 'border-t border-white/5'
-                    }
-                  >
-                    <td className="p-2 text-zinc-500">{r._row}</td>
-                    <td className="p-2 font-mono">{r.external_id}</td>
-                    <td className="p-2">{r.title}</td>
-                    <td className="p-2 whitespace-nowrap">{r.date}</td>
-                    <td className="p-2">{r.open_time}</td>
-                    <td className="p-2 text-red-400">{r._errors.join('; ')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
-      {/* Preview pedidos */}
-      {previewOrders && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-3 text-sm">
-            <span className="px-3 py-1 rounded-full bg-zinc-800 text-zinc-300">
-              {previewOrders.total} linhas
-            </span>
-            <span className="px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400">
-              {previewOrders.validCount} válidas
-            </span>
-            <span className="px-3 py-1 rounded-full bg-sky-500/15 text-sky-300">
-              {previewOrders.orderCount} pedidos
-            </span>
-            <span className="px-3 py-1 rounded-full bg-amber-500/15 text-amber-300">
-              eventos no CSV: {previewOrders.eventsReferenced} · achados no portal:{' '}
-              {previewOrders.eventsMatched}
-            </span>
-            <span className="px-3 py-1 rounded-full bg-red-500/15 text-red-400">
-              {previewOrders.errorCount} com erro
-            </span>
-          </div>
-          {previewOrders.eventsMatched < previewOrders.eventsReferenced && (
-            <div className="text-sm text-amber-300 bg-amber-950/30 border border-amber-500/20 rounded-xl px-4 py-3">
-              Alguns <code>event_external_id</code> não existem no portal. Importe o CSV de eventos
-              primeiro ou essas linhas usarão o evento fallback.
-            </div>
-          )}
-          {previewOrders.truncated && (
-            <div className="text-xs text-zinc-500">
-              Tabela mostra as primeiras 500 linhas; o import usa o arquivo inteiro.
-            </div>
-          )}
-          <div className="overflow-x-auto rounded-2xl border border-white/10 max-h-[480px] overflow-y-auto">
+          <div className="overflow-x-auto rounded-2xl border border-white/10 max-h-[520px] overflow-y-auto">
             <table className="w-full text-xs text-left">
-              <thead className="sticky top-0 bg-zinc-900 text-zinc-400">
+              <thead className="sticky top-0 bg-zinc-900 text-zinc-400 z-10">
                 <tr>
-                  <th className="p-2">#</th>
-                  <th className="p-2">pedido</th>
-                  <th className="p-2">evento</th>
-                  <th className="p-2">ingresso</th>
-                  <th className="p-2">R$</th>
-                  <th className="p-2">qty</th>
-                  <th className="p-2">cliente</th>
-                  <th className="p-2">e-mail</th>
-                  <th className="p-2">status</th>
-                  <th className="p-2">erros</th>
+                  {step === 'events' && (
+                    <>
+                      <th className="p-2">#</th>
+                      <th className="p-2">id</th>
+                      <th className="p-2">título</th>
+                      <th className="p-2">data</th>
+                      <th className="p-2">foto</th>
+                      <th className="p-2">erros</th>
+                    </>
+                  )}
+                  {step === 'lotes' && (
+                    <>
+                      <th className="p-2">#</th>
+                      <th className="p-2">produto</th>
+                      <th className="p-2">evento</th>
+                      <th className="p-2">nome</th>
+                      <th className="p-2">R$</th>
+                      <th className="p-2">cap</th>
+                      <th className="p-2">stock</th>
+                      <th className="p-2">sold</th>
+                      <th className="p-2">esgotado</th>
+                      <th className="p-2">erros</th>
+                    </>
+                  )}
+                  {step === 'orders' && (
+                    <>
+                      <th className="p-2">#</th>
+                      <th className="p-2">pedido</th>
+                      <th className="p-2">evento</th>
+                      <th className="p-2">ingresso</th>
+                      <th className="p-2">R$</th>
+                      <th className="p-2">qty</th>
+                      <th className="p-2">cliente</th>
+                      <th className="p-2">e-mail</th>
+                      <th className="p-2">status</th>
+                      <th className="p-2">erros</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {previewOrders.rows.map((r) => (
-                  <tr
-                    key={`${r._row}-${r.external_id}`}
-                    className={
-                      r._errors.length
-                        ? 'bg-red-950/20 border-t border-white/5'
-                        : 'border-t border-white/5'
-                    }
-                  >
-                    <td className="p-2 text-zinc-500">{r._row}</td>
-                    <td className="p-2 font-mono">{r.external_id}</td>
-                    <td className="p-2 font-mono">{r.event_external_id || '—'}</td>
-                    <td className="p-2 max-w-[140px] truncate">{r.ticket_name}</td>
-                    <td className="p-2">{r.price}</td>
-                    <td className="p-2">{r.qty}</td>
-                    <td className="p-2 max-w-[120px] truncate">{r.buyer_name}</td>
-                    <td className="p-2 max-w-[160px] truncate">{r.buyer_email}</td>
-                    <td className="p-2">{r.status}</td>
-                    <td className="p-2 text-red-400">{r._errors.join('; ')}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const errs = (r._errors as string[]) || [];
+                  const bad = errs.length > 0;
+                  return (
+                    <tr
+                      key={String(r._row) + String(r.external_id || r.product_external_id || '')}
+                      className={
+                        bad ? 'bg-red-950/20 border-t border-white/5' : 'border-t border-white/5'
+                      }
+                    >
+                      {step === 'events' && (
+                        <>
+                          <td className="p-2 text-zinc-500">{String(r._row)}</td>
+                          <td className="p-2 font-mono">{String(r.external_id)}</td>
+                          <td className="p-2 max-w-[200px] truncate">{String(r.title)}</td>
+                          <td className="p-2 whitespace-nowrap">{String(r.date)}</td>
+                          <td className="p-2">
+                            {r.image_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={String(r.image_url)}
+                                alt=""
+                                className="h-10 w-8 object-cover rounded"
+                              />
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="p-2 text-red-400">{errs.join('; ')}</td>
+                        </>
+                      )}
+                      {step === 'lotes' && (
+                        <>
+                          <td className="p-2 text-zinc-500">{String(r._row)}</td>
+                          <td className="p-2 font-mono">{String(r.product_external_id)}</td>
+                          <td className="p-2 font-mono">{String(r.event_external_id)}</td>
+                          <td className="p-2 max-w-[180px] truncate">{String(r.nome)}</td>
+                          <td className="p-2">{String(r.price)}</td>
+                          <td className="p-2">{String(r.capacity)}</td>
+                          <td className="p-2">{String(r.stock)}</td>
+                          <td className="p-2">{String(r.sold)}</td>
+                          <td className="p-2">
+                            {r.sold_out === '1' ? (
+                              <span className="text-amber-400">sim</span>
+                            ) : (
+                              'não'
+                            )}
+                          </td>
+                          <td className="p-2 text-red-400">{errs.join('; ')}</td>
+                        </>
+                      )}
+                      {step === 'orders' && (
+                        <>
+                          <td className="p-2 text-zinc-500">{String(r._row)}</td>
+                          <td className="p-2 font-mono">{String(r.external_id)}</td>
+                          <td className="p-2 font-mono">{String(r.event_external_id || '—')}</td>
+                          <td className="p-2 max-w-[140px] truncate">{String(r.ticket_name)}</td>
+                          <td className="p-2">{String(r.price)}</td>
+                          <td className="p-2">{String(r.qty)}</td>
+                          <td className="p-2 max-w-[120px] truncate">{String(r.buyer_name)}</td>
+                          <td className="p-2 max-w-[150px] truncate">{String(r.buyer_email)}</td>
+                          <td className="p-2">{String(r.status)}</td>
+                          <td className="p-2 text-red-400">{errs.join('; ')}</td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -362,12 +363,26 @@ export default function AdminImportacaoPage() {
           {JSON.stringify(result, null, 2)}
         </pre>
       )}
-
-      <div className="text-xs text-zinc-600 leading-relaxed">
-        Doc completo com SQL copiável:{' '}
-        <code className="text-zinc-400">docs/MIGRACAO_CSV_WOOCOMMERCE.md</code> no repositório.
-        Pedidos migrados não aceitam cancelamento pelo cliente no Meus Ingressos.
-      </div>
     </div>
   );
+}
+
+function Chip({
+  children,
+  tone = 'default',
+}: {
+  children: React.ReactNode;
+  tone?: 'default' | 'ok' | 'bad' | 'sky' | 'amber';
+}) {
+  const cls =
+    tone === 'ok'
+      ? 'bg-emerald-500/15 text-emerald-400'
+      : tone === 'bad'
+        ? 'bg-red-500/15 text-red-400'
+        : tone === 'sky'
+          ? 'bg-sky-500/15 text-sky-300'
+          : tone === 'amber'
+            ? 'bg-amber-500/15 text-amber-300'
+            : 'bg-zinc-800 text-zinc-300';
+  return <span className={`px-3 py-1 rounded-full text-sm ${cls}`}>{children}</span>;
 }

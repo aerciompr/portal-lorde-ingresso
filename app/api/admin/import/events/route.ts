@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdminMutation } from '@/lib/request-security';
-import { parseEventsCsv, slugify } from '@/lib/csv-woo-import';
+import { parseEventsCsv } from '@/lib/csv-woo-import';
+import { downloadAndStoreEventImage } from '@/lib/import-download-image';
 
 /**
- * POST multipart: file (CSV) + action=preview|import + replace=0|1
+ * POST multipart: file (CSV) + action=preview|import + replace=0|1 + download_images=0|1
  */
 export async function POST(req: NextRequest) {
   const gate = await requireAdminMutation(req);
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const action = String(form.get('action') || 'preview');
   const replace = String(form.get('replace') || '0') === '1';
+  const downloadImages = String(form.get('download_images') || '1') !== '0';
   const file = form.get('file');
 
   if (!(file instanceof File)) {
@@ -23,6 +25,7 @@ export async function POST(req: NextRequest) {
   const parsed = parseEventsCsv(text);
 
   if (action === 'preview') {
+    const withImg = parsed.rows.filter((r) => r.image_url && /^https?:\/\//i.test(r.image_url));
     return NextResponse.json({
       ok: true,
       type: 'events',
@@ -30,6 +33,7 @@ export async function POST(req: NextRequest) {
       total: parsed.rows.length,
       validCount: parsed.validCount,
       errorCount: parsed.errorCount,
+      withImageUrl: withImg.length,
       rows: parsed.rows,
     });
   }
@@ -42,13 +46,12 @@ export async function POST(req: NextRequest) {
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  let imagesOk = 0;
+  let imagesFail = 0;
   const errors: { row: number; msg: string }[] = [];
 
   for (const r of valid) {
     try {
-      const externalKey = `woo-event-${r.external_id}`;
-      // slug estável preferindo external
-      let slug = slugify(r.slug || r.title);
       const existingByMeta = await prisma.event.findFirst({
         where: {
           OR: [
@@ -65,10 +68,23 @@ export async function POST(req: NextRequest) {
 
       const date = new Date(r.date.includes('T') ? r.date : r.date.replace(' ', 'T') + '-03:00');
       const openTime =
-        r.open_time ||
-        (r.date.length >= 16 ? r.date.slice(11, 16) : '20:00');
-      const description =
-        (r.description || '') + `\n\n[woo:event:${r.external_id}]`;
+        r.open_time || (r.date.length >= 16 ? r.date.slice(11, 16) : '20:00');
+      const description = `${r.description || ''}\n\n[woo:event:${r.external_id}]`.trim();
+
+      let imageUrl: string | null = existingByMeta?.imageUrl || null;
+      if (downloadImages && r.image_url && /^https?:\/\//i.test(r.image_url)) {
+        const dl = await downloadAndStoreEventImage(r.image_url);
+        if ('url' in dl) {
+          imageUrl = dl.url;
+          imagesOk += 1;
+        } else {
+          imagesFail += 1;
+          // fallback: URL original se download falhar
+          if (!imageUrl) imageUrl = r.image_url;
+        }
+      } else if (r.image_url && /^https?:\/\//i.test(r.image_url)) {
+        imageUrl = r.image_url;
+      }
 
       if (existingByMeta && replace) {
         await prisma.event.update({
@@ -79,14 +95,14 @@ export async function POST(req: NextRequest) {
             openTime,
             address: (r.address || existingByMeta.address).slice(0, 500),
             description,
+            imageUrl,
           },
         });
         updated += 1;
         continue;
       }
 
-      // garantir slug único
-      slug = `woo-${r.external_id}`;
+      const slug = `woo-${r.external_id}`;
       let n = 0;
       let trySlug = slug;
       while (await prisma.event.findUnique({ where: { slug: trySlug } })) {
@@ -102,11 +118,11 @@ export async function POST(req: NextRequest) {
           openTime,
           address: (r.address || 'Lorde Nelson Rest Pub — Maceió/AL').slice(0, 500),
           description,
+          imageUrl,
           allowCancel: true,
         },
       });
       created += 1;
-      void externalKey;
     } catch (e) {
       errors.push({ row: r._row, msg: (e as Error).message });
     }
@@ -118,6 +134,8 @@ export async function POST(req: NextRequest) {
     created,
     updated,
     skipped,
+    imagesOk,
+    imagesFail,
     errors,
   });
 }

@@ -130,6 +130,21 @@ export async function POST(req: NextRequest) {
   ): Promise<string> {
     const key = `${eventId}:${productExt || name}:${priceCents}`;
     if (ttCache.has(key)) return ttCache.get(key)!;
+
+    // Preferir lote/tipo já importado (CSV lotes) via tag [woo:product:ID]
+    if (productExt) {
+      const byProduct = await prisma.ticketType.findFirst({
+        where: {
+          eventId,
+          description: { contains: `[woo:product:${productExt}]` },
+        },
+      });
+      if (byProduct) {
+        ttCache.set(key, byProduct.id);
+        return byProduct.id;
+      }
+    }
+
     const existing = await prisma.ticketType.findFirst({
       where: {
         eventId,
@@ -148,7 +163,9 @@ export async function POST(req: NextRequest) {
         priceCents,
         totalQty: 99999,
         sold: 0,
-        description: productExt ? `Woo product #${productExt}` : 'Import CSV',
+        description: productExt
+          ? `[woo:product:${productExt}] Import CSV`
+          : 'Import CSV',
       },
     });
     ttCache.set(key, tt.id);

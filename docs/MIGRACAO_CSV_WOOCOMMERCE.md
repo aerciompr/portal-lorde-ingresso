@@ -2,50 +2,60 @@
 
 Fluxo:
 
-1. Rodar as queries no **MySQL do WordPress** (phpMyAdmin, HeidiSQL, DBeaver, CLI)  
-2. Exportar resultado como **CSV (UTF-8)**  
-3. No portal: **Admin → Importação**  
-4. **Etapa 1:** enviar `eventos.csv` → **pré-visualizar** → confirmar  
-5. **Etapa 2:** enviar `pedidos.csv` → **pré-visualizar** → confirmar  
+1. Rodar as queries no **MySQL do WordPress** (arquivos em `scripts/export-woo/`)  
+2. Exportar cada resultado como **CSV (UTF-8)**  
+3. No portal: **Admin → Importação CSV**  
+4. **Etapa 1 — Eventos:** `eventos.csv` → pré-visualizar (inclui thumbnails) → importar **com download de fotos**  
+5. **Etapa 2 — Lotes:** `lotes.csv` → preços reais, capacity/stock, **esgotados** → importar  
+6. **Etapa 3 — Pedidos:** `pedidos.csv` → pré-visualizar → importar  
 
-Pedidos importados ficam com:
+Pedidos importados:
 
 - `source = woocommerce`  
-- `allowClientCancel = false` (cliente **não** pede cancelamento no portal)  
+- `allowClientCancel = false` (sem cancelamento self-service)  
 
 ---
 
 ## 1. Exportar eventos → `eventos.csv`
 
-Execute no banco WordPress (`wp_` = prefixo; ajuste se for outro):
+Arquivo pronto: **`scripts/export-woo/01_eventos.sql`** (inclui `image_url` da thumbnail).
 
-```sql
-SELECT
-  e.post_id AS external_id,
-  COALESCE(NULLIF(TRIM(p.post_title), ''), CONCAT('Evento ', e.post_id)) AS title,
-  COALESCE(NULLIF(TRIM(p.post_name), ''), CONCAT('evento-', e.post_id)) AS slug,
-  e.start_date AS date,
-  TIME_FORMAT(STR_TO_DATE(e.start_date, '%Y-%m-%d %H:%i:%s'), '%H:%i') AS open_time,
-  'Lorde Nelson Rest Pub — Maceió/AL' AS address,
-  LEFT(COALESCE(p.post_content, ''), 2000) AS description
-FROM wp_tec_events e
-LEFT JOIN wp_posts p ON p.ID = e.post_id
-ORDER BY e.start_date ASC;
-```
-
-**Exportar CSV** com cabeçalho (primeira linha = nomes das colunas).
-
-Colunas esperadas pelo portal:
+Colunas:
 
 | Coluna | Obrigatório | Exemplo |
 |--------|-------------|---------|
-| `external_id` | sim | `52024` (ID do post do evento no WP) |
+| `external_id` | sim | `62737` |
 | `title` | sim | `Aniversário da Parabrisas` |
-| `slug` | não | `aniversario-parabrisas` |
-| `date` | sim | `2024-12-14 20:00:00` |
+| `slug` | não | |
+| `date` | sim | `2026-08-14 20:00:00` |
 | `open_time` | não | `20:00` |
-| `address` | não | endereço |
-| `description` | não | texto |
+| `address` | não | |
+| `description` | não | |
+| `image_url` | não | `https://www.lordenelson.com.br/wp-content/uploads/...` |
+
+No import, marque **Baixar fotos dos eventos** para copiar a imagem para o storage do portal.
+
+---
+
+## 1b. Exportar lotes → `lotes.csv`
+
+Arquivo: **`scripts/export-woo/01b_lotes.sql`**
+
+Cada produto Event Tickets (ex.: “Evento - Lote Promocional”) vira **Lote + TicketType** com:
+
+| Coluna | Significado |
+|--------|-------------|
+| `product_external_id` | ID do produto Woo |
+| `event_external_id` | ID do evento WP |
+| `nome` | Título do produto/lote |
+| `price` | Preço real cadastrado (`_price`) |
+| `capacity` | Capacidade Tribe |
+| `stock` | Estoque restante |
+| `sold` | capacity − stock (aprox.) |
+| `sold_out` | 1 se esgotado |
+| `stock_status` | `instock` / `outofstock` |
+
+Lotes esgotados: `ativo = false` no portal.
 
 ---
 
