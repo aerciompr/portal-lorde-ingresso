@@ -64,19 +64,54 @@ async function main() {
     return;
   }
 
-  console.log('\nIniciando deleção no banco de dados...');
+  console.log('\nIniciando deleção manual de dados para contornar restrições do banco...');
 
-  // 1. Deletar as orders do evento (isso deletará tickets e cancellationRequests em cascata)
-  const deletedOrders = await prisma.order.deleteMany({
+  // Buscar todas as orders do evento para obter os IDs
+  const orders = await prisma.order.findMany({
+    where: { eventId },
+    select: { id: true },
+  });
+  const orderIds = orders.map((o) => o.id);
+
+  if (orderIds.length > 0) {
+    // 1. Deletar os tickets vinculados a essas orders
+    const deletedTickets = await prisma.ticket.deleteMany({
+      where: { orderId: { in: orderIds } },
+    });
+    console.log(`-> ${deletedTickets.count} ingresso(s) (tickets) deletado(s).`);
+
+    // 2. Deletar solicitações de cancelamento vinculadas a essas orders
+    const deletedCancellations = await prisma.cancellationRequest.deleteMany({
+      where: { orderId: { in: orderIds } },
+    });
+    console.log(`-> ${deletedCancellations.count} solicitação(ões) de cancelamento deletada(s).`);
+
+    // 3. Deletar as orders do evento
+    const deletedOrders = await prisma.order.deleteMany({
+      where: { eventId },
+    });
+    console.log(`-> ${deletedOrders.count} pedido(s) deletado(s).`);
+  } else {
+    console.log('-> Nenhum pedido associado para deletar.');
+  }
+
+  // 4. Deletar lotes do evento
+  const deletedLotes = await prisma.lote.deleteMany({
     where: { eventId },
   });
-  console.log(`-> ${deletedOrders.count} pedido(s) deletado(s) em cascata.`);
+  console.log(`-> ${deletedLotes.count} lote(s) deletado(s).`);
 
-  // 2. Deletar o evento (isso deletará lotes e ticketTypes em cascata)
+  // 5. Deletar ticketTypes do evento
+  const deletedTicketTypes = await prisma.ticketType.deleteMany({
+    where: { eventId },
+  });
+  console.log(`-> ${deletedTicketTypes.count} tipo(s) de ingresso deletado(s).`);
+
+  // 6. Deletar o evento
   await prisma.event.delete({
     where: { id: eventId },
   });
-  console.log(`-> Evento "${event.title}" e seus lotes deletados com sucesso.`);
+  console.log(`-> Evento "${event.title}" deletado com sucesso.`);
 }
 
 main()
