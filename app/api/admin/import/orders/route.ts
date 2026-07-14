@@ -176,6 +176,7 @@ export async function POST(req: NextRequest) {
   let skipped = 0;
   let replaced = 0;
   const errors: { order: string; msg: string }[] = [];
+  const eventIdsTouched = new Set<string>();
 
   for (const [extOrderId, lines] of byOrder) {
     try {
@@ -289,17 +290,38 @@ export async function POST(req: NextRequest) {
             },
           });
         }
-        if (status === 'paid') {
-          await prisma.ticketType.update({
-            where: { id: ttId },
-            data: { sold: { increment: q } },
+        // NÃO incrementa sold aqui — recalcula no fim (evita sold = CSV + pedidos)
+        // Vincula pedido ao lote do produto quando possível
+        if (line.product_external_id) {
+          const lote = await prisma.lote.findFirst({
+            where: {
+              eventId,
+              nome: { contains: `(#${line.product_external_id})` },
+            },
           });
+          if (lote) {
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { loteId: lote.id },
+            });
+          }
         }
       }
 
       created += 1;
+      eventIdsTouched.add(eventId);
     } catch (e) {
       errors.push({ order: extOrderId, msg: (e as Error).message });
+    }
+  }
+
+  // Recalcula sold (TicketType + Lote) e activeLote a partir dos tickets pagos
+  let stockRecalc = 0;
+  if (eventIdsTouched.size > 0) {
+    const { recalcEventStock } = await import('@/lib/recalc-stock');
+    for (const eid of eventIdsTouched) {
+      await recalcEventStock(eid);
+      stockRecalc += 1;
     }
   }
 
@@ -309,6 +331,7 @@ export async function POST(req: NextRequest) {
     created,
     skipped,
     replaced,
+    stockRecalcEvents: stockRecalc,
     errors: errors.slice(0, 50),
     errorCount: errors.length,
   });

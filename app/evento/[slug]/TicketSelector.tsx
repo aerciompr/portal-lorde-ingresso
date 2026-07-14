@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
+import { matchTicketTypeToLote } from '@/lib/recalc-stock';
 
 interface TicketType {
   id: string;
@@ -49,43 +50,46 @@ export default function TicketSelector({ event }: Props) {
     return [...(event.lotes || [])].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
   }, [event.lotes]);
 
-  /** Lotes já encerrados (histórico) — só nomes e esgotado */
+  /** Lotes já encerrados (histórico) — não inclui o ativo */
   const lotesHistorico = useMemo(() => {
     return lotesOrdenados.filter((l) => {
       if (currentLote && l.id === currentLote.id) return false;
-      const esgotado = !l.ativo || l.sold >= l.totalQty;
-      return esgotado || !l.ativo;
+      return !l.ativo || l.sold >= l.totalQty;
     });
   }, [lotesOrdenados, currentLote]);
 
-  // Estoque público: prioriza lote ativo; senão ticket type
-  const primaryType = event.ticketTypes[0];
+  // Tipo de ingresso do lote ativo (não usa ticketTypes[0] cegamente — isso bloqueava Lote 1)
+  const matchedType = useMemo(() => {
+    if (!currentLote) return event.ticketTypes[0] || null;
+    return matchTicketTypeToLote(currentLote, event.ticketTypes);
+  }, [currentLote, event.ticketTypes]);
+
   const loteDisponivel = currentLote
     ? Math.max(0, currentLote.totalQty - currentLote.sold)
     : 0;
 
   const typeDisponivel = (tt: TicketType) => Math.max(0, tt.totalQty - tt.sold);
 
-  const total = event.ticketTypes.reduce((sum, tt) => {
-    const price = currentLote?.precoCents ?? tt.priceCents;
-    return sum + (quantities[tt.id] || 0) * price;
-  }, 0);
+  // Com lotes: disponibilidade = vagas do lote (fonte da verdade da venda em lote)
+  const sellableQty =
+    currentLote && matchedType
+      ? Math.max(0, Math.min(loteDisponivel, typeDisponivel(matchedType)))
+      : matchedType
+        ? typeDisponivel(matchedType)
+        : 0;
+
+  const price = currentLote?.precoCents ?? matchedType?.priceCents ?? 0;
+
+  const total = matchedType
+    ? (quantities[matchedType.id] || 0) * price
+    : event.ticketTypes.reduce((sum, tt) => {
+        return sum + (quantities[tt.id] || 0) * (currentLote?.precoCents ?? tt.priceCents);
+      }, 0);
 
   const updateQty = (id: string, delta: number) => {
     setQuantities((prev) => {
       const current = prev[id] || 0;
-      const tt = event.ticketTypes.find((t) => t.id === id);
-      if (!tt) return prev;
-      // Limite: o menor entre tipo e lote ativo
-      const maxType = typeDisponivel(tt);
-      const maxLote = currentLote ? loteDisponivel : maxType;
-      // soma das outras quantidades no mesmo lote
-      const others = Object.entries(prev)
-        .filter(([k]) => k !== id)
-        .reduce((s, [, q]) => s + q, 0);
-      const max = currentLote
-        ? Math.min(maxType, Math.max(0, maxLote - others))
-        : maxType;
+      const max = sellableQty;
       const next = Math.max(0, Math.min(current + delta, max));
       return { ...prev, [id]: next };
     });
@@ -134,14 +138,18 @@ export default function TicketSelector({ event }: Props) {
 
   // ——— UI: com lotes (recomendado) ———
   if (hasLotes) {
-    const price = currentLote?.precoCents ?? primaryType?.priceCents ?? 0;
-    const activeName = currentLote?.nome || 'Ingresso';
+    // Esgotado = lote sem vaga (NÃO o primeiro ticket type da lista)
     const soldOutActive =
-      !currentLote || loteDisponivel < 1 || (primaryType && typeDisponivel(primaryType) < 1);
+      !currentLote ||
+      !currentLote.ativo ||
+      loteDisponivel < 1 ||
+      sellableQty < 1;
+
+    const activeName = currentLote?.nome || 'Ingresso';
+    const qtyId = matchedType?.id;
 
     return (
       <div>
-        {/* Histórico de lotes esgotados */}
         {lotesHistorico.length > 0 && (
           <div className="mb-5 space-y-1.5">
             <div className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">
@@ -159,55 +167,45 @@ export default function TicketSelector({ event }: Props) {
           </div>
         )}
 
-        {/* Lote ativo — título principal */}
-        {currentLote && !soldOutActive ? (
+        {currentLote && !soldOutActive && qtyId ? (
           <div className="mb-2">
             <div className="flex justify-between items-start gap-3">
               <div>
                 <div className="text-xl font-semibold tracking-tight text-white">{activeName}</div>
+                {loteDisponivel > 0 && loteDisponivel <= 10 && (
+                  <div className="text-xs text-amber-400 mt-1">
+                    Restam {loteDisponivel} ingresso{loteDisponivel === 1 ? '' : 's'}
+                  </div>
+                )}
               </div>
               <div className="text-right shrink-0">
                 <div className="text-xl font-semibold tabular-nums">{formatPrice(price)}</div>
               </div>
             </div>
 
-            {/* Quantidade — um seletor por tipo (em geral só 1) */}
-            {event.ticketTypes.map((tt) => {
-              const available = Math.min(
-                typeDisponivel(tt),
-                loteDisponivel
-              );
-              const qty = quantities[tt.id] || 0;
-              // Só mostra nome do tipo se houver mais de um (VIP, pista…)
-              const showTypeName = event.ticketTypes.length > 1;
-
-              return (
-                <div key={tt.id} className="mt-5">
-                  {showTypeName && (
-                    <div className="text-sm text-zinc-400 mb-2">{tt.name}</div>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => updateQty(tt.id, -1)}
-                      className="w-9 h-9 flex items-center justify-center border border-white/20 rounded-lg active:bg-white/5"
-                      disabled={qty === 0}
-                    >
-                      −
-                    </button>
-                    <div className="w-10 text-center font-mono text-lg tabular-nums">{qty}</div>
-                    <button
-                      type="button"
-                      onClick={() => updateQty(tt.id, +1)}
-                      className="w-9 h-9 flex items-center justify-center border border-white/20 rounded-lg active:bg-white/5"
-                      disabled={qty >= available || available < 1}
-                    >
-                      +
-                    </button>
-                  </div>
+            <div className="mt-5">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => updateQty(qtyId, -1)}
+                  className="w-9 h-9 flex items-center justify-center border border-white/20 rounded-lg active:bg-white/5"
+                  disabled={(quantities[qtyId] || 0) === 0}
+                >
+                  −
+                </button>
+                <div className="w-10 text-center font-mono text-lg tabular-nums">
+                  {quantities[qtyId] || 0}
                 </div>
-              );
-            })}
+                <button
+                  type="button"
+                  onClick={() => updateQty(qtyId, +1)}
+                  className="w-9 h-9 flex items-center justify-center border border-white/20 rounded-lg active:bg-white/5"
+                  disabled={(quantities[qtyId] || 0) >= sellableQty || sellableQty < 1}
+                >
+                  +
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="p-4 text-center text-red-400 bg-red-950/20 rounded-xl text-sm mb-4">
@@ -251,7 +249,7 @@ export default function TicketSelector({ event }: Props) {
   return (
     <div>
       {event.ticketTypes.map((tt) => {
-        const price = tt.priceCents;
+        const p = tt.priceCents;
         const available = typeDisponivel(tt);
         const qty = quantities[tt.id] || 0;
         return (
@@ -259,20 +257,22 @@ export default function TicketSelector({ event }: Props) {
             <div className="flex justify-between">
               <div>
                 <div className="font-medium">{tt.name}</div>
-                {tt.description && (
-                  <div className="text-xs text-zinc-400">{tt.description}</div>
-                )}
                 {available < 1 && <div className="text-xs mt-1 text-red-400">Esgotado</div>}
               </div>
               <div className="text-right">
-                <div className="font-semibold">{formatPrice(price)}</div>
+                <div className="font-semibold">{formatPrice(p)}</div>
               </div>
             </div>
 
             <div className="flex items-center gap-3 mt-3">
               <button
                 type="button"
-                onClick={() => updateQty(tt.id, -1)}
+                onClick={() =>
+                  setQuantities((prev) => ({
+                    ...prev,
+                    [tt.id]: Math.max(0, (prev[tt.id] || 0) - 1),
+                  }))
+                }
                 className="w-9 h-9 flex items-center justify-center border border-white/20 rounded-lg active:bg-white/5"
                 disabled={qty === 0 || available < 1}
               >
@@ -281,7 +281,12 @@ export default function TicketSelector({ event }: Props) {
               <div className="w-10 text-center font-mono text-lg tabular-nums">{qty}</div>
               <button
                 type="button"
-                onClick={() => updateQty(tt.id, +1)}
+                onClick={() =>
+                  setQuantities((prev) => ({
+                    ...prev,
+                    [tt.id]: Math.min(available, (prev[tt.id] || 0) + 1),
+                  }))
+                }
                 className="w-9 h-9 flex items-center justify-center border border-white/20 rounded-lg active:bg-white/5"
                 disabled={qty >= available || available < 1}
               >

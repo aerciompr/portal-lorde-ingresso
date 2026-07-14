@@ -45,6 +45,7 @@ export default function AdminPedidos() {
   const [total, setTotal] = useState(0);
   const [syncingStripe, setSyncingStripe] = useState(false);
   const [runningCrons, setRunningCrons] = useState(false);
+  const [recalcStock, setRecalcStock] = useState(false);
   const limit = 50;
 
   const load = useCallback(async () => {
@@ -257,6 +258,39 @@ export default function AdminPedidos() {
           }}
         >
           {runningCrons ? 'Rodando…' : 'Rodar crons agora'}
+        </button>
+        <button
+          type="button"
+          disabled={recalcStock}
+          className="btn btn-secondary text-sm disabled:opacity-50"
+          title="Recalcula vendidos/estoque dos lotes após migração Woo"
+          onClick={async () => {
+            if (
+              !confirm(
+                'Recalcular estoque de TODOS os eventos a partir dos ingressos pagos?\n\nCorrige Lote ativo “esgotado” após importação.'
+              )
+            ) {
+              return;
+            }
+            setRecalcStock(true);
+            try {
+              const res = await fetch('/api/admin/orders/recalc-stock', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'Falha');
+              toast.success(data.message || 'Estoques recalculados');
+            } catch (e) {
+              toast.error((e as Error).message);
+            } finally {
+              setRecalcStock(false);
+            }
+          }}
+        >
+          {recalcStock ? 'Recalculando…' : 'Recalcular estoques'}
         </button>
         <a href="/admin/ingresso-preview" className="btn btn-secondary text-sm inline-flex items-center gap-1.5">
           <FileText size={14} /> Layout + PDF exemplo

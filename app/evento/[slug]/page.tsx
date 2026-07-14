@@ -19,13 +19,28 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
 
   if (!event) notFound();
 
-  // Esgotado: sem lote ativo com vaga, ou todos os tipos sem estoque
+  // Esgotado: prioriza LOTE ATIVO (não o 1º ticketType — isso bloqueava Lote 1 após migração)
   const loteAtivo = event.activeLote;
-  const loteEsgotado = loteAtivo
-    ? loteAtivo.sold >= loteAtivo.totalQty
-    : (event.lotes?.length || 0) > 0;
-  const tiposEsgotados = event.ticketTypes.every((tt: { sold: number; totalQty: number }) => tt.sold >= tt.totalQty);
-  const soldOut = tiposEsgotados || loteEsgotado;
+  const hasLotes = (event.lotes?.length || 0) > 0;
+  let soldOut = false;
+  if (loteAtivo) {
+    soldOut =
+      !loteAtivo.ativo ||
+      loteAtivo.sold >= loteAtivo.totalQty ||
+      loteAtivo.totalQty - loteAtivo.sold < 1;
+  } else if (hasLotes) {
+    // tem lotes mas nenhum ativo com vaga
+    soldOut = !event.lotes.some(
+      (l: { sold: number; totalQty: number; ativo: boolean }) =>
+        l.ativo && l.sold < l.totalQty
+    );
+  } else {
+    soldOut =
+      event.ticketTypes.length > 0 &&
+      event.ticketTypes.every(
+        (tt: { sold: number; totalQty: number }) => tt.sold >= tt.totalQty
+      );
+  }
   const past = isPastDeadline(event);
 
   return (

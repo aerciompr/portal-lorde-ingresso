@@ -185,6 +185,46 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Após importar todos os lotes: um activeLote por evento = último com vaga (maior ordem)
+  try {
+    const eventIds = [
+      ...new Set(
+        (
+          await prisma.lote.findMany({
+            select: { eventId: true },
+            distinct: ['eventId'],
+          })
+        ).map((l) => l.eventId)
+      ),
+    ];
+    for (const eventId of eventIds) {
+      const lotes = await prisma.lote.findMany({
+        where: { eventId },
+        orderBy: { ordem: 'asc' },
+      });
+      if (!lotes.length) continue;
+      const withStock = lotes.filter((l) => l.sold < l.totalQty);
+      const active = withStock.length
+        ? withStock[withStock.length - 1]
+        : null;
+      for (const l of lotes) {
+        const want = active ? l.id === active.id : false;
+        if (l.ativo !== want) {
+          await prisma.lote.update({
+            where: { id: l.id },
+            data: { ativo: want },
+          });
+        }
+      }
+      await prisma.event.update({
+        where: { id: eventId },
+        data: { activeLoteId: active?.id || null },
+      });
+    }
+  } catch {
+    /* não falha o import */
+  }
+
   return NextResponse.json({
     ok: true,
     type: 'lotes',

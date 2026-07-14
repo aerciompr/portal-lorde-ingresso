@@ -24,13 +24,28 @@ export async function POST(req: NextRequest) {
     const orderItems: { ticketTypeId: string; quantity: number; priceCents: number }[] = [];
 
     const currentPrice = event.activeLote?.precoCents;
+    const loteAvail = event.activeLote
+      ? Math.max(0, event.activeLote.totalQty - event.activeLote.sold)
+      : null;
+    let qtyTotal = 0;
     for (const item of items) {
-      const tt = event.ticketTypes.find((t: any) => t.id === item.ticketTypeId);
+      const tt = event.ticketTypes.find((t: { id: string }) => t.id === item.ticketTypeId);
       if (!tt) throw new Error('Tipo de ingresso inválido');
-      const avail = tt.totalQty - tt.sold;
+      const typeAvail = Math.max(0, tt.totalQty - tt.sold);
+      // Com lote ativo, o limite é o menor entre tipo e vagas do lote
+      const avail = loteAvail != null ? Math.min(typeAvail, loteAvail - qtyTotal) : typeAvail;
       if (item.quantity > avail || item.quantity < 1) {
-        return NextResponse.json({ error: `Estoque insuficiente para ${tt.name}` }, { status: 400 });
+        return NextResponse.json(
+          {
+            error:
+              loteAvail != null && loteAvail < 1
+                ? 'Lote ativo esgotado'
+                : `Estoque insuficiente para ${tt.name}`,
+          },
+          { status: 400 }
+        );
       }
+      qtyTotal += item.quantity;
       const price = currentPrice ?? tt.priceCents;
       const lineTotal = price * item.quantity;
       totalCents += lineTotal;
