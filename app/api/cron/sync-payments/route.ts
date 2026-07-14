@@ -98,10 +98,14 @@ export async function GET(req: NextRequest) {
     const apiKey = useConnect ? oauth : key;
     if (apiKey) {
       const stripe = new Stripe(apiKey);
-      const opts = useConnect ? { stripeAccount: accountId } : undefined;
+      const reqOpts = useConnect ? { stripeAccount: accountId } : undefined;
       for (const order of stripePending) {
         try {
-          const pi = await stripe.paymentIntents.retrieve(String(order.paymentId), opts);
+          const pi = await stripe.paymentIntents.retrieve(
+            String(order.paymentId),
+            undefined,
+            reqOpts
+          );
           const st = String(pi.status || '').toLowerCase();
           if (st === 'succeeded') {
             const r = await finalizePaidOrder(order.id, {

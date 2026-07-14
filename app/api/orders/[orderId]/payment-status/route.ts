@@ -132,6 +132,7 @@ export async function GET(
         const stripe = new Stripe(apiKey);
         const pi = await stripe.paymentIntents.retrieve(
           String(order.paymentId),
+          undefined,
           useConnect ? { stripeAccount: accountId } : undefined
         );
         const st = String(pi.status || '').toLowerCase();
