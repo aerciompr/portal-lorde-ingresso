@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
           },
         });
         if (existingLote) {
-          await prisma.lote.update({
+          const updatedLote = await prisma.lote.update({
             where: { id: existingLote.id },
             data: {
               nome: `${loteNome} (#${r.product_external_id})`.slice(0, 255),
@@ -137,6 +137,12 @@ export async function POST(req: NextRequest) {
               ativo: !soldOut,
             },
           });
+          if (!soldOut) {
+            await prisma.event.update({
+              where: { id: event.id },
+              data: { activeLoteId: updatedLote.id },
+            });
+          }
         }
         updated += 1;
         continue;
@@ -153,7 +159,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      await prisma.lote.create({
+      const newLote = await prisma.lote.create({
         data: {
           eventId: event.id,
           nome: `${loteNome} (#${r.product_external_id})`.slice(0, 255),
@@ -166,8 +172,12 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // se houver lote ativo e este não está esgotado, não força activeLote
-      // (admin define depois)
+      if (!soldOut) {
+        await prisma.event.update({
+          where: { id: event.id },
+          data: { activeLoteId: newLote.id },
+        });
+      }
 
       created += 1;
     } catch (e) {
