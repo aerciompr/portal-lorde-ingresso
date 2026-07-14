@@ -1,0 +1,357 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { isAdmin } from '@/lib/auth';
+import { requireAdminMutation } from '@/lib/request-security';
+import {
+  buildMigrationNoticeHtml,
+  sendMigrationNotice,
+  MIGRATION_EMAIL_MARKER,
+  DEFAULT_MIGRATION_INTRO,
+} from '@/lib/email-migration';
+import type { OrderWithDetails } from '@/lib/email';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function toPayload(order: {
+  id: string;
+  buyerName: string;
+  buyerEmail: string;
+  totalCents: number;
+  accessCode: string | null;
+  feeDetails: string | null;
+  event: {
+    title: string;
+    date: Date;
+    address: string;
+    openTime: string | null;
+    imageUrl: string | null;
+  };
+  lote: { nome: string } | null;
+  tickets: Array<{
+    id: string;
+    uniqueCode: string;
+    qrPayload: string | null;
+    ticketType: { name: string; priceCents: number };
+  }>;
+}): OrderWithDetails {
+  return {
+    id: order.id,
+    buyerName: order.buyerName,
+    buyerEmail: order.buyerEmail,
+    totalCents: order.totalCents,
+    accessCode: order.accessCode,
+    event: order.event,
+    lote: order.lote,
+    tickets: order.tickets,
+  };
+}
+
+async function loadCandidates(opts: {
+  eventId?: string;
+  onlyNotSent?: boolean;
+  limit?: number;
+  offset?: number;
+}) {
+  const limit = Math.min(200, Math.max(1, opts.limit || 50));
+  const offset = Math.max(0, opts.offset || 0);
+
+  const orders = await prisma.order.findMany({
+    where: {
+      source: 'woocommerce',
+      status: 'paid',
+      buyerEmail: { contains: '@' },
+      ...(opts.eventId ? { eventId: opts.eventId } : {}),
+    },
+    include: {
+      event: true,
+      lote: true,
+      tickets: {
+        where: { status: { not: 'cancelled' } },
+        include: { ticketType: true },
+      },
+    },
+    orderBy: { paidAt: 'desc' },
+    take: 500,
+  });
+
+  let list = orders.filter((o) => (o.tickets?.length || 0) > 0);
+  if (opts.onlyNotSent !== false) {
+    list = list.filter(
+      (o) => !(o.feeDetails || '').includes(MIGRATION_EMAIL_MARKER)
+    );
+  }
+
+  const total = list.length;
+  const slice = list.slice(offset, offset + limit);
+
+  return {
+    total,
+    limit,
+    offset,
+    orders: slice.map((o) => ({
+      id: o.id,
+      buyerName: o.buyerName,
+      buyerEmail: o.buyerEmail,
+      accessCode: o.accessCode,
+      eventTitle: o.event.title,
+      ticketCount: o.tickets.length,
+      alreadySent: (o.feeDetails || '').includes(MIGRATION_EMAIL_MARKER),
+      paidAt: o.paidAt,
+    })),
+    full: slice,
+  };
+}
+
+/**
+ * GET ?action=stats|preview
+ * POST action=preview|send-test|send-batch
+ */
+export async function GET(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const action = req.nextUrl.searchParams.get('action') || 'stats';
+  const eventId = req.nextUrl.searchParams.get('eventId') || undefined;
+
+  if (action === 'stats') {
+    const all = await loadCandidates({ eventId, onlyNotSent: false, limit: 500 });
+    const pending = all.orders.filter((o) => !o.alreadySent);
+    const events = await prisma.event.findMany({
+      where: {
+        orders: { some: { source: 'woocommerce', status: 'paid' } },
+      },
+      select: { id: true, title: true, date: true },
+      orderBy: { date: 'asc' },
+    });
+    return NextResponse.json({
+      totalImportedPaid: all.total,
+      pendingSend: pending.length,
+      alreadySent: all.total - pending.length,
+      events,
+      defaultIntro: DEFAULT_MIGRATION_INTRO,
+      sample: all.orders.slice(0, 15),
+    });
+  }
+
+  if (action === 'preview') {
+    const orderId = req.nextUrl.searchParams.get('orderId') || '';
+    let order = orderId
+      ? await prisma.order.findUnique({
+          where: { id: orderId },
+          include: {
+            event: true,
+            lote: true,
+            tickets: {
+              where: { status: { not: 'cancelled' } },
+              include: { ticketType: true },
+            },
+          },
+        })
+      : null;
+
+    if (!order) {
+      const c = await loadCandidates({ eventId, onlyNotSent: false, limit: 1 });
+      order = c.full[0] || null;
+    }
+
+    if (!order) {
+      return NextResponse.json(
+        { error: 'Nenhum pedido importado pago para pré-visualizar' },
+        { status: 404 }
+      );
+    }
+
+    const introHtml = req.nextUrl.searchParams.get('intro') || undefined;
+    const built = await buildMigrationNoticeHtml(toPayload(order), { introHtml });
+    return NextResponse.json({
+      ok: true,
+      orderId: order.id,
+      buyerEmail: order.buyerEmail,
+      buyerName: order.buyerName,
+      eventTitle: order.event.title,
+      subject: built.subject,
+      html: built.html,
+      appUrl: built.appUrl,
+    });
+  }
+
+  return NextResponse.json({ error: 'action inválida' }, { status: 400 });
+}
+
+export async function POST(req: NextRequest) {
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
+
+  let body: {
+    action?: string;
+    eventId?: string;
+    orderId?: string;
+    toEmail?: string;
+    subject?: string;
+    introHtml?: string;
+    attachPdf?: boolean;
+    limit?: number;
+    dryRun?: boolean;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
+  }
+
+  const action = body.action || 'preview';
+  const attachPdf = body.attachPdf !== false;
+
+  if (action === 'preview') {
+    const introHtml = body.introHtml;
+    let order = body.orderId
+      ? await prisma.order.findUnique({
+          where: { id: body.orderId },
+          include: {
+            event: true,
+            lote: true,
+            tickets: {
+              where: { status: { not: 'cancelled' } },
+              include: { ticketType: true },
+            },
+          },
+        })
+      : null;
+    if (!order) {
+      const c = await loadCandidates({
+        eventId: body.eventId,
+        onlyNotSent: false,
+        limit: 1,
+      });
+      order = c.full[0] || null;
+    }
+    if (!order) {
+      return NextResponse.json({ error: 'Sem pedido para preview' }, { status: 404 });
+    }
+    const built = await buildMigrationNoticeHtml(toPayload(order), { introHtml });
+    return NextResponse.json({
+      ok: true,
+      orderId: order.id,
+      buyerEmail: order.buyerEmail,
+      subject: body.subject || built.subject,
+      html: built.html,
+    });
+  }
+
+  if (action === 'send-test') {
+    const toEmail = (body.toEmail || '').trim().toLowerCase();
+    if (!toEmail.includes('@')) {
+      return NextResponse.json({ error: 'Informe toEmail de teste' }, { status: 400 });
+    }
+    let order = body.orderId
+      ? await prisma.order.findUnique({
+          where: { id: body.orderId },
+          include: {
+            event: true,
+            lote: true,
+            tickets: {
+              where: { status: { not: 'cancelled' } },
+              include: { ticketType: true },
+            },
+          },
+        })
+      : null;
+    if (!order) {
+      const c = await loadCandidates({
+        eventId: body.eventId,
+        onlyNotSent: false,
+        limit: 1,
+      });
+      order = c.full[0] || null;
+    }
+    if (!order) {
+      return NextResponse.json({ error: 'Sem pedido modelo' }, { status: 404 });
+    }
+
+    const mail = await sendMigrationNotice(toPayload(order), {
+      toOverride: toEmail,
+      subject: body.subject
+        ? `[TESTE] ${body.subject}`
+        : undefined,
+      introHtml: body.introHtml,
+      attachPdf,
+    });
+    return NextResponse.json({
+      ...mail,
+      testTo: toEmail,
+      orderId: order.id,
+      message: mail.ok
+        ? `E-mail de teste enviado para ${toEmail}`
+        : mail.error || 'Falha',
+    });
+  }
+
+  if (action === 'send-batch') {
+    const limit = Math.min(50, Math.max(1, body.limit || 20));
+    const c = await loadCandidates({
+      eventId: body.eventId,
+      onlyNotSent: true,
+      limit,
+      offset: 0,
+    });
+
+    if (body.dryRun) {
+      return NextResponse.json({
+        ok: true,
+        dryRun: true,
+        wouldSend: c.orders.length,
+        totalPending: c.total,
+        sample: c.orders.slice(0, 10),
+      });
+    }
+
+    const results: Array<{ orderId: string; email: string; ok: boolean; error?: string }> =
+      [];
+    let sent = 0;
+    let failed = 0;
+
+    for (const full of c.full) {
+      const mail = await sendMigrationNotice(toPayload(full), {
+        subject: body.subject,
+        introHtml: body.introHtml,
+        attachPdf,
+      });
+      if (mail.ok) {
+        sent += 1;
+        const prev = full.feeDetails || '';
+        const next = [prev, MIGRATION_EMAIL_MARKER, new Date().toISOString().slice(0, 10)]
+          .filter(Boolean)
+          .join(' | ')
+          .slice(0, 250);
+        await prisma.order.update({
+          where: { id: full.id },
+          data: { feeDetails: next },
+        });
+      } else {
+        failed += 1;
+      }
+      results.push({
+        orderId: full.id,
+        email: full.buyerEmail,
+        ok: mail.ok,
+        error: mail.error,
+      });
+      // leve pausa para não estourar rate limit Resend
+      await new Promise((r) => setTimeout(r, 350));
+    }
+
+    return NextResponse.json({
+      ok: true,
+      sent,
+      failed,
+      batchSize: c.full.length,
+      totalPendingAfter: Math.max(0, c.total - sent),
+      results: results.slice(0, 30),
+      message: `Enviados ${sent}, falhas ${failed} (lote de ${c.full.length})`,
+    });
+  }
+
+  return NextResponse.json({ error: 'action inválida' }, { status: 400 });
+}
