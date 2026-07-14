@@ -63,7 +63,7 @@ export default async function Programacao() {
                 </div>
                 <div className="mt-auto flex items-center justify-between gap-2 pt-2 border-t border-white/10">
                   <div className="font-mono text-sm text-emerald-400">{formatPrice(minPrice)}</div>
-                  {available < 1 ? (
+                  {!available ? (
                     <span className="text-xs text-red-400">Esgotado</span>
                   ) : (
                     <Link href={`/evento/${event.slug}`} className="btn btn-primary text-xs sm:text-sm px-3 py-2">
