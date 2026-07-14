@@ -66,6 +66,9 @@ interface Order {
   buyerPasswordHash?: string | null;
   /** API sanitizada — true se o comprador já tem senha (hash nunca vem no JSON) */
   hasPassword?: boolean;
+  /** portal | woocommerce */
+  source?: string | null;
+  allowClientCancel?: boolean | null;
   event: {
     id: string;
     title: string;
@@ -403,6 +406,9 @@ export default function MeusIngressos() {
 
   const canCancel = (order: Order) => {
     if (order.status !== 'paid') return false;
+    // Migrados do Woo: sem self-service de cancelamento
+    if ((order.source || '').toLowerCase() === 'woocommerce') return false;
+    if (order.allowClientCancel === false) return false;
     if (order.cancellationRequests.some((cr) => cr.status === 'pending' || cr.status === 'approved'))
       return false;
     return isUpcoming(order.event.date);

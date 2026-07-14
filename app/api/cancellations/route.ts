@@ -56,6 +56,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Pedido não elegível' }, { status: 400 });
   }
 
+  // Pedidos migrados do WooCommerce: sem cancelamento self-service
+  // (pagamento no Stripe/MP antigo — estorno automático daqui não é confiável)
+  const src = ((order as { source?: string }).source || 'portal').toLowerCase();
+  const allowClient =
+    (order as { allowClientCancel?: boolean }).allowClientCancel !== false;
+  if (src === 'woocommerce' || !allowClient) {
+    return NextResponse.json(
+      {
+        error:
+          'Este pedido foi importado do site antigo e não aceita cancelamento pelo portal. Fale conosco no WhatsApp ou Contato.',
+      },
+      { status: 400 }
+    );
+  }
+
   const pending = order.cancellationRequests?.some(
     (c) => c.status === 'pending' || c.status === 'approved'
   );

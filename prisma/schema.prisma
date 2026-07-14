@@ -80,12 +80,23 @@ model Order {
   feeCents   Int     @default(0)
   feeDetails String? @db.VarChar(255)
 
+  /** portal = pedido novo; woocommerce = importado do site antigo */
+  source            String  @default("portal") @db.VarChar(32)
+  /** ID do pedido no WooCommerce (shop_order) */
+  externalId        String? @db.VarChar(64)
+  /**
+   * false = cliente NÃO pode pedir cancelamento no portal
+   * (padrão para migração Woo — estorno Stripe/MP antigo não é confiável daqui)
+   */
+  allowClientCancel Boolean @default(true)
+
   tickets              Ticket[]
   cancellationRequests CancellationRequest[]
 
   @@index([eventId])
   @@index([buyerEmail])
   @@index([status])
+  @@index([source, externalId])
 }
 
 model Ticket {
