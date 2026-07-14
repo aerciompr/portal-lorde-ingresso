@@ -98,6 +98,36 @@ export async function POST(req: NextRequest) {
       finalPhone = cleanedPhone;
     }
 
+    // Endereço (obrigatório no cartão / Stripe)
+    const zip = String(buyer?.zip || buyer?.cep || '').replace(/\D/g, '').slice(0, 8);
+    const street = String(buyer?.street || '').trim().slice(0, 255);
+    const number = String(buyer?.number || '').trim().slice(0, 32);
+    const complement = String(buyer?.complement || '').trim().slice(0, 128);
+    const neighborhood = String(buyer?.neighborhood || '').trim().slice(0, 128);
+    const city = String(buyer?.city || '').trim().slice(0, 128);
+    const state = String(buyer?.state || '')
+      .trim()
+      .toUpperCase()
+      .slice(0, 2);
+
+    if (method === 'card') {
+      if (zip.length !== 8) {
+        return NextResponse.json({ error: 'CEP inválido (8 dígitos)' }, { status: 400 });
+      }
+      if (street.length < 2) {
+        return NextResponse.json({ error: 'Informe a rua/avenida' }, { status: 400 });
+      }
+      if (!number) {
+        return NextResponse.json({ error: 'Informe o número do endereço' }, { status: 400 });
+      }
+      if (city.length < 2) {
+        return NextResponse.json({ error: 'Informe a cidade' }, { status: 400 });
+      }
+      if (state.length !== 2) {
+        return NextResponse.json({ error: 'Informe o UF (2 letras)' }, { status: 400 });
+      }
+    }
+
     const accessCode = 'LN-' + Math.random().toString(36).slice(2, 8).toUpperCase();
 
     const finalCpf = cleanCpf(buyer.cpf || '');
@@ -118,6 +148,16 @@ export async function POST(req: NextRequest) {
 
     const buyerEmailNorm = String(buyer.email || '').trim().toLowerCase();
 
+    const addressData = {
+      buyerZip: zip || null,
+      buyerStreet: street || null,
+      buyerNumber: number || null,
+      buyerComplement: complement || null,
+      buyerNeighborhood: neighborhood || null,
+      buyerCity: city || null,
+      buyerState: state || null,
+    };
+
     await prisma.order.update({
       where: { id: orderId },
       data: {
@@ -126,6 +166,7 @@ export async function POST(req: NextRequest) {
         buyerCpf: finalCpf || null,
         buyerPhone: finalPhone,
         accessCode,
+        ...addressData,
         ...(buyerPasswordHash ? { buyerPasswordHash } : {}),
       },
     });
@@ -296,6 +337,18 @@ export async function POST(req: NextRequest) {
       const buyerEmail = String(buyer.email || '').trim().toLowerCase();
       const buyerName = String(buyer.name || '').trim();
       let customerId: string | undefined;
+      const stripeAddress =
+        zip.length === 8 && street
+          ? {
+              line1: `${street}${number ? `, ${number}` : ''}`.slice(0, 200),
+              line2: complement || undefined,
+              city: city || undefined,
+              state: state || undefined,
+              postal_code: zip,
+              country: 'BR',
+            }
+          : undefined;
+
       if (buyerEmail) {
         try {
           const existing = await stripe.customers.list(
@@ -309,6 +362,7 @@ export async function POST(req: NextRequest) {
               {
                 name: buyerName || undefined,
                 phone: finalPhone || undefined,
+                address: stripeAddress,
                 metadata: {
                   cpf: finalCpf || '',
                   source: 'portal-lorde-nelson',
@@ -322,6 +376,7 @@ export async function POST(req: NextRequest) {
                 email: buyerEmail,
                 name: buyerName || undefined,
                 phone: finalPhone || undefined,
+                address: stripeAddress,
                 metadata: {
                   cpf: finalCpf || '',
                   source: 'portal-lorde-nelson',
@@ -360,8 +415,20 @@ export async function POST(req: NextRequest) {
           buyer_email: buyerEmail.slice(0, 500),
           buyer_cpf: (finalCpf || '').slice(0, 32),
           buyer_phone: (finalPhone || '').slice(0, 32),
+          buyer_zip: zip,
+          buyer_city: city.slice(0, 100),
+          buyer_state: state,
           event_title: String(order.event.title || '').slice(0, 500),
         },
+        ...(stripeAddress
+          ? {
+              shipping: {
+                name: buyerName || 'Cliente',
+                address: stripeAddress,
+                phone: finalPhone || undefined,
+              },
+            }
+          : {}),
       };
 
       let paymentIntent: Stripe.PaymentIntent;

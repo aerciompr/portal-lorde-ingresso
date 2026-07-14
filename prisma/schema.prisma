@@ -64,6 +64,14 @@ model Order {
   buyerCpf          String?   @db.VarChar(32)
   buyerPhone        String?   @db.VarChar(32)
   buyerPasswordHash String?   @db.VarChar(255)
+  /** Endereço (cartão / Stripe billing) */
+  buyerZip          String?   @db.VarChar(16)
+  buyerStreet       String?   @db.VarChar(255)
+  buyerNumber       String?   @db.VarChar(32)
+  buyerComplement   String?   @db.VarChar(128)
+  buyerNeighborhood String?   @db.VarChar(128)
+  buyerCity         String?   @db.VarChar(128)
+  buyerState        String?   @db.VarChar(8)
   totalCents        Int
   status            String    @default("pending") @db.VarChar(32)
   paymentGateway    String?   @db.VarChar(64)

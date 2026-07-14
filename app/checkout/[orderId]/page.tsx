@@ -5,7 +5,17 @@ import { useParams, useRouter } from 'next/navigation';
 import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
 import { loadStripe, Stripe, type StripeElements } from '@stripe/stripe-js';
-import { formatCpf, isValidCpf, formatPhone, isValidPhone, cleanCpf, cleanPhone } from '@/lib/masks';
+import {
+  formatCpf,
+  isValidCpf,
+  formatPhone,
+  isValidPhone,
+  cleanCpf,
+  cleanPhone,
+  formatCep,
+  cleanCep,
+  isValidCep,
+} from '@/lib/masks';
 import PurchaseSuccessModal, {
   type PurchaseModalVariant,
 } from '@/components/PurchaseSuccessModal';
@@ -17,6 +27,10 @@ interface OrderData {
   tickets: { id: string }[];
   status: string;
 }
+
+const UF_LIST = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+] as const;
 
 export default function CheckoutPage() {
   const params = useParams<{ orderId: string }>();
@@ -31,8 +45,17 @@ export default function CheckoutPage() {
     phone: '',
     password: '',
     password2: '',
+    zip: '',
+    street: '',
+    number: '',
+    complement: '',
+    neighborhood: '',
+    city: '',
+    state: '',
   });
   const [wantPassword, setWantPassword] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepStatus, setCepStatus] = useState<'idle' | 'ok' | 'manual' | 'error'>('idle');
 
   const [selectedMethod, setSelectedMethod] = useState<'pix' | 'card' | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -106,6 +129,13 @@ export default function CheckoutPage() {
   const isPhoneValid = !buyer.phone || isValidPhone(cleanPhone(buyer.phone));
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailValid = emailRegex.test(buyer.email.trim());
+  const zipDigits = cleanCep(buyer.zip);
+  const addressValid =
+    isValidCep(buyer.zip) &&
+    buyer.street.trim().length >= 2 &&
+    buyer.number.trim().length >= 1 &&
+    buyer.city.trim().length >= 2 &&
+    buyer.state.trim().length === 2;
 
   const basicValid =
     buyer.name.trim().length > 2 &&
@@ -118,7 +148,56 @@ export default function CheckoutPage() {
     !wantPassword ||
     (buyer.password.length >= 6 && buyer.password === buyer.password2);
 
-  const isFormValid = basicValid && selectedMethod && passwordOk;
+  // Endereço obrigatório no cartão (Stripe); no PIX é opcional mas enviamos se preenchido
+  const isFormValid =
+    basicValid &&
+    selectedMethod &&
+    passwordOk &&
+    (selectedMethod !== 'card' || addressValid);
+
+  async function lookupCep(raw?: string) {
+    const cep = cleanCep(raw ?? buyer.zip);
+    if (cep.length !== 8) {
+      setCepStatus('idle');
+      return;
+    }
+    setCepLoading(true);
+    setCepStatus('idle');
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      if (!res.ok) throw new Error('ViaCEP indisponível');
+      const data = (await res.json()) as {
+        erro?: boolean;
+        logradouro?: string;
+        bairro?: string;
+        localidade?: string;
+        uf?: string;
+        complemento?: string;
+      };
+      if (data.erro) {
+        setCepStatus('manual');
+        toast.message('CEP não encontrado — preencha o endereço manualmente');
+        return;
+      }
+      setBuyer((b) => ({
+        ...b,
+        zip: formatCep(cep),
+        street: data.logradouro?.trim() || b.street,
+        neighborhood: data.bairro?.trim() || b.neighborhood,
+        city: data.localidade?.trim() || b.city,
+        state: (data.uf || b.state).toUpperCase().slice(0, 2),
+        // complemento do ViaCEP às vezes é referência; só preenche se vazio
+        complement: b.complement || (data.complemento?.trim() || ''),
+      }));
+      setCepStatus('ok');
+      toast.success('Endereço preenchido pelo CEP');
+    } catch {
+      setCepStatus('error');
+      toast.message('Não foi possível consultar o CEP — digite o endereço manualmente');
+    } finally {
+      setCepLoading(false);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -200,6 +279,10 @@ export default function CheckoutPage() {
       toast.error('Preencha nome, e-mail válido e CPF antes de escolher a forma de pagamento');
       return;
     }
+    if (!addressValid) {
+      toast.error('Para cartão, preencha o endereço completo (CEP, rua, número, cidade e UF)');
+      return;
+    }
     setSelectedMethod('card');
     setPixData(null);
 
@@ -231,6 +314,8 @@ export default function CheckoutPage() {
         toast.error('Informe um CPF válido (11 dígitos)');
       } else if (buyer.phone && !isValidPhone(cleanPhone(buyer.phone))) {
         toast.error('Telefone inválido (use DDD + número)');
+      } else if (selectedMethod === 'card' && !addressValid) {
+        toast.error('Preencha o endereço completo para pagamento com cartão');
       } else if (!selectedMethod) {
         toast.error('Escolha PIX ou Cartão');
       } else if (wantPassword && buyer.password.length < 6) {
@@ -249,6 +334,13 @@ export default function CheckoutPage() {
       email: buyer.email.trim(),
       cpf: cleanedCpf,
       phone: buyer.phone ? cleanPhone(buyer.phone) : '',
+      zip: zipDigits,
+      street: buyer.street.trim(),
+      number: buyer.number.trim(),
+      complement: buyer.complement.trim(),
+      neighborhood: buyer.neighborhood.trim(),
+      city: buyer.city.trim(),
+      state: buyer.state.trim().toUpperCase(),
     };
     if (wantPassword && buyer.password.length >= 6) {
       buyerPayload.password = buyer.password;
@@ -316,6 +408,14 @@ export default function CheckoutPage() {
                 name: buyer.name.trim(),
                 email: buyer.email.trim(),
                 phone: buyer.phone ? cleanPhone(buyer.phone) : undefined,
+                address: {
+                  line1: `${buyer.street.trim()}${buyer.number.trim() ? `, ${buyer.number.trim()}` : ''}`.slice(0, 200),
+                  line2: buyer.complement.trim() || undefined,
+                  city: buyer.city.trim() || undefined,
+                  state: buyer.state.trim().toUpperCase() || undefined,
+                  postal_code: zipDigits || undefined,
+                  country: 'BR',
+                },
               },
             },
             fields: {
@@ -323,6 +423,7 @@ export default function CheckoutPage() {
                 name: 'auto',
                 email: 'auto',
                 phone: 'auto',
+                address: 'never', // já coletamos no formulário + enviamos no confirm
               },
             },
           });
@@ -371,6 +472,14 @@ export default function CheckoutPage() {
             name: buyer.name.trim(),
             email: buyer.email.trim(),
             phone: buyer.phone ? cleanPhone(buyer.phone) : undefined,
+            address: {
+              line1: `${buyer.street.trim()}${buyer.number.trim() ? `, ${buyer.number.trim()}` : ''}`.slice(0, 200),
+              line2: buyer.complement.trim() || undefined,
+              city: buyer.city.trim() || undefined,
+              state: buyer.state.trim().toUpperCase() || undefined,
+              postal_code: zipDigits || undefined,
+              country: 'BR',
+            },
           },
         },
         receipt_email: buyer.email.trim() || undefined,
@@ -434,6 +543,116 @@ export default function CheckoutPage() {
         />
         {buyer.phone && !isPhoneValid && <div className="text-[10px] text-red-400 mt-1">Telefone deve ter 10 ou 11 dígitos (com DDD).</div>}
 
+        {/* Endereço — obrigatório no cartão (Stripe); ViaCEP preenche quando possível */}
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <div className="label mb-1">Endereço de cobrança</div>
+          <p className="text-[11px] text-zinc-500 mb-3">
+            Obrigatório para pagamento com cartão (enviado ao Stripe). Digite o CEP para preencher
+            automaticamente; se não achar, complete manualmente.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-2 mb-2">
+            <div className="flex-1">
+              <input
+                className={`input ${zipDigits.length > 0 && !isValidCep(buyer.zip) ? 'border-red-500 focus:ring-red-500/30' : ''}`}
+                placeholder="CEP *"
+                inputMode="numeric"
+                autoComplete="postal-code"
+                value={buyer.zip}
+                onChange={(e) => {
+                  const next = formatCep(e.target.value);
+                  setBuyer({ ...buyer, zip: next });
+                  setCepStatus('idle');
+                  if (cleanCep(next).length === 8) {
+                    void lookupCep(next);
+                  }
+                }}
+                onBlur={() => {
+                  if (zipDigits.length === 8) void lookupCep();
+                }}
+                maxLength={9}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary sm:w-auto px-4 text-sm disabled:opacity-50"
+              disabled={cepLoading || zipDigits.length !== 8}
+              onClick={() => void lookupCep()}
+            >
+              {cepLoading ? 'Buscando…' : 'Buscar CEP'}
+            </button>
+          </div>
+          {cepStatus === 'manual' && (
+            <div className="text-[10px] text-amber-400 mb-2">
+              CEP não encontrado. Preencha rua, bairro, cidade e UF abaixo.
+            </div>
+          )}
+          {cepStatus === 'error' && (
+            <div className="text-[10px] text-amber-400 mb-2">
+              Consulta do CEP indisponível. Preencha o endereço manualmente.
+            </div>
+          )}
+          {cepStatus === 'ok' && (
+            <div className="text-[10px] text-emerald-400 mb-2">Endereço localizado — confira e informe o número.</div>
+          )}
+
+          <input
+            className="input mb-2"
+            placeholder="Rua / Avenida *"
+            autoComplete="address-line1"
+            value={buyer.street}
+            onChange={(e) => setBuyer({ ...buyer, street: e.target.value })}
+          />
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            <input
+              className="input col-span-1"
+              placeholder="Nº *"
+              autoComplete="address-line2"
+              value={buyer.number}
+              onChange={(e) => setBuyer({ ...buyer, number: e.target.value })}
+            />
+            <input
+              className="input col-span-2"
+              placeholder="Complemento (opcional)"
+              value={buyer.complement}
+              onChange={(e) => setBuyer({ ...buyer, complement: e.target.value })}
+            />
+          </div>
+          <input
+            className="input mb-2"
+            placeholder="Bairro"
+            value={buyer.neighborhood}
+            onChange={(e) => setBuyer({ ...buyer, neighborhood: e.target.value })}
+          />
+          <div className="grid grid-cols-3 gap-2 mb-1">
+            <input
+              className="input col-span-2"
+              placeholder="Cidade *"
+              autoComplete="address-level2"
+              value={buyer.city}
+              onChange={(e) => setBuyer({ ...buyer, city: e.target.value })}
+            />
+            <select
+              className="input col-span-1"
+              value={buyer.state}
+              onChange={(e) => setBuyer({ ...buyer, state: e.target.value })}
+              aria-label="UF"
+            >
+              <option value="">UF *</option>
+              {UF_LIST.map((uf) => (
+                <option key={uf} value={uf}>
+                  {uf}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedMethod === 'card' && !addressValid && (
+            <div className="text-[10px] text-red-400 mt-1">
+              Para cartão: CEP, rua, número, cidade e UF são obrigatórios.
+            </div>
+          )}
+        </div>
+
         {/* Cadastro opcional de senha na compra */}
         <div className="mt-4 pt-4 border-t border-white/10">
           <label className="flex items-start gap-3 cursor-pointer">
@@ -483,7 +702,10 @@ export default function CheckoutPage() {
           )}
         </div>
 
-        <div className="text-[10px] text-zinc-400 mt-2">* Campos obrigatórios. CPF é exigido para PIX e emissão do ingresso.</div>
+        <div className="text-[10px] text-zinc-400 mt-2">
+          * Nome, e-mail e CPF obrigatórios. Endereço obrigatório no cartão. CPF exigido para PIX e
+          emissão.
+        </div>
       </div>
 
       {/* Payment methods */}
@@ -492,6 +714,11 @@ export default function CheckoutPage() {
         {!basicValid && (
           <div className="mb-3 text-sm text-amber-400 bg-amber-950/40 border border-amber-900/50 rounded px-3 py-2">
             Preencha nome completo, e-mail válido e CPF acima para habilitar as opções de pagamento.
+          </div>
+        )}
+        {basicValid && selectedMethod === 'card' && !addressValid && (
+          <div className="mb-3 text-sm text-amber-400 bg-amber-950/40 border border-amber-900/50 rounded px-3 py-2">
+            Complete o endereço (CEP, rua, número, cidade e UF) para continuar com cartão.
           </div>
         )}
 

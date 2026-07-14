@@ -59,3 +59,19 @@ export function cleanCpf(value: string): string {
 export function cleanPhone(value: string): string {
   return cleanDigits(value);
 }
+
+/** CEP: 00000-000 */
+export function formatCep(value: string): string {
+  const d = cleanDigits(value).slice(0, 8);
+  if (!d) return '';
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+}
+
+export function cleanCep(value: string): string {
+  return cleanDigits(value).slice(0, 8);
+}
+
+export function isValidCep(value: string): boolean {
+  return cleanCep(value).length === 8;
+}
