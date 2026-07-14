@@ -69,18 +69,55 @@ export async function POST(req: NextRequest) {
   const gate = await requireAdminMutation(req);
   if (gate !== true) return gate;
 
-  const data = await req.json();
+  let data: unknown;
+  try {
+    data = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
+  }
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return NextResponse.json({ error: 'Body inválido' }, { status: 400 });
   }
-  for (const [k, v] of Object.entries(data)) {
+
+  let saved = 0;
+  const errors: string[] = [];
+
+  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
     if (!k || typeof k !== 'string' || k.length > 120) continue;
-    await prisma.setting.upsert({
-      where: { key: k },
-      update: { value: String(v) },
-      create: { key: k, value: String(v) },
-    });
+    // null/undefined → string vazia (permite limpar)
+    const value =
+      v === null || v === undefined
+        ? ''
+        : typeof v === 'string'
+          ? v
+          : typeof v === 'number' || typeof v === 'boolean'
+            ? String(v)
+            : JSON.stringify(v);
+    try {
+      await prisma.setting.upsert({
+        where: { key: k },
+        update: { value },
+        create: { key: k, value },
+      });
+      saved += 1;
+    } catch (e) {
+      console.error('[settings POST]', k, e);
+      errors.push(k);
+    }
   }
+
   bustSettingsCache();
-  return NextResponse.json({ ok: true });
+
+  if (saved === 0 && errors.length) {
+    return NextResponse.json(
+      { error: `Falha ao gravar: ${errors.join(', ')}` },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    saved,
+    ...(errors.length ? { partialErrors: errors } : {}),
+  });
 }

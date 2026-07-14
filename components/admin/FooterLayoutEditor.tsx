@@ -30,9 +30,11 @@ const TYPE_LABELS: Record<FooterWidgetType, string> = {
 type Props = {
   settings: Record<string, string>;
   onChange: (patch: Record<string, string>) => void;
+  /** Salva só o rodapé no servidor (botão dedicado) */
+  onSaveFooter?: (payload: Record<string, string>) => Promise<boolean | void>;
 };
 
-export default function FooterLayoutEditor({ settings, onChange }: Props) {
+export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }: Props) {
   const year = String(new Date().getFullYear());
   const siteName = settings.site_name || 'Lorde Nelson';
 
@@ -50,9 +52,36 @@ export default function FooterLayoutEditor({ settings, onChange }: Props) {
   );
 
   const [openId, setOpenId] = useState<string | null>(layout.widgets[0]?.id || null);
+  const [savingFooter, setSavingFooter] = useState(false);
+  // espelho local do JSON — garante que o que está na tela é o que grava
+  const [layoutJson, setLayoutJson] = useState(() =>
+    serializeFooterLayout(
+      parseFooterLayout(settings.footer_layout, {
+        left: settings.footer_left,
+        right: settings.footer_right,
+        year,
+        siteName,
+      })
+    )
+  );
 
   function commit(next: FooterLayout) {
-    onChange({ footer_layout: serializeFooterLayout(next) });
+    const json = serializeFooterLayout(next);
+    setLayoutJson(json);
+    onChange({ footer_layout: json });
+  }
+
+  async function handleSaveFooter() {
+    if (!onSaveFooter) return;
+    setSavingFooter(true);
+    try {
+      // usa layoutJson atual (última edição), não settings possivelmente stale
+      await onSaveFooter({
+        footer_layout: layoutJson || settings.footer_layout || '',
+      });
+    } finally {
+      setSavingFooter(false);
+    }
   }
 
   function updateWidget(id: string, patch: Partial<FooterWidget>) {
@@ -367,10 +396,22 @@ export default function FooterLayoutEditor({ settings, onChange }: Props) {
         ))}
       </div>
 
-      <p className="text-[10px] text-zinc-600">
-        Clique em <strong className="text-zinc-400">Salvar configurações</strong> abaixo para gravar
-        o rodapé no banco.
-      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2 border-t border-white/10">
+        {onSaveFooter && (
+          <button
+            type="button"
+            className="btn btn-primary text-sm px-6 disabled:opacity-50"
+            disabled={savingFooter}
+            onClick={() => void handleSaveFooter()}
+          >
+            {savingFooter ? 'Salvando rodapé…' : 'Salvar rodapé agora'}
+          </button>
+        )}
+        <p className="text-[10px] text-zinc-600">
+          Ou use <strong className="text-zinc-400">Salvar configurações</strong> no final da página
+          (grava tudo, inclusive rodapé).
+        </p>
+      </div>
     </div>
   );
 }

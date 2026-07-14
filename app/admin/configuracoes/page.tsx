@@ -14,20 +14,36 @@ export default function AdminConfiguracoes() {
   const [uploading, setUploading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch('/api/admin/settings');
+    const res = await fetch('/api/admin/settings', { credentials: 'include' });
     if (res.ok) setSettings(await res.json());
+    else if (res.status === 401) toast.error('Sessão expirada — faça login de novo');
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  async function saveSettings() {
-    await fetch('/api/admin/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
-    });
-    toast.success('Configurações salvas no banco');
-    load();
+  async function saveSettings(override?: Record<string, string>) {
+    const payload = override ? { ...settings, ...override } : settings;
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || `Falha ao salvar (${res.status})`);
+        return false;
+      }
+      toast.success('Configurações salvas no banco');
+      // atualiza estado local com o que mandamos (evita race com load)
+      if (override) setSettings((s) => ({ ...s, ...override }));
+      await load();
+      return true;
+    } catch (e) {
+      toast.error((e as Error).message || 'Erro de rede ao salvar');
+      return false;
+    }
   }
 
   async function handleImageUpload(file: File, key: string) {
@@ -739,7 +755,12 @@ export default function AdminConfiguracoes() {
             {visualSub === 'rodape' && (
               <FooterLayoutEditor
                 settings={settings}
-                onChange={(patch) => setSettings({ ...settings, ...patch })}
+                onChange={(patch) => setSettings((s) => ({ ...s, ...patch }))}
+                onSaveFooter={async (footerPayload) => {
+                  // grava só chaves do rodapé (evita perder edição se estado geral estiver desatualizado)
+                  const ok = await saveSettings(footerPayload);
+                  return ok;
+                }}
               />
             )}
           </section>
