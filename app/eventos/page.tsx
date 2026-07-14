@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { Calendar, Clock, MapPin } from "lucide-react";
+import { eventHasAvailability, eventMinPriceCents } from "@/lib/event-price";
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,11 @@ export default async function Programacao() {
     where: {
       date: { gte: new Date() },
     },
-    include: { ticketTypes: true },
+    include: {
+      ticketTypes: true,
+      lotes: true,
+      activeLote: true,
+    },
     orderBy: { date: 'asc' },
   });
 
@@ -20,9 +25,9 @@ export default async function Programacao() {
       <p className="text-zinc-400 mb-10">Todos os eventos. Escolha o seu e garanta seu lugar.</p>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {events.map((event: any) => {
-          const minPrice = event.ticketTypes.length ? Math.min(...event.ticketTypes.map((t: any) => t.priceCents)) : 0;
-          const available = event.ticketTypes.reduce((s: number, t: any) => s + (t.totalQty - t.sold), 0);
+        {events.map((event) => {
+          const minPrice = eventMinPriceCents(event);
+          const available = eventHasAvailability(event);
           return (
             <div
               key={event.id}

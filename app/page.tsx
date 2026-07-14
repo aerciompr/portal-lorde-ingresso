@@ -4,13 +4,18 @@ import { formatPrice, formatDate } from "@/lib/utils";
 import { MapPin } from "lucide-react";
 import { getAppSettings } from "@/lib/settings";
 import EventImage from "@/components/EventImage";
+import { eventMinPriceCents } from "@/lib/event-price";
 
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   const [allEvents, settings] = await Promise.all([
     prisma.event.findMany({
-      include: { ticketTypes: true },
+      include: {
+        ticketTypes: true,
+        lotes: true,
+        activeLote: true,
+      },
       orderBy: { date: 'asc' },
     }),
     getAppSettings(),
@@ -65,7 +70,7 @@ export default async function Home() {
             {/* Grid 2 col: cartaz 3:4 com object-contain (arte inteira, sem crop agressivo) */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {events.map((event) => {
-                const minPrice = Math.min(...event.ticketTypes.map(t => t.priceCents));
+                const minPrice = eventMinPriceCents(event);
                 return (
                   <Link
                     key={event.id}
