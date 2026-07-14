@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchTicketTypeToLote, productIdFromLoteNome } from './recalc-stock';
+import { matchTicketTypeToLote, productIdFromLoteNome } from './lote-match';
 
 describe('matchTicketTypeToLote', () => {
   const types = [

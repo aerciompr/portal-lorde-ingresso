@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
-import { matchTicketTypeToLote } from '@/lib/recalc-stock';
+import { matchTicketTypeToLote } from '@/lib/lote-match';
 
 interface TicketType {
   id: string;
