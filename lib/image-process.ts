@@ -99,17 +99,21 @@ export async function processUploadImage(
   // Logo / favicon: só a arte, sem retângulo branco no PNG
   if (purpose === 'logo' || purpose === 'favicon') {
     const size = purpose === 'favicon' ? 128 : 512;
-    let buf = await sharp(input, { failOn: 'none' })
-      .rotate()
-      .resize(size, size, { fit: 'inside', withoutEnlargement: true })
-      .ensureAlpha()
-      .png()
-      .toBuffer();
+    let buf: Buffer = Buffer.from(
+      await sharp(input, { failOn: 'none' })
+        .rotate()
+        .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+        .ensureAlpha()
+        .png()
+        .toBuffer()
+    );
 
     try {
-      buf = await removeNearWhiteBackground(sharp, buf);
+      buf = Buffer.from(await removeNearWhiteBackground(sharp, buf));
       // corta margens transparentes
-      buf = await sharp(buf).trim({ threshold: 10 }).png({ compressionLevel: 9 }).toBuffer();
+      buf = Buffer.from(
+        await sharp(buf).trim({ threshold: 10 }).png({ compressionLevel: 9 }).toBuffer()
+      );
     } catch {
       /* mantém resize se trim/alpha falhar */
     }
