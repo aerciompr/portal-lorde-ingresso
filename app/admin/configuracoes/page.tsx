@@ -182,7 +182,7 @@ export default function AdminConfiguracoes() {
           <p className="text-sm text-zinc-400 mt-1">Gerencie o portal em seções organizadas. Imagens podem ser enviadas por arquivo ou URL.</p>
         </div>
         <button 
-          onClick={saveSettings} 
+          onClick={() => void saveSettings()}
           className="btn btn-primary px-8"
         >
           Salvar todas as configurações
@@ -898,7 +898,7 @@ export default function AdminConfiguracoes() {
         )}
 
         <div className="pt-6 mt-8 border-t border-white/10 flex justify-end">
-          <button onClick={saveSettings} className="btn btn-primary px-8">Salvar configurações</button>
+          <button type="button" onClick={() => void saveSettings()} className="btn btn-primary px-8">Salvar configurações</button>
         </div>
       </div>
     </div>
