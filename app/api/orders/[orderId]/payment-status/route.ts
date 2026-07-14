@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 import { getAppSettings } from '@/lib/settings';
 import { finalizePaidOrder } from '@/lib/finalize-paid-order';
@@ -115,68 +114,53 @@ export async function GET(
     }
   }
 
-  // Pending + Stripe: consulta PaymentIntent (se webhook atrasou / falhou)
-  if (
+  // Pending + Stripe (paymentId pi_* ou gateway stripe)
+  const isStripePending =
     order.status === 'pending' &&
-    order.paymentGateway === 'stripe' &&
-    order.paymentId
-  ) {
+    Boolean(order.paymentId?.startsWith('pi_') || order.paymentGateway === 'stripe');
+
+  if (isStripePending && order.paymentId) {
     try {
-      const s = await getAppSettings();
-      const key = (s.payment.stripeSecretKey || process.env.STRIPE_SECRET_KEY || '').trim();
-      const oauth = (s.payment.stripeAccessToken || '').trim();
-      const accountId = (s.payment.stripeAccountId || '').trim();
-      const useConnect = Boolean(oauth && accountId && oauth !== key);
-      const apiKey = useConnect ? oauth : key;
-      if (apiKey) {
-        const stripe = new Stripe(apiKey);
-        const pi = await stripe.paymentIntents.retrieve(
-          String(order.paymentId),
-          undefined,
-          useConnect ? { stripeAccount: accountId } : undefined
-        );
-        const st = String(pi.status || '').toLowerCase();
-        if (st === 'succeeded') {
-          await finalizePaidOrder(order.id, {
-            paymentId: pi.id,
-            paymentMethod: 'card',
-            paymentGateway: 'stripe',
-          });
-          const refreshed = await prisma.order.findUnique({
-            where: { id: order.id },
-            select: {
-              status: true,
-              accessCode: true,
-              buyerEmail: true,
-              tickets: { select: { id: true } },
-            },
-          });
-          return NextResponse.json({
-            status: 'paid',
-            accessCode: refreshed?.accessCode,
-            buyerEmail: refreshed?.buyerEmail,
-            ticketIds: (refreshed?.tickets || []).map((t) => t.id),
-            message: 'Pagamento confirmado',
-            synced: true,
-            stripeStatus: st,
-          });
-        }
-        if (['canceled', 'cancelled'].includes(st)) {
-          return NextResponse.json({
-            status: 'pending',
-            stripeStatus: st,
-            message: 'Pagamento cancelado no Stripe',
-          });
-        }
+      const { reconcileStripeOrder } = await import('@/lib/stripe-reconcile');
+      const r = await reconcileStripeOrder(order.id, {
+        paymentIntentId: order.paymentId,
+      });
+      if (r.status === 'paid') {
+        const refreshed = await prisma.order.findUnique({
+          where: { id: order.id },
+          select: {
+            status: true,
+            accessCode: true,
+            buyerEmail: true,
+            tickets: { select: { id: true } },
+          },
+        });
         return NextResponse.json({
-          status: 'pending',
-          stripeStatus: st,
-          message:
-            st === 'requires_payment_method' || st === 'requires_action'
-              ? 'Aguardando confirmação do cartão…'
-              : 'Aguardando pagamento…',
+          status: 'paid',
+          accessCode: refreshed?.accessCode,
+          buyerEmail: refreshed?.buyerEmail,
+          ticketIds: (refreshed?.tickets || []).map((t) => t.id),
+          message: 'Pagamento confirmado',
+          synced: true,
+          stripeStatus: r.stripeStatus,
         });
       }
+      if (r.stripeStatus && ['canceled', 'cancelled'].includes(r.stripeStatus)) {
+        return NextResponse.json({
+          status: 'pending',
+          stripeStatus: r.stripeStatus,
+          message: 'Pagamento cancelado no Stripe',
+        });
+      }
+      return NextResponse.json({
+        status: 'pending',
+        stripeStatus: r.stripeStatus,
+        message:
+          r.stripeStatus === 'requires_payment_method' ||
+          r.stripeStatus === 'requires_action'
+            ? 'Aguardando confirmação do cartão…'
+            : 'Aguardando pagamento…',
+      });
     } catch (e) {
       console.error('[payment-status] Stripe check failed', e);
     }

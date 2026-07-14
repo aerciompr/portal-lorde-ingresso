@@ -42,6 +42,7 @@ export default function AdminPedidos() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [syncingStripe, setSyncingStripe] = useState(false);
   const limit = 50;
 
   const load = useCallback(async () => {
@@ -191,6 +192,33 @@ export default function AdminPedidos() {
           <option value="pending">Pendentes</option>
           <option value="cancelled">Cancelados</option>
         </select>
+        <button
+          type="button"
+          disabled={syncingStripe}
+          className="btn btn-secondary text-sm disabled:opacity-50"
+          title="Consulta Stripe e marca pending já cobrados como pagos"
+          onClick={async () => {
+            setSyncingStripe(true);
+            try {
+              const res = await fetch('/api/admin/orders/sync-stripe', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'Falha');
+              toast.success(data.message || 'Sincronizado');
+              load();
+            } catch (e) {
+              toast.error((e as Error).message);
+            } finally {
+              setSyncingStripe(false);
+            }
+          }}
+        >
+          {syncingStripe ? 'Sincronizando…' : 'Sincronizar Stripe'}
+        </button>
         <a href="/admin/ingresso-preview" className="btn btn-secondary text-sm inline-flex items-center gap-1.5">
           <FileText size={14} /> Layout + PDF exemplo
         </a>

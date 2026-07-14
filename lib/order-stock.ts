@@ -310,6 +310,24 @@ export async function cleanupPendingOrders(options: {
   const orderIds: string[] = [];
 
   for (const { id } of pending) {
+    // Antes de cancelar: se for cartão Stripe e o PI já succeeded, marca pago
+    try {
+      const full = await prisma.order.findUnique({
+        where: { id },
+        select: { paymentId: true, paymentGateway: true, paymentMethod: true },
+      });
+      const pi = full?.paymentId || '';
+      if (pi.startsWith('pi_')) {
+        const { reconcileStripeOrder } = await import('@/lib/stripe-reconcile');
+        const r = await reconcileStripeOrder(id, { paymentIntentId: pi });
+        if (r.status === 'paid' || r.finalized || r.alreadyPaid) {
+          continue; // não cancela — foi pago
+        }
+      }
+    } catch {
+      /* segue cleanup */
+    }
+
     const result = await releaseOrderStock(id);
     ticketsReleased += result.ticketsReleased;
     await prisma.order.update({

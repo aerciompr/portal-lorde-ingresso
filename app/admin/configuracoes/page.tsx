@@ -542,6 +542,22 @@ export default function AdminConfiguracoes() {
                     <input className="input font-mono text-xs" type="password" placeholder="sk_live_..." value={settings.stripe_secret_key || ''} onChange={e => setSettings({...settings, stripe_secret_key: e.target.value})} />
                     <div className="text-[10px] text-zinc-500 mt-0.5">STRIPE_SECRET_KEY</div>
                   </div>
+                  <div>
+                    <div className="label">Webhook Signing Secret (whsec_…)</div>
+                    <input
+                      className="input font-mono text-xs"
+                      type="password"
+                      placeholder="whsec_..."
+                      value={settings.stripe_webhook_secret || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, stripe_webhook_secret: e.target.value })
+                      }
+                    />
+                    <div className="text-[10px] text-zinc-500 mt-0.5">
+                      Stripe Dashboard → Developers → Webhooks → endpoint → Signing secret.
+                      Também pode ir no env <code className="text-zinc-400">STRIPE_WEBHOOK_SECRET</code>.
+                    </div>
+                  </div>
 
                   <p className="text-[10px] text-zinc-500 leading-relaxed">
                     <strong className="text-zinc-400">Modo recomendado: chaves diretas</strong> (pk_ + sk_ da
@@ -549,7 +565,8 @@ export default function AdminConfiguracoes() {
                     Webhook produção:{' '}
                     <code className="text-zinc-400">https://portal.lordenelson.com.br/api/webhook/stripe</code>
                     {' '}
-                    + env <code className="text-zinc-400">STRIPE_WEBHOOK_SECRET</code>.
+                    eventos: <code className="text-zinc-400">payment_intent.succeeded</code>,{' '}
+                    <code className="text-zinc-400">charge.refunded</code>.
                   </p>
 
                   {/* Connect opcional — se account_id ficar sem token OAuth, o código ignora e usa sk_ */}

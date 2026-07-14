@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 import { getAppSettings } from '@/lib/settings';
 import { finalizePaidOrder } from '@/lib/finalize-paid-order';
@@ -78,55 +77,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 2) Sync Stripe pending (últimas 48h)
-  const stripePending = await prisma.order.findMany({
-    where: {
-      status: 'pending',
-      paymentGateway: 'stripe',
-      paymentId: { not: null },
-      createdAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
-    },
-    take: 80,
-    orderBy: { createdAt: 'asc' },
-  });
-
-  if (stripePending.length > 0) {
-    const key = (s.payment.stripeSecretKey || process.env.STRIPE_SECRET_KEY || '').trim();
-    const oauth = (s.payment.stripeAccessToken || '').trim();
-    const accountId = (s.payment.stripeAccountId || '').trim();
-    const useConnect = Boolean(oauth && accountId && oauth !== key);
-    const apiKey = useConnect ? oauth : key;
-    if (apiKey) {
-      const stripe = new Stripe(apiKey);
-      const reqOpts = useConnect ? { stripeAccount: accountId } : undefined;
-      for (const order of stripePending) {
-        try {
-          const pi = await stripe.paymentIntents.retrieve(
-            String(order.paymentId),
-            undefined,
-            reqOpts
-          );
-          const st = String(pi.status || '').toLowerCase();
-          if (st === 'succeeded') {
-            const r = await finalizePaidOrder(order.id, {
-              paymentId: pi.id,
-              paymentMethod: 'card',
-              paymentGateway: 'stripe',
-            });
-            if (r.ok) finalized++;
-          } else if (st === 'canceled' || st === 'cancelled') {
-            await releaseOrderStock(order.id);
-            await prisma.order.update({
-              where: { id: order.id },
-              data: { status: 'cancelled', feeDetails: `stripe sync: ${st}` },
-            });
-            cancelled++;
-          }
-        } catch (e: unknown) {
-          errors.push(`stripe ${order.id}: ${e instanceof Error ? e.message : 'erro'}`);
-        }
-      }
+  // 2) Sync Stripe pending (PaymentIntent pi_*)
+  try {
+    const { reconcileAllPendingStripe } = await import('@/lib/stripe-reconcile');
+    const stripeBatch = await reconcileAllPendingStripe(100);
+    finalized += stripeBatch.finalized;
+    if (stripeBatch.errors.length) {
+      errors.push(...stripeBatch.errors.map((e) => `stripe ${e}`));
     }
+  } catch (e: unknown) {
+    errors.push(`stripe batch: ${e instanceof Error ? e.message : 'erro'}`);
   }
 
   // 3) Virada automática em eventos com lote ativo esgotado

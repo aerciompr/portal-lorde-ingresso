@@ -44,6 +44,7 @@ export default function AdminDashboard() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [cleaning, setCleaning] = useState(false);
+  const [syncingStripe, setSyncingStripe] = useState(false);
   const [Recharts, setRecharts] = useState<RechartsModule | null>(null);
 
   useEffect(() => {
@@ -144,6 +145,27 @@ export default function AdminDashboard() {
     }
   }
 
+  /** Marca como pagos os pending cujo PaymentIntent já succeeded no Stripe */
+  async function syncStripePendings() {
+    setSyncingStripe(true);
+    try {
+      const res = await fetch('/api/admin/orders/sync-stripe', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha na sincronização');
+      toast.success(data.message || 'Sincronização concluída');
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncingStripe(false);
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -190,18 +212,29 @@ export default function AdminDashboard() {
           onCustomFromChange={setCustomFrom}
           onCustomToChange={setCustomTo}
         />
-        {dash.pendingCount > 0 && (
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={cleaning}
-            onClick={cleanupPendings}
-            className="text-xs px-3 py-2 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
+            disabled={syncingStripe}
+            onClick={syncStripePendings}
+            className="text-xs px-3 py-2 rounded-xl border border-sky-500/30 text-sky-300 hover:bg-sky-950/40 disabled:opacity-50"
+            title="Consulta o Stripe e marca como pagos os pending já cobrados"
           >
-            {cleaning
-              ? 'Limpando…'
-              : `Limpar pendentes antigos (${dash.pendingCount} no período)`}
+            {syncingStripe ? 'Sincronizando Stripe…' : 'Sincronizar cartão (Stripe)'}
           </button>
-        )}
+          {dash.pendingCount > 0 && (
+            <button
+              type="button"
+              disabled={cleaning}
+              onClick={cleanupPendings}
+              className="text-xs px-3 py-2 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
+            >
+              {cleaning
+                ? 'Limpando…'
+                : `Limpar pendentes antigos (${dash.pendingCount} no período)`}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

@@ -463,10 +463,13 @@ export default function CheckoutPage() {
       code = code || sessionStorage.getItem(`orderCode-${orderId}`) || '';
     } catch {}
     const codeQ = code ? `&code=${encodeURIComponent(code)}` : '';
-    const { error } = await stripe.confirmPayment({
+    // return_url: 3DS / banco; stripe-return sincroniza no destino
+    const returnUrl = `${window.location.origin}/ingressos?email=${encodeURIComponent(buyer.email)}${codeQ}&success=1&orderId=${encodeURIComponent(orderId)}`;
+
+    const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/ingressos?email=${encodeURIComponent(buyer.email)}${codeQ}&success=1`,
+        return_url: returnUrl,
         payment_method_data: {
           billing_details: {
             name: buyer.name.trim(),
@@ -484,18 +487,51 @@ export default function CheckoutPage() {
         },
         receipt_email: buyer.email.trim() || undefined,
       },
-      redirect: 'always',
+      // Só redireciona se 3DS; senão finalizamos aqui e sincronizamos o pedido
+      redirect: 'if_required',
     });
 
     if (error) {
       toast.error(error.message || 'Erro ao confirmar cartão');
       setProcessing(false);
-    } else {
-      // Se não redirecionou, modal + ir para Meus Ingressos com código
-      setModalVariant('paid');
-      setModalOpen(true);
-      toast.success('Pagamento processado!');
+      return;
     }
+
+    // Sincroniza com o backend (webhook pode atrasar / falhar)
+    try {
+      if (paymentIntent?.id) {
+        await fetch(
+          `/api/orders/stripe-return?payment_intent=${encodeURIComponent(paymentIntent.id)}`,
+          { cache: 'no-store' }
+        );
+      }
+      // Backup: payment-status do pedido
+      for (let i = 0; i < 5; i++) {
+        const res = await fetch(`/api/orders/${orderId}/payment-status`, {
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'paid') {
+            if (data.accessCode) setPaidAccessCode(data.accessCode);
+            if (Array.isArray(data.ticketIds)) setPaidTicketIds(data.ticketIds);
+            setModalVariant('paid');
+            setModalOpen(true);
+            toast.success('Pagamento confirmado!');
+            setProcessing(false);
+            return;
+          }
+        }
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    } catch {
+      /* segue modal */
+    }
+
+    setModalVariant('paid');
+    setModalOpen(true);
+    toast.success('Pagamento processado! Se o status demorar, aguarde alguns segundos.');
+    setProcessing(false);
   }
 
   if (loading || !order) return <div className="p-12 text-center text-zinc-400">Carregando checkout seguro...</div>;

@@ -263,9 +263,53 @@ export default function MeusIngressos() {
 
   const didAutoLookup = useRef(false);
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const q = new URLSearchParams(window.location.search);
-      if (q.get('success') === '1') {
+    if (typeof window === 'undefined') return;
+
+    const q = new URLSearchParams(window.location.search);
+    const paymentIntent = q.get('payment_intent') || '';
+    const orderFromUrl = q.get('orderId') || '';
+
+    // Retorno do Stripe (3DS / redirect): sincroniza PI → pedido paid
+    const syncStripeReturn = async () => {
+      if (paymentIntent && paymentIntent.startsWith('pi_')) {
+        try {
+          const res = await fetch(
+            `/api/orders/stripe-return?payment_intent=${encodeURIComponent(paymentIntent)}`,
+            { cache: 'no-store' }
+          );
+          const data = await res.json().catch(() => ({}));
+          if (data.accessCode && !code) {
+            // preenche código se a API devolveu
+            try {
+              const url = new URL(window.location.href);
+              if (!url.searchParams.get('code') && data.accessCode) {
+                url.searchParams.set('code', data.accessCode);
+              }
+              if (data.buyerEmail && !url.searchParams.get('email')) {
+                url.searchParams.set('email', data.buyerEmail);
+              }
+              window.history.replaceState({}, '', url.pathname + url.search);
+            } catch {
+              /* ignore */
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      } else if (orderFromUrl) {
+        try {
+          await fetch(`/api/orders/${orderFromUrl}/payment-status`, {
+            cache: 'no-store',
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    void (async () => {
+      if (q.get('success') === '1' || paymentIntent) {
+        await syncStripeReturn();
         setJustPaid(true);
         toast.success('Pagamento confirmado!');
         try {
@@ -276,22 +320,30 @@ export default function MeusIngressos() {
         } catch {
           setWelcomeOpen(true);
         }
-        // Evita reabrir o modal no F5 com a mesma URL
         try {
           const url = new URL(window.location.href);
           url.searchParams.delete('success');
+          url.searchParams.delete('payment_intent');
+          url.searchParams.delete('payment_intent_client_secret');
+          url.searchParams.delete('redirect_status');
           window.history.replaceState({}, '', url.pathname + url.search);
-        } catch {}
+        } catch {
+          /* ignore */
+        }
       }
-    }
-    if (didAutoLookup.current) return;
-    if (email && (code || password)) {
-      didAutoLookup.current = true;
-      lookupWith(email, code, password);
-    } else if (code) {
-      didAutoLookup.current = true;
-      lookupWith(email, code);
-    }
+
+      if (didAutoLookup.current) return;
+      const q2 = new URLSearchParams(window.location.search);
+      const e = q2.get('email') || email;
+      const c = q2.get('code') || code;
+      if (e && (c || password)) {
+        didAutoLookup.current = true;
+        lookupWith(e, c, password);
+      } else if (c) {
+        didAutoLookup.current = true;
+        lookupWith(e, c);
+      }
+    })();
   }, [email, code, password]);
 
   async function lookup(usePassword = false) {

@@ -60,6 +60,8 @@ export const SECRET_SETTING_KEY_PATTERNS = [
   /stripe_secret/i,
   /stripe_access/i,
   /stripe_refresh/i,
+  /webhook_secret/i,
+  /whsec/i,
   /resend/i,
 ];
 
