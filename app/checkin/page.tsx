@@ -64,6 +64,7 @@ function CheckinInner() {
   const [adminUser, setAdminUser] = useState('');
   const [today, setToday] = useState<EventRow[]>([]);
   const [upcoming, setUpcoming] = useState<EventRow[]>([]);
+  const [past, setPast] = useState<EventRow[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [lockEventTitle, setLockEventTitle] = useState('');
   const qrRef = useRef<Html5Qrcode | null>(null);
@@ -83,9 +84,10 @@ function CheckinInner() {
   const loadEvents = useCallback(async () => {
     setLoadingEvents(true);
     try {
-      const [tRes, uRes] = await Promise.all([
+      const [tRes, uRes, pRes] = await Promise.all([
         fetch('/api/checkin/events?scope=today', { credentials: 'include' }),
         fetch('/api/checkin/events?scope=upcoming', { credentials: 'include' }),
+        fetch('/api/checkin/events?scope=past', { credentials: 'include' }),
       ]);
       if (tRes.ok) {
         const d = await tRes.json();
@@ -94,6 +96,10 @@ function CheckinInner() {
       if (uRes.ok) {
         const d = await uRes.json();
         setUpcoming(d.events || []);
+      }
+      if (pRes.ok) {
+        const d = await pRes.json();
+        setPast(d.events || []);
       }
     } catch {
       toast.error('Falha ao carregar eventos');
@@ -262,10 +268,11 @@ function CheckinInner() {
             ) : (
               <>
                 <EventList title="Hoje" items={today} />
-                <EventList title="Próximos" items={upcoming} />
-                {today.length === 0 && upcoming.length === 0 && (
+                <EventList title="Próximos (todos)" items={upcoming} />
+                <EventList title="Anteriores" items={past} />
+                {today.length === 0 && upcoming.length === 0 && past.length === 0 && (
                   <div className="text-center text-zinc-500 text-sm py-16">
-                    Nenhum evento hoje ou nos próximos 30 dias.
+                    Nenhum evento cadastrado.
                   </div>
                 )}
                 <button

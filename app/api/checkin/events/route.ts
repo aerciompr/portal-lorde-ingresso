@@ -12,28 +12,39 @@ export async function GET(req: NextRequest) {
 
   const scope = (req.nextUrl.searchParams.get('scope') || 'today').toLowerCase();
   const { start, end } = dayBoundsSaoPaulo();
-  const now = new Date();
 
-  let where: { date?: { gte?: Date; lte?: Date; gt?: Date } } = {};
+  // today | upcoming (todos futuros) | past | all (hoje+futuros) | everything (todos no banco)
+  let where: { date?: { gte?: Date; lte?: Date; gt?: Date; lt?: Date } } = {};
+  let orderBy: { date: 'asc' | 'desc' } = { date: 'asc' };
+  let take = 200;
+
   if (scope === 'today') {
     where = { date: { gte: start, lte: end } };
+    take = 50;
   } else if (scope === 'upcoming') {
-    // a partir de agora / fim de hoje, próximos 30 dias
-    where = {
-      date: {
-        gt: end,
-        lte: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
-      },
-    };
+    // todos os eventos depois de hoje (sem limite de 30 dias)
+    where = { date: { gt: end } };
+    orderBy = { date: 'asc' };
+    take = 200;
+  } else if (scope === 'past') {
+    where = { date: { lt: start } };
+    orderBy = { date: 'desc' };
+    take = 100;
+  } else if (scope === 'everything') {
+    where = {};
+    orderBy = { date: 'desc' };
+    take = 300;
   } else {
-    // all futuros + hoje
+    // all = hoje + futuros
     where = { date: { gte: start } };
+    orderBy = { date: 'asc' };
+    take = 250;
   }
 
   const events = await prisma.event.findMany({
     where,
-    orderBy: { date: 'asc' },
-    take: 40,
+    orderBy,
+    take,
     select: {
       id: true,
       title: true,

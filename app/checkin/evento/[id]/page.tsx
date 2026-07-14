@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { Html5Qrcode } from 'html5-qrcode';
 import { toast } from 'sonner';
 
 type Stats = { total: number; checkedIn: number; notCheckedIn: number };
@@ -57,10 +58,22 @@ export default function CheckinEventoPage() {
   const [filter, setFilter] = useState<'all' | 'valid' | 'used'>('all');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [showGate, setShowGate] = useState(true);
+  const [scanning, setScanning] = useState(false);
+  const [code, setCode] = useState('');
+  const [lastResult, setLastResult] = useState<string | null>(null);
+  const qrRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
     document.body.classList.add('checkin-app');
-    return () => document.body.classList.remove('checkin-app');
+    return () => {
+      document.body.classList.remove('checkin-app');
+      const inst = qrRef.current;
+      if (inst) {
+        inst.stop().catch(() => undefined);
+        qrRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -141,6 +154,68 @@ export default function CheckinEventoPage() {
     }
   }
 
+  async function validateCode(qrOrCode: string) {
+    try {
+      const res = await fetch('/api/checkin/validate', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: qrOrCode, eventId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Inválido');
+      const msg = `${data.buyerName || 'OK'} · ${data.uniqueCode || ''}`;
+      setLastResult(msg);
+      toast.success(`Check-in: ${data.buyerName || 'ok'}`);
+      await load();
+    } catch (e) {
+      toast.error((e as Error).message || 'Ingresso inválido');
+      setLastResult(null);
+    }
+  }
+
+  async function startScanner() {
+    setShowGate(true);
+    setScanning(true);
+    try {
+      const inst = new Html5Qrcode('event-qr-reader');
+      qrRef.current = inst;
+      await inst.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        async (decodedText) => {
+          await validateCode(decodedText);
+          stopScanner();
+        },
+        () => {}
+      );
+    } catch {
+      toast.error('Não foi possível iniciar a câmera');
+      setScanning(false);
+    }
+  }
+
+  function stopScanner() {
+    const inst = qrRef.current;
+    if (inst) {
+      inst
+        .stop()
+        .then(() => {
+          qrRef.current = null;
+          setScanning(false);
+        })
+        .catch(() => setScanning(false));
+    } else {
+      setScanning(false);
+    }
+  }
+
+  async function manualGateCheck() {
+    if (!code.trim()) return;
+    await validateCode(code.trim());
+    setCode('');
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
       <div className="bg-zinc-900 border-b border-white/10 px-3 py-3 sticky top-0 z-20">
@@ -168,17 +243,68 @@ export default function CheckinEventoPage() {
               </div>
             )}
           </div>
-          <Link
-            href={`/checkin?tab=scanner&eventId=${eventId}`}
+          <button
+            type="button"
+            onClick={() => {
+              setShowGate((v) => !v);
+              if (showGate) stopScanner();
+            }}
             className="text-[11px] px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shrink-0"
           >
-            Scanner
-          </Link>
+            {showGate ? 'Lista' : 'Check-in QR'}
+          </button>
         </div>
       </div>
 
       <div className="flex-1 p-4 max-w-lg mx-auto w-full pb-12 space-y-4">
         <StatsBar stats={stats} />
+
+        {/* Check-in por QR / código neste evento */}
+        {showGate && (
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-3">
+            <div className="text-xs font-medium text-emerald-300 uppercase tracking-wide">
+              Check-in neste evento
+            </div>
+            <div
+              id="event-qr-reader"
+              className="w-full rounded-xl overflow-hidden bg-black"
+              style={{ minHeight: scanning ? 280 : 0 }}
+            />
+            {!scanning ? (
+              <button type="button" onClick={startScanner} className="btn btn-primary w-full text-sm">
+                Abrir câmera (QR)
+              </button>
+            ) : (
+              <button type="button" onClick={stopScanner} className="btn btn-secondary w-full text-sm">
+                Parar câmera
+              </button>
+            )}
+            <div className="flex gap-2">
+              <input
+                className="input flex-1 font-mono text-sm"
+                placeholder="Código do ingresso"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && manualGateCheck()}
+              />
+              <button
+                type="button"
+                onClick={manualGateCheck}
+                className="btn btn-secondary shrink-0 text-sm"
+              >
+                Validar
+              </button>
+            </div>
+            {lastResult && (
+              <div className="text-xs text-emerald-300 bg-emerald-950/40 rounded-lg px-3 py-2">
+                Último: {lastResult}
+              </div>
+            )}
+            <p className="text-[10px] text-zinc-500">
+              Só aceita ingressos deste evento. Abaixo: busca e check-in manual na lista.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-2">
           <input
