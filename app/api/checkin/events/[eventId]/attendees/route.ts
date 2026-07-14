@@ -26,6 +26,7 @@ export async function GET(
       date: true,
       openTime: true,
       address: true,
+      imageUrl: true,
     },
   });
   if (!event) {

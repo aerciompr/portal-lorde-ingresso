@@ -52,9 +52,38 @@ export type ProcessedImage = {
   bytesOut: number;
 };
 
+/** Fundo quase branco → transparente (logo/favicon sem caixa branca no arquivo). */
+async function removeNearWhiteBackground(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sharp: any,
+  input: Buffer,
+  threshold = 242
+): Promise<Buffer> {
+  const { data, info } = await sharp(input, { failOn: 'none' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const px = Buffer.from(data);
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i];
+    const g = px[i + 1];
+    const b = px[i + 2];
+    if (r >= threshold && g >= threshold && b >= threshold) {
+      px[i + 3] = 0;
+    }
+  }
+
+  return sharp(px, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
 /**
  * Redimensiona (sem crop forçado), corrige EXIF, comprime.
- * fit: inside + withoutEnlargement → não estica e não corta arte.
+ * Logo/favicon: remove fundo branco do arquivo e grava PNG transparente.
  */
 export async function processUploadImage(
   input: Buffer,
@@ -63,11 +92,39 @@ export async function processUploadImage(
   const bytesIn = input.length;
   const profile = PROFILES[purpose] || PROFILES.generic;
 
-  // sharp é dependency — falha controlada se binário ausente
   const sharp = (await import('sharp')).default;
 
-  const base = sharp(input, { failOn: 'none' }).rotate();
-  const meta = await base.metadata();
+  const meta = await sharp(input, { failOn: 'none' }).rotate().metadata();
+
+  // Logo / favicon: só a arte, sem retângulo branco no PNG
+  if (purpose === 'logo' || purpose === 'favicon') {
+    const size = purpose === 'favicon' ? 128 : 512;
+    let buf = await sharp(input, { failOn: 'none' })
+      .rotate()
+      .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+      .ensureAlpha()
+      .png()
+      .toBuffer();
+
+    try {
+      buf = await removeNearWhiteBackground(sharp, buf);
+      // corta margens transparentes
+      buf = await sharp(buf).trim({ threshold: 10 }).png({ compressionLevel: 9 }).toBuffer();
+    } catch {
+      /* mantém resize se trim/alpha falhar */
+    }
+
+    const outMeta = await sharp(buf).metadata();
+    return {
+      buffer: buf,
+      mime: 'image/png',
+      ext: 'png',
+      width: outMeta.width,
+      height: outMeta.height,
+      bytesIn,
+      bytesOut: buf.length,
+    };
+  }
 
   let pipeline = sharp(input, { failOn: 'none' })
     .rotate()
@@ -92,11 +149,19 @@ export async function processUploadImage(
     ext = 'webp';
   }
 
-  // Se por algum motivo aumentou (raro), mantém original se for imagem já ok
-  if (out.length > bytesIn && bytesIn < 400_000 && (meta.format === 'jpeg' || meta.format === 'webp' || meta.format === 'png')) {
+  if (
+    out.length > bytesIn &&
+    bytesIn < 400_000 &&
+    (meta.format === 'jpeg' || meta.format === 'webp' || meta.format === 'png')
+  ) {
     return {
       buffer: input,
-      mime: meta.format === 'png' ? 'image/png' : meta.format === 'webp' ? 'image/webp' : 'image/jpeg',
+      mime:
+        meta.format === 'png'
+          ? 'image/png'
+          : meta.format === 'webp'
+            ? 'image/webp'
+            : 'image/jpeg',
       ext: meta.format === 'png' ? 'png' : meta.format === 'webp' ? 'webp' : 'jpg',
       width: meta.width,
       height: meta.height,

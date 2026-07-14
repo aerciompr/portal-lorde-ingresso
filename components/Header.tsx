@@ -104,13 +104,13 @@ export default function Header({
           href="/"
           className="flex items-center gap-2.5 font-semibold tracking-tight text-xl hover:opacity-90 transition min-w-0"
         >
-          {/* Logo no formato natural (redonda se for selo); sem caixa branca retangular */}
+          {/* Só a imagem da logo — sem caixa/fundo/anel */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             key={logoSrc}
             src={logoSrc}
             alt={siteName}
-            className="h-10 w-10 sm:h-11 sm:w-11 shrink-0 rounded-full object-cover ring-1 ring-white/15"
+            className="h-10 sm:h-11 w-auto max-w-[min(160px,42vw)] object-contain bg-transparent shrink-0"
             onError={() => {
               setCandidateIndex((i) => {
                 if (i + 1 < candidates.length) return i + 1;

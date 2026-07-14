@@ -25,6 +25,7 @@ type EventInfo = {
   date: string;
   openTime?: string | null;
   address?: string | null;
+  imageUrl?: string | null;
 };
 
 function StatsBar({ stats }: { stats: Stats }) {
@@ -226,6 +227,18 @@ export default function CheckinEventoPage() {
           >
             ←
           </Link>
+          <div className="relative h-10 w-8 shrink-0 rounded-md overflow-hidden bg-zinc-800 border border-white/10">
+            {event?.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={event.imageUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs opacity-40">🎫</div>
+            )}
+          </div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold truncate text-sm sm:text-base">
               {event?.title || 'Evento'}

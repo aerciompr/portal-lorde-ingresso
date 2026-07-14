@@ -14,6 +14,7 @@ type EventRow = {
   date: string;
   openTime?: string | null;
   address?: string | null;
+  imageUrl?: string | null;
   stats: Stats;
 };
 
@@ -196,13 +197,29 @@ function CheckinInner() {
             <Link
               key={ev.id}
               href={`/checkin/evento/${ev.id}`}
-              className="block rounded-2xl border border-white/10 bg-zinc-900/80 hover:border-emerald-500/40 p-4 transition"
+              className="flex gap-3 rounded-2xl border border-white/10 bg-zinc-900/80 hover:border-emerald-500/40 p-3 transition"
             >
-              <div className="font-semibold text-white leading-snug">{ev.title}</div>
-              <div className="text-xs text-zinc-500 mt-1">
-                {formatEventWhen(ev.date, ev.openTime)}
+              <div className="relative h-14 w-11 shrink-0 rounded-lg overflow-hidden bg-zinc-800 border border-white/10">
+                {ev.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={ev.imageUrl}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-lg opacity-40">🎫</div>
+                )}
               </div>
-              <StatsChips stats={ev.stats} />
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-white leading-snug text-sm line-clamp-2">
+                  {ev.title}
+                </div>
+                <div className="text-xs text-zinc-500 mt-0.5">
+                  {formatEventWhen(ev.date, ev.openTime)}
+                </div>
+                <StatsChips stats={ev.stats} />
+              </div>
             </Link>
           ))}
         </div>

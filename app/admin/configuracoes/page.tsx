@@ -138,7 +138,7 @@ export default function AdminConfiguracoes() {
                 alt={label}
                 className={
                   key === 'logo_url' || key === 'favicon_url'
-                    ? 'h-12 w-12 object-cover rounded-full ring-1 ring-white/15'
+                    ? 'h-12 w-auto max-w-[140px] object-contain bg-transparent'
                     : 'max-h-12 max-w-[160px] object-contain rounded'
                 }
                 onError={(e) => (e.currentTarget.style.display = 'none')}

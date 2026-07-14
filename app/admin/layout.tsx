@@ -74,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <img
               src={logoFailed ? '/logo-lordenelson.jpg' : logoUrl}
               alt={siteName}
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-white/15"
+              className="h-10 w-auto max-w-[140px] object-contain bg-transparent shrink-0"
               onError={() => setLogoFailed(true)}
             />
           </Link>

@@ -30,7 +30,7 @@ function WidgetBlock({
         <img
           src={contact.logoUrl || '/logo-lordenelson.jpg'}
           alt={contact.siteName}
-          className={`${size === 'h-10' ? 'h-10 w-10' : 'h-12 w-12'} object-cover rounded-full ring-1 ring-white/10`}
+          className={`${size === 'h-10' ? 'h-10' : 'h-12'} w-auto max-w-[140px] object-contain bg-transparent`}
         />
       </div>
     );
@@ -191,7 +191,7 @@ export default function SiteFooter({ layout, contact }: Props) {
                 <img
                   src={contact.logoUrl || '/logo-lordenelson.jpg'}
                   alt={contact.siteName}
-                  className="h-11 w-11 object-cover rounded-full ring-1 ring-white/10"
+                  className="h-11 w-auto max-w-[140px] object-contain bg-transparent"
                 />
               </div>
             ) : null}
