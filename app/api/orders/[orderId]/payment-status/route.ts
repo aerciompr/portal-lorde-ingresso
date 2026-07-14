@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 import { getAppSettings } from '@/lib/settings';
 import { finalizePaidOrder } from '@/lib/finalize-paid-order';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
 /**
- * Status de pagamento em tempo real (polling do checkout).
- * Se PIX ainda pending, consulta a API do Mercado Pago e finaliza se aprovado.
+ * Status de pagamento em tempo real (polling do checkout / retorno).
+ * - PIX pending → consulta Mercado Pago
+ * - Cartão pending → consulta PaymentIntent no Stripe (backup do webhook)
  */
 export async function GET(
   _req: NextRequest,
@@ -110,6 +112,72 @@ export async function GET(
       }
     } catch (e) {
       console.error('[payment-status] MP check failed', e);
+    }
+  }
+
+  // Pending + Stripe: consulta PaymentIntent (se webhook atrasou / falhou)
+  if (
+    order.status === 'pending' &&
+    order.paymentGateway === 'stripe' &&
+    order.paymentId
+  ) {
+    try {
+      const s = await getAppSettings();
+      const key = (s.payment.stripeSecretKey || process.env.STRIPE_SECRET_KEY || '').trim();
+      const oauth = (s.payment.stripeAccessToken || '').trim();
+      const accountId = (s.payment.stripeAccountId || '').trim();
+      const useConnect = Boolean(oauth && accountId && oauth !== key);
+      const apiKey = useConnect ? oauth : key;
+      if (apiKey) {
+        const stripe = new Stripe(apiKey);
+        const pi = await stripe.paymentIntents.retrieve(
+          String(order.paymentId),
+          useConnect ? { stripeAccount: accountId } : undefined
+        );
+        const st = String(pi.status || '').toLowerCase();
+        if (st === 'succeeded') {
+          await finalizePaidOrder(order.id, {
+            paymentId: pi.id,
+            paymentMethod: 'card',
+            paymentGateway: 'stripe',
+          });
+          const refreshed = await prisma.order.findUnique({
+            where: { id: order.id },
+            select: {
+              status: true,
+              accessCode: true,
+              buyerEmail: true,
+              tickets: { select: { id: true } },
+            },
+          });
+          return NextResponse.json({
+            status: 'paid',
+            accessCode: refreshed?.accessCode,
+            buyerEmail: refreshed?.buyerEmail,
+            ticketIds: (refreshed?.tickets || []).map((t) => t.id),
+            message: 'Pagamento confirmado',
+            synced: true,
+            stripeStatus: st,
+          });
+        }
+        if (['canceled', 'cancelled'].includes(st)) {
+          return NextResponse.json({
+            status: 'pending',
+            stripeStatus: st,
+            message: 'Pagamento cancelado no Stripe',
+          });
+        }
+        return NextResponse.json({
+          status: 'pending',
+          stripeStatus: st,
+          message:
+            st === 'requires_payment_method' || st === 'requires_action'
+              ? 'Aguardando confirmação do cartão…'
+              : 'Aguardando pagamento…',
+        });
+      }
+    } catch (e) {
+      console.error('[payment-status] Stripe check failed', e);
     }
   }
 
