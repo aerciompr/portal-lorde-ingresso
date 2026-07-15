@@ -6,7 +6,14 @@ import Link from '@tiptap/extension-link';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import CodeBlock from '@tiptap/extension-code-block';
-import { useEffect, useState, useCallback } from 'react';
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import {
   Bold,
   Italic,
@@ -33,6 +40,25 @@ interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  /** Chamado quando o editor monta/atualiza — use no save para ler HTML fresco */
+  onEditorApi?: (api: { getHTML: () => string } | null) => void;
+}
+
+/** Para o pai ler o HTML atual no momento do save (sem depender de re-render). */
+export type RichTextEditorHandle = {
+  getHTML: () => string;
+};
+
+/** Compara HTML ignorando classes/atributos e espaços entre tags */
+function htmlRoughEqual(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    (s || '')
+      .replace(/\s+/g, ' ')
+      .replace(/<([a-z0-9]+)(\s[^>]*)?>/gi, '<$1>')
+      .replace(/>\s+</g, '><')
+      .trim()
+      .toLowerCase();
+  return norm(a) === norm(b);
 }
 
 function ToolbarButton({
@@ -66,13 +92,24 @@ function ToolbarDivider() {
   return <span className="mx-0.5 h-5 w-px self-center bg-white/10" aria-hidden />;
 }
 
-export default function RichTextEditor({
-  value,
-  onChange,
-  placeholder = 'Escreva a descrição do evento…',
-}: RichTextEditorProps) {
+const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
+  function RichTextEditor(
+    {
+      value,
+      onChange,
+      placeholder = 'Escreva a descrição do evento…',
+      onEditorApi,
+    },
+    ref
+  ) {
   const [isSource, setIsSource] = useState(false);
   const [sourceValue, setSourceValue] = useState(value || '');
+  /** Último HTML emitido por este editor — evita setContent em loop */
+  const lastEmittedRef = useRef(value || '');
+  const isSourceRef = useRef(isSource);
+  isSourceRef.current = isSource;
+  const sourceValueRef = useRef(sourceValue);
+  sourceValueRef.current = sourceValue;
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -111,6 +148,7 @@ export default function RichTextEditor({
     content: value || '',
     onUpdate: ({ editor: ed }) => {
       const html = ed.getHTML();
+      lastEmittedRef.current = html;
       setSourceValue(html);
       onChange(html);
     },
@@ -123,11 +161,30 @@ export default function RichTextEditor({
     },
   });
 
+  const getHTML = useCallback(() => {
+    if (isSourceRef.current) return sourceValueRef.current || '';
+    return editor?.getHTML() || lastEmittedRef.current || '';
+  }, [editor]);
+
+  useImperativeHandle(ref, () => ({ getHTML }), [getHTML]);
+
   useEffect(() => {
-    if (editor && value !== editor.getHTML() && !isSource) {
-      editor.commands.setContent(value || '', { emitUpdate: false });
-      setSourceValue(value || '');
+    if (!onEditorApi) return;
+    onEditorApi({ getHTML });
+    return () => onEditorApi(null);
+  }, [onEditorApi, getHTML]);
+
+  useEffect(() => {
+    if (!editor || isSource) return;
+    // Não reaplicar se a mudança veio do próprio editor (evita apagar digitação)
+    if (htmlRoughEqual(value || '', lastEmittedRef.current)) return;
+    if (htmlRoughEqual(value || '', editor.getHTML())) {
+      lastEmittedRef.current = value || '';
+      return;
     }
+    editor.commands.setContent(value || '', { emitUpdate: false });
+    lastEmittedRef.current = value || '';
+    setSourceValue(value || '');
   }, [value, editor, isSource]);
 
   const setLink = useCallback(() => {
@@ -150,6 +207,7 @@ export default function RichTextEditor({
 
   const handleSourceChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newHtml = e.target.value;
+    lastEmittedRef.current = newHtml;
     setSourceValue(newHtml);
     onChange(newHtml);
     editor.commands.setContent(newHtml, { emitUpdate: false });
@@ -157,9 +215,13 @@ export default function RichTextEditor({
 
   const toggleSource = () => {
     if (!isSource) {
-      setSourceValue(editor.getHTML());
+      const html = editor.getHTML();
+      lastEmittedRef.current = html;
+      setSourceValue(html);
     } else {
-      editor.commands.setContent(sourceValue);
+      lastEmittedRef.current = sourceValue;
+      editor.commands.setContent(sourceValue, { emitUpdate: false });
+      onChange(sourceValue);
     }
     setIsSource(!isSource);
   };
@@ -315,4 +377,6 @@ export default function RichTextEditor({
       </div>
     </div>
   );
-}
+});
+
+export default RichTextEditor;

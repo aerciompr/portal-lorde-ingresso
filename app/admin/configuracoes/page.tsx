@@ -44,10 +44,34 @@ export default function AdminConfiguracoes() {
         toast.error(data.error || `Falha ao salvar (${res.status})`);
         return false;
       }
+      if (override) setSettings((s) => ({ ...s, ...override }));
+
+      // Confirma no GET que o rodapé ficou gravado
+      if (opts?.onlyKeys && override?.footer_layout != null) {
+        const check = await fetch('/api/admin/settings', { credentials: 'include' });
+        if (check.ok) {
+          const row = (await check.json()) as Record<string, string>;
+          const saved = row.footer_layout || '';
+          const want = override.footer_layout || '';
+          if (saved !== want) {
+            console.error('[footer save] mismatch', {
+              wantLen: want.length,
+              savedLen: saved.length,
+            });
+            toast.error(
+              'Banco não confirmou o rodapé. Tente de novo ou verifique a sessão admin.'
+            );
+            return false;
+          }
+          setSettings(row);
+          toast.success(`Rodapé salvo (${Math.round(saved.length / 1024) || 1} KB no banco)`);
+          return true;
+        }
+      }
+
       toast.success(
         opts?.onlyKeys ? 'Rodapé salvo no banco' : 'Configurações salvas no banco'
       );
-      if (override) setSettings((s) => ({ ...s, ...override }));
       await load();
       return true;
     } catch (e) {

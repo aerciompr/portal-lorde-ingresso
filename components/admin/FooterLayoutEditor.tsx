@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   type FooterLayout,
@@ -30,7 +30,6 @@ const TYPE_LABELS: Record<FooterWidgetType, string> = {
 type Props = {
   settings: Record<string, string>;
   onChange: (patch: Record<string, string>) => void;
-  /** Salva só o rodapé no servidor (botão dedicado) */
   onSaveFooter?: (payload: Record<string, string>) => Promise<boolean | void>;
 };
 
@@ -47,17 +46,21 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
   const year = String(new Date().getFullYear());
   const siteName = settings.site_name || 'Lorde Nelson';
 
-  // Estado local + ref: evita perder a última tecla/clique no "Salvar"
   const [layout, setLayout] = useState<FooterLayout>(() => parseFromSettings(settings));
   const layoutRef = useRef(layout);
   const [openId, setOpenId] = useState<string | null>(
     () => parseFromSettings(settings).widgets[0]?.id || null
   );
   const [savingFooter, setSavingFooter] = useState(false);
-  /** Só re-sincroniza do servidor quando a string do banco muda (após load) */
+  /** true = usuário editou; não sobrescrever com load do servidor */
+  const dirtyRef = useRef(false);
   const lastServerJson = useRef(settings.footer_layout || '');
+  /** getHTML() de cada editor TipTap aberto (por widget id) */
+  const editorApis = useRef(new Map<string, () => string>());
 
+  // Só hidrata do servidor se não houver edição local pendente
   useEffect(() => {
+    if (dirtyRef.current) return;
     const server = settings.footer_layout || '';
     if (server === lastServerJson.current) return;
     lastServerJson.current = server;
@@ -66,25 +69,51 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
     setLayout(next);
   }, [settings.footer_layout, settings.footer_left, settings.footer_right, settings.site_name]);
 
-  function commit(next: FooterLayout) {
+  function commit(next: FooterLayout, opts?: { fromServer?: boolean }) {
+    if (!opts?.fromServer) dirtyRef.current = true;
     layoutRef.current = next;
     setLayout(next);
     const json = serializeFooterLayout(next);
     onChange({ footer_layout: json });
   }
 
+  /** Puxa HTML fresco do TipTap (evita perder o que ainda não entrou no state) */
+  function flushRichTextEditors(): FooterLayout {
+    let base = layoutRef.current;
+    if (editorApis.current.size === 0) return base;
+    let changed = false;
+    const widgets = base.widgets.map((w) => {
+      if (w.type !== 'richtext') return w;
+      const getHtml = editorApis.current.get(w.id);
+      if (!getHtml) return w;
+      const html = getHtml();
+      if (html === (w.html || '')) return w;
+      changed = true;
+      return { ...w, html };
+    });
+    if (!changed) return base;
+    const next = { ...base, widgets };
+    layoutRef.current = next;
+    setLayout(next);
+    return next;
+  }
+
   async function handleSaveFooter() {
     if (!onSaveFooter) return;
     setSavingFooter(true);
     try {
-      const json = serializeFooterLayout(layoutRef.current);
-      // grava JSON atual + limpa legado que reintroduzia WhatsApp no fallback
+      const flushed = flushRichTextEditors();
+      const json = serializeFooterLayout(flushed);
+      onChange({ footer_layout: json });
+
       const ok = await onSaveFooter({
         footer_layout: json,
         footer_left: '',
         footer_right: '',
       });
+
       if (ok !== false) {
+        dirtyRef.current = false;
         lastServerJson.current = json;
       }
     } finally {
@@ -102,6 +131,7 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
 
   function removeWidget(id: string) {
     if (!confirm('Remover este bloco do rodapé?')) return;
+    editorApis.current.delete(id);
     const base = layoutRef.current;
     commit({
       ...base,
@@ -128,13 +158,20 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
     setOpenId(w.id);
   }
 
+  const registerEditorApi = useCallback((widgetId: string) => {
+    return (api: { getHTML: () => string } | null) => {
+      if (api) editorApis.current.set(widgetId, api.getHTML);
+      else editorApis.current.delete(widgetId);
+    };
+  }, []);
+
   return (
     <div className="space-y-5">
       <div>
         <div className="font-medium text-emerald-400 mb-1">Rodapé (widgets)</div>
         <p className="text-xs text-zinc-500">
-          Monte o rodapé em blocos. Use <strong className="text-zinc-400">Salvar rodapé agora</strong>{' '}
-          após editar. No bloco Redes, desmarque o que não quiser (ex.: WhatsApp).
+          Edite o texto e clique em <strong className="text-zinc-300">Salvar rodapé agora</strong>.
+          Sem esse botão o site público não atualiza.
         </p>
       </div>
 
@@ -245,22 +282,6 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                   )}
                 </div>
 
-                {w.type === 'richtext' && (
-                  <div>
-                    <div className="label mb-1">Conteúdo</div>
-                    <div className="rounded-xl border border-white/10 overflow-hidden bg-zinc-900">
-                      <RichTextEditor
-                        value={w.html || ''}
-                        onChange={(html) => updateWidget(w.id, { html })}
-                        placeholder="Endereço, texto livre…"
-                      />
-                    </div>
-                    <p className="text-[10px] text-zinc-500 mt-1">
-                      Use {'{year}'} no texto para o ano atual. Depois clique em Salvar rodapé.
-                    </p>
-                  </div>
-                )}
-
                 {w.type === 'hours' && (
                   <div>
                     <div className="label mb-1">Linhas (uma por linha)</div>
@@ -314,7 +335,7 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                 {w.type === 'social' && (
                   <div className="space-y-2">
                     <p className="text-[11px] text-zinc-500">
-                      Desmarque para ocultar no site. Números/links vêm da aba Contato.
+                      Desmarque para ocultar no site. Dados vêm da aba Contato.
                     </p>
                     <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
                       {(['whatsapp', 'instagram', 'email'] as const).map((key) => {
@@ -409,6 +430,35 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                 )}
               </div>
             )}
+
+            {/* TipTap sempre montado (visível se aberto) — flush no save não perde HTML */}
+            {w.type === 'richtext' && (
+              <div
+                className={
+                  openId === w.id
+                    ? 'p-3 pt-0 border-t border-white/5'
+                    : 'hidden'
+                }
+                aria-hidden={openId !== w.id}
+              >
+                {openId === w.id && (
+                  <div className="label mb-1">Conteúdo</div>
+                )}
+                <div className="rounded-xl border border-white/10 overflow-hidden bg-zinc-900">
+                  <RichTextEditor
+                    value={w.html || ''}
+                    onChange={(html) => updateWidget(w.id, { html })}
+                    onEditorApi={registerEditorApi(w.id)}
+                    placeholder="Endereço, texto livre…"
+                  />
+                </div>
+                {openId === w.id && (
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    Use {'{year}'} no texto. Depois: <strong>Salvar rodapé agora</strong>.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -439,7 +489,7 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
           </button>
         )}
         <p className="text-[10px] text-zinc-600">
-          Prefira este botão após editar o rodapé (grava o JSON completo e limpa o legado).
+          Este botão grava o texto rico no banco. Depois atualize o site (Ctrl+F5).
         </p>
       </div>
     </div>
