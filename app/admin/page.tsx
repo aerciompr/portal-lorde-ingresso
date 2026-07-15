@@ -52,6 +52,13 @@ export default function AdminDashboard() {
     pendingCount?: number;
     pendingOlderThanTtl?: number;
     pendingOrderTtlMinutes?: number;
+    endpoints?: { sync?: string; cleanup?: string };
+  } | null>(null);
+  const [cronLastResult, setCronLastResult] = useState<{
+    ok: boolean;
+    message: string;
+    ranAt?: string;
+    details?: string[];
   } | null>(null);
   const [Recharts, setRecharts] = useState<RechartsModule | null>(null);
   const [lowStock, setLowStock] = useState<{
@@ -236,6 +243,7 @@ export default function AdminDashboard() {
       return;
     }
     setSyncingStripe(true);
+    setCronLastResult(null);
     try {
       const res = await fetch('/api/admin/orders/run-crons', {
         method: 'POST',
@@ -245,11 +253,46 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha');
-      toast.success(data.message || 'Crons ok');
+
+      const cleanup = data.cleanup as
+        | { cleaned?: number; ticketsReleased?: number; scanned?: number }
+        | undefined;
+      const stripe = data.stripe as
+        | { finalized?: number; cancelled?: number; feesUpdated?: number }
+        | undefined;
+      const pix = data.pix as
+        | { finalized?: number; cancelled?: number; skipped?: boolean }
+        | undefined;
+      const loteAlerts = data.loteAlerts as
+        | { scanned?: number; emailed?: number; critical?: number }
+        | undefined;
+
+      const details = [
+        `Stripe: ${stripe?.finalized ?? 0} pagos · ${stripe?.cancelled ?? 0} cancel. · ${stripe?.feesUpdated ?? 0} taxas`,
+        pix?.skipped
+          ? 'PIX: pulado (token MP ausente)'
+          : `PIX: ${pix?.finalized ?? data.pixFinalized ?? 0} pagos · ${pix?.cancelled ?? 0} cancel.`,
+        `Cleanup: ${cleanup?.cleaned ?? 0} cancelados · ${cleanup?.ticketsReleased ?? 0} ingressos liberados · varridos ${cleanup?.scanned ?? '—'}`,
+        `Viradas de lote: ${data.viradas ?? 0}`,
+        loteAlerts
+          ? `Alertas estoque: ${loteAlerts.critical ?? 0} críticos · ${loteAlerts.emailed ?? 0} e-mail(s)`
+          : null,
+      ].filter(Boolean) as string[];
+
+      setCronLastResult({
+        ok: true,
+        message: data.message || 'Crons executados com sucesso',
+        ranAt: data.ranAt || new Date().toISOString(),
+        details,
+      });
+      toast.success('Crons OK — veja o resumo no painel');
       load();
       loadCron();
+      loadLowStock();
     } catch (e) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message;
+      setCronLastResult({ ok: false, message: msg, details: [] });
+      toast.error(msg);
     } finally {
       setSyncingStripe(false);
     }
@@ -399,43 +442,119 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Status das crons */}
-      <div className="mb-6 p-4 border border-white/10 bg-zinc-900/80 rounded-2xl text-sm space-y-2">
-        <div className="font-medium text-zinc-200">⏱ Crons (limpeza + sync pagamento)</div>
-        <div className="grid sm:grid-cols-2 gap-2 text-xs text-zinc-400">
-          <div>
-            Secret no servidor:{' '}
-            {cronInfo?.cronSecretConfigured ? (
-              <span className="text-emerald-400">configurado</span>
-            ) : (
-              <span className="text-amber-400">
-                ausente — URLs /api/cron/* retornam 401 em produção
+      {/* Status / validação das crons */}
+      <div className="mb-6 p-4 border border-white/10 bg-zinc-900/80 rounded-2xl text-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="font-medium text-zinc-200">⏱ Crons — validação</div>
+          <button
+            type="button"
+            onClick={() => void loadCron()}
+            className="text-[11px] px-2.5 py-1 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5"
+          >
+            Atualizar status
+          </button>
+        </div>
+
+        {/* Checklist */}
+        <ul className="space-y-1.5 text-xs">
+          <li className="flex items-start gap-2">
+            <span className={cronInfo?.cronSecretConfigured ? 'text-emerald-400' : 'text-amber-400'}>
+              {cronInfo?.cronSecretConfigured ? '✓' : '!'}
+            </span>
+            <span className="text-zinc-400">
+              <strong className="text-zinc-300">CRON_SECRET</strong> no EasyPanel:{' '}
+              {cronInfo?.cronSecretConfigured ? (
+                <span className="text-emerald-400">presente</span>
+              ) : (
+                <span className="text-amber-400">
+                  ausente — jobs externos dão 401 (adicione e reinicie o app)
+                </span>
+              )}
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className={cronInfo?.lastRunAt ? 'text-emerald-400' : 'text-zinc-500'}>
+              {cronInfo?.lastRunAt ? '✓' : '·'}
+            </span>
+            <span className="text-zinc-400">
+              Última execução:{' '}
+              {cronInfo?.lastRunAt ? (
+                <>
+                  <strong className="text-zinc-200">
+                    {new Date(cronInfo.lastRunAt).toLocaleString('pt-BR')}
+                  </strong>
+                  {cronInfo.lastRunSource ? (
+                    <span className="text-zinc-600"> · fonte: {cronInfo.lastRunSource}</span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-zinc-500">nunca — clique em “Rodar crons agora” para testar</span>
+              )}
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-zinc-500">·</span>
+            <span className="text-zinc-400">
+              Pending: <strong className="text-zinc-200">{cronInfo?.pendingCount ?? '—'}</strong>
+              {' · '}
+              elegíveis (&gt;{cronInfo?.pendingOrderTtlMinutes ?? 30} min):{' '}
+              <strong className="text-amber-300">{cronInfo?.pendingOlderThanTtl ?? '—'}</strong>
+              <span className="text-zinc-600">
+                {' '}
+                (só estes o cleanup cancela)
               </span>
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-zinc-500">·</span>
+            <span className="text-zinc-400">
+              URLs HTTP (cron-job.org / EasyPanel):
+              <br />
+              <code className="text-[10px] text-zinc-500 break-all">
+                {cronInfo?.endpoints?.sync ||
+                  'https://portal.lordenelson.com.br/api/cron/sync-payments'}
+              </code>
+              <br />
+              <code className="text-[10px] text-zinc-500 break-all">
+                {cronInfo?.endpoints?.cleanup ||
+                  'https://portal.lordenelson.com.br/api/cron/cleanup-pending'}
+              </code>
+              <br />
+              <span className="text-[10px] text-zinc-600">
+                Header: Authorization: Bearer &lt;CRON_SECRET&gt; · a cada 5–15 min
+              </span>
+            </span>
+          </li>
+        </ul>
+
+        {cronLastResult && (
+          <div
+            className={`rounded-xl border p-3 text-xs space-y-1 ${
+              cronLastResult.ok
+                ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-100'
+                : 'border-red-500/30 bg-red-950/30 text-red-200'
+            }`}
+          >
+            <div className="font-medium">
+              {cronLastResult.ok ? '✓ Último teste manual OK' : '✗ Falha no teste'}
+              {cronLastResult.ranAt
+                ? ` · ${new Date(cronLastResult.ranAt).toLocaleString('pt-BR')}`
+                : ''}
+            </div>
+            {cronLastResult.details?.map((line, i) => (
+              <div key={i} className="text-zinc-400">
+                {line}
+              </div>
+            ))}
+            {!cronLastResult.ok && (
+              <div className="text-red-300">{cronLastResult.message}</div>
             )}
           </div>
-          <div>
-            Última execução:{' '}
-            {cronInfo?.lastRunAt
-              ? new Date(cronInfo.lastRunAt).toLocaleString('pt-BR')
-              : 'nunca registrada'}
-            {cronInfo?.lastRunSource ? (
-              <span className="text-zinc-600"> ({cronInfo.lastRunSource})</span>
-            ) : null}
-          </div>
-          <div>
-            Pending agora: <strong className="text-zinc-300">{cronInfo?.pendingCount ?? '—'}</strong>
-            {' · '}
-            elegíveis (&gt;{cronInfo?.pendingOrderTtlMinutes ?? 30} min):{' '}
-            <strong className="text-amber-300">{cronInfo?.pendingOlderThanTtl ?? '—'}</strong>
-          </div>
-        </div>
+        )}
+
         <p className="text-[11px] text-zinc-500">
-          Limpeza automática (cron HTTP) e o botão usam o TTL de{' '}
-          <strong className="text-zinc-400">
-            Configurações → Regras → Expirar pending ({cronInfo?.pendingOrderTtlMinutes ?? 30} min)
-          </strong>
-          . Pending mais novos <strong className="text-zinc-400">não</strong> são cancelados.
-          A pasta <code className="text-zinc-400">scripts/</code> não agenda nada sozinha — use{' '}
+          <strong className="text-zinc-400">Teste 1 (agora):</strong> botão abaixo — não precisa de
+          secret. <strong className="text-zinc-400">Teste 2 (automático):</strong>{' '}
           <a
             href="https://cron-job.org"
             target="_blank"
@@ -444,8 +563,7 @@ export default function AdminDashboard() {
           >
             cron-job.org
           </a>{' '}
-          com <code className="text-zinc-400">Authorization: Bearer CRON_SECRET</code>, ou o botão
-          abaixo.
+          com o header Bearer. Scripts na pasta do projeto <em>não</em> disparam sozinhos.
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
           <button
@@ -454,7 +572,7 @@ export default function AdminDashboard() {
             onClick={runAllCrons}
             className="text-xs px-3 py-2 rounded-xl border border-violet-500/40 text-violet-200 hover:bg-violet-950/40 disabled:opacity-50"
           >
-            {syncingStripe ? 'Executando…' : 'Rodar crons agora (manual)'}
+            {syncingStripe ? 'Executando…' : '1) Rodar crons agora (validar)'}
           </button>
           <button
             type="button"
