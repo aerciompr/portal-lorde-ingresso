@@ -107,11 +107,30 @@ model Order {
 
   tickets              Ticket[]
   cancellationRequests CancellationRequest[]
+  logs                 OrderLog[]
 
   @@index([eventId])
   @@index([buyerEmail])
   @@index([status])
   @@index([source, externalId])
+}
+
+/**
+ * Histórico do pedido (admin): tentativas de pagamento, erros, e-mails, cancelamentos.
+ * kind: created | pay_start | pay_ok | pay_error | paid | email | cancelled | refunded | note | client_error
+ */
+model OrderLog {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind      String   @db.VarChar(48)
+  title     String   @db.VarChar(255)
+  detail    String?  @db.Text
+  meta      String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([kind])
 }
 
 model Ticket {

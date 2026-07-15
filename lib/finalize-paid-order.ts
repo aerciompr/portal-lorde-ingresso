@@ -73,6 +73,29 @@ export async function finalizePaidOrder(
     data: updateData,
   });
 
+  try {
+    const { logOrderEvent } = await import('@/lib/order-log');
+    await logOrderEvent(
+      orderId,
+      'paid',
+      'Pagamento confirmado',
+      [
+        options?.paymentGateway && `gateway=${options.paymentGateway}`,
+        options?.paymentMethod && `método=${options.paymentMethod}`,
+        options?.paymentId && `id=${options.paymentId}`,
+      ]
+        .filter(Boolean)
+        .join(' · ') || null,
+      {
+        paymentId: options?.paymentId,
+        paymentGateway: options?.paymentGateway,
+        paymentMethod: options?.paymentMethod,
+      }
+    );
+  } catch {
+    /* ignore */
+  }
+
   for (const t of order.tickets) {
     if (!t.qrPayload) {
       await prisma.ticket.update({
@@ -98,14 +121,39 @@ export async function finalizePaidOrder(
       );
       if (!mail.ok) {
         console.error('[FINALIZE] e-mail não enviado (pedido JÁ está pago):', mail.error || mail);
+        const { logOrderEvent } = await import('@/lib/order-log');
+        await logOrderEvent(
+          orderId,
+          'email_fail',
+          'E-mail de confirmação não enviado',
+          (mail as { error?: string }).error || 'falha Resend'
+        );
       } else {
         await prisma.order.update({
           where: { id: orderId },
           data: { emailSentAt: new Date() },
         });
+        const { logOrderEvent } = await import('@/lib/order-log');
+        await logOrderEvent(
+          orderId,
+          'email',
+          'E-mail de ingresso enviado',
+          fullOrder.buyerEmail
+        );
       }
     } catch (e) {
       console.error('[FINALIZE] e-mail falhou (pedido já está pago):', e);
+      try {
+        const { logOrderEvent } = await import('@/lib/order-log');
+        await logOrderEvent(
+          orderId,
+          'email_fail',
+          'Exceção ao enviar e-mail',
+          e instanceof Error ? e.message : 'erro'
+        );
+      } catch {
+        /* ignore */
+      }
     }
 
     try {

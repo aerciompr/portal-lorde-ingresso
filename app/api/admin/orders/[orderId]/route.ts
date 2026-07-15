@@ -52,6 +52,10 @@ export async function GET(
       cancellationRequests: {
         orderBy: { requestedAt: 'desc' },
       },
+      logs: {
+        orderBy: { createdAt: 'asc' },
+        take: 200,
+      },
     },
   });
 
@@ -59,89 +63,89 @@ export async function GET(
     return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 });
   }
 
-  const { buyerPasswordHash, ...rest } = order as typeof order & {
+  const { buyerPasswordHash, logs, ...rest } = order as typeof order & {
     buyerPasswordHash?: string | null;
+    logs?: Array<{
+      id: string;
+      kind: string;
+      title: string;
+      detail: string | null;
+      createdAt: Date;
+    }>;
   };
 
   const timeline: TimelineItem[] = [];
 
-  timeline.push({
-    at: order.createdAt.toISOString(),
-    kind: 'created',
-    title: 'Pedido criado',
-    detail:
-      order.buyerName === 'Checkout em andamento' || !order.buyerEmail
-        ? 'Checkout iniciado (cliente ainda não preenchido ou abandonado)'
-        : `Cliente: ${order.buyerName}`,
-  });
-
-  if (order.paymentGateway || order.paymentId || order.paymentMethod) {
+  // Preferir logs reais (erros de cartão, tentativas, etc.)
+  for (const log of logs || []) {
     timeline.push({
-      at: order.createdAt.toISOString(),
-      kind: 'payment_setup',
-      title: 'Meio de pagamento',
-      detail: [
-        order.paymentGateway && `Gateway: ${order.paymentGateway}`,
-        order.paymentMethod && `Método: ${order.paymentMethod}`,
-        order.paymentId && `ID: ${order.paymentId}`,
-      ]
-        .filter(Boolean)
-        .join(' · '),
+      at: log.createdAt.toISOString(),
+      kind: log.kind,
+      title: log.title,
+      detail: log.detail || undefined,
     });
   }
 
-  if (order.paidAt) {
+  // Fallback / complementos se ainda não houver log de criação
+  if (!(logs || []).some((l) => l.kind === 'created')) {
+    timeline.push({
+      at: order.createdAt.toISOString(),
+      kind: 'created',
+      title: 'Pedido criado',
+      detail:
+        order.buyerName === 'Checkout em andamento' || !order.buyerEmail
+          ? 'Checkout iniciado (cliente ainda não preenchido ou abandonado)'
+          : `Cliente: ${order.buyerName}`,
+    });
+  }
+
+  if (order.paidAt && !(logs || []).some((l) => l.kind === 'paid')) {
     timeline.push({
       at: order.paidAt.toISOString(),
       kind: 'paid',
       title: 'Pagamento confirmado',
-      detail: `Status: ${order.status} · Bruto ${(order.grossCents || order.totalCents) / 100}`,
+      detail: `Status: ${order.status}`,
     });
   }
 
-  if (order.emailSentAt) {
+  if (order.emailSentAt && !(logs || []).some((l) => l.kind === 'email')) {
     timeline.push({
       at: order.emailSentAt.toISOString(),
       kind: 'email',
       title: 'E-mail de ingresso enviado',
       detail: `Para ${order.buyerEmail}`,
     });
-  } else if (order.paidAt && order.status === 'paid') {
-    timeline.push({
-      at: order.paidAt.toISOString(),
-      kind: 'email_unknown',
-      title: 'E-mail de confirmação',
-      detail:
-        'Disparo no momento do pagamento (se RESEND_API_KEY estiver ok). Sem registro de data — reenvie pelo admin se necessário.',
-    });
   }
 
   if ((order.feeDetails || '').includes(MIGRATION_EMAIL_MARKER)) {
-    const m = (order.feeDetails || '').match(
-      /migration-email-sent\s*\|\s*(\d{4}-\d{2}-\d{2})/
-    );
+    if (!(logs || []).some((l) => l.kind === 'email_migration')) {
+      const m = (order.feeDetails || '').match(
+        /migration-email-sent\s*\|\s*(\d{4}-\d{2}-\d{2})/
+      );
+      timeline.push({
+        at: m
+          ? `${m[1]}T12:00:00.000Z`
+          : order.emailSentAt?.toISOString() || order.createdAt.toISOString(),
+        kind: 'email_migration',
+        title: 'E-mail de migração (Woo → portal)',
+        detail: order.feeDetails || undefined,
+      });
+    }
+  }
+
+  if (
+    (order.status === 'cancelled' || order.status === 'canceled') &&
+    !(logs || []).some((l) => l.kind === 'cancelled')
+  ) {
     timeline.push({
-      at: m
-        ? `${m[1]}T12:00:00.000Z`
-        : order.emailSentAt?.toISOString() || order.createdAt.toISOString(),
-      kind: 'email_migration',
-      title: 'E-mail de migração (Woo → portal)',
+      at: order.createdAt.toISOString(),
+      kind: 'cancelled',
+      title: 'Pedido cancelado',
       detail: order.feeDetails || undefined,
     });
   }
 
-  if (order.status === 'cancelled' || order.status === 'canceled') {
-    timeline.push({
-      at: order.paidAt?.toISOString() || order.createdAt.toISOString(),
-      kind: 'cancelled',
-      title: 'Pedido cancelado',
-      detail:
-        order.feeDetails ||
-        'Se a limpeza rodou, o estoque foi devolvido (tickets cancelados)',
-    });
-  }
-
-  if (order.status === 'refunded') {
+  if (order.status === 'refunded' && !(logs || []).some((l) => l.kind === 'refunded')) {
     timeline.push({
       at: order.paidAt?.toISOString() || order.createdAt.toISOString(),
       kind: 'refunded',

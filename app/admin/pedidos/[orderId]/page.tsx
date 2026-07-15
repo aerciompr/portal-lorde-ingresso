@@ -88,14 +88,21 @@ function fmt(iso?: string | null) {
 const kindColor: Record<string, string> = {
   created: 'bg-zinc-500',
   payment_setup: 'bg-sky-500',
+  pay_start: 'bg-sky-500',
+  pay_ok: 'bg-sky-400',
+  pay_error: 'bg-red-500',
+  client_error: 'bg-red-600',
   paid: 'bg-emerald-500',
   email: 'bg-emerald-400',
+  email_fail: 'bg-red-400',
   email_unknown: 'bg-zinc-600',
   email_migration: 'bg-violet-500',
   cancelled: 'bg-amber-500',
   refunded: 'bg-red-500',
   cancel_request: 'bg-orange-500',
   cancel_processed: 'bg-orange-400',
+  note: 'bg-zinc-400',
+  sync: 'bg-indigo-500',
 };
 
 export default function AdminPedidoDetailPage() {
@@ -273,10 +280,13 @@ export default function AdminPedidoDetailPage() {
 
       {/* Timeline */}
       <div className="card p-5">
-        <div className="font-medium mb-4 flex items-center gap-2">
+        <div className="font-medium mb-1 flex items-center gap-2">
           <Clock className="w-4 h-4 text-emerald-400" />
           Histórico do pedido
         </div>
+        <p className="text-[11px] text-zinc-500 mb-4">
+          Inclui tentativas de pagamento, recusa de cartão, erros de gateway e e-mails.
+        </p>
         <ol className="relative border-l border-white/10 ml-2 space-y-5">
           {timeline.map((item, i) => (
             <li key={`${item.kind}-${i}`} className="ml-4">

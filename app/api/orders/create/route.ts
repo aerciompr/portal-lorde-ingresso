@@ -109,6 +109,24 @@ export async function POST(req: NextRequest) {
       console.error('[CREATE ORDER] virada automática falhou', e);
     }
 
+    const { logOrderEvent } = await import('@/lib/order-log');
+    await logOrderEvent(
+      order.id,
+      'created',
+      'Checkout iniciado',
+      `${orderItems.reduce((s, i) => s + i.quantity, 0)} ingresso(s) · ${totalCents} centavos · evento ${event.title}`,
+      {
+        eventId,
+        loteId: activeLoteId,
+        items: orderItems.map((i) => ({
+          ticketTypeId: i.ticketTypeId,
+          quantity: i.quantity,
+          priceCents: i.priceCents,
+        })),
+        promo: promo.applied || null,
+      }
+    );
+
     return NextResponse.json({
       orderId: order.id,
       totalCents,

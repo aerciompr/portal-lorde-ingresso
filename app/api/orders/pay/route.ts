@@ -47,10 +47,14 @@ async function getPaymentClients() {
 }
 
 export async function POST(req: NextRequest) {
+  let logOrderId = '';
   try {
     const body = await req.json();
     const { orderId, buyer } = body;
+    logOrderId = String(orderId || '');
     const method: string = body.method === 'card' ? 'card' : 'pix';
+
+    const { logOrderEvent } = await import('@/lib/order-log');
 
     const s = await getAppSettings();
     const { stripe, mpClient, STRIPE_ACCOUNT_ID, MP_ACCESS_TOKEN } = await getPaymentClients();
@@ -66,6 +70,9 @@ export async function POST(req: NextRequest) {
     const methodsCfg = paymentMethodsFromRaw(rawSettings);
     const methodCfg = methodsCfg.find((m) => m.id === method);
     if (methodCfg && !methodCfg.enabled) {
+      if (logOrderId) {
+        await logOrderEvent(logOrderId, 'pay_error', 'Forma de pagamento indisponível', method);
+      }
       return NextResponse.json({ error: 'Forma de pagamento indisponível' }, { status: 400 });
     }
     const gateway = resolvePayGateway(method, rawSettings);
@@ -80,12 +87,29 @@ export async function POST(req: NextRequest) {
     });
 
     if (!order || order.status !== 'pending') {
+      if (logOrderId) {
+        await logOrderEvent(
+          logOrderId,
+          'pay_error',
+          'Pedido inválido ou já processado',
+          order ? `status=${order.status}` : 'pedido não encontrado'
+        );
+      }
       return NextResponse.json({ error: 'Pedido inválido ou já processado' }, { status: 400 });
     }
+
+    await logOrderEvent(
+      orderId,
+      'pay_start',
+      method === 'card' ? 'Iniciando pagamento cartão' : 'Iniciando pagamento PIX',
+      `gateway=${gateway} · valor=${order.totalCents} centavos`,
+      { method, gateway, buyerEmail: buyer?.email }
+    );
 
     // Server-side validation for CPF and phone (masks already applied on client)
     const cleanedCpf = cleanCpf(buyer?.cpf || '');
     if (!cleanedCpf || !isValidCpf(cleanedCpf)) {
+      await logOrderEvent(orderId, 'pay_error', 'CPF inválido', null);
       return NextResponse.json({ error: 'CPF inválido' }, { status: 400 });
     }
 
@@ -278,6 +302,14 @@ export async function POST(req: NextRequest) {
           data: { paymentGateway: 'mercadopago', paymentMethod: 'pix', paymentId: String(paymentId) },
         });
 
+        await logOrderEvent(
+          orderId,
+          'pay_ok',
+          'PIX gerado no Mercado Pago',
+          `paymentId=${paymentId}`,
+          { paymentId: String(paymentId) }
+        );
+
         return NextResponse.json({
           success: true,
           type: 'pix',
@@ -290,6 +322,12 @@ export async function POST(req: NextRequest) {
       } catch (mpErr: any) {
         console.error('Mercado Pago PIX error completo:', mpErr);
         const detail = mpErr?.message || mpErr?.cause?.[0]?.description || '';
+        await logOrderEvent(
+          orderId,
+          'pay_error',
+          'Erro ao gerar PIX (Mercado Pago)',
+          detail || 'falha MP'
+        );
         throw new Error(`Erro ao gerar PIX no Mercado Pago. ${detail || 'Verifique as chaves em Configurações (Access Token), se a conta tem PIX liberado e se não está usando chave de produção em localhost sem https.'}`);
       }
     }
@@ -438,6 +476,9 @@ export async function POST(req: NextRequest) {
         const se = stripeErr as { message?: string; raw?: { message?: string } };
         const msg = se?.message || se?.raw?.message || String(stripeErr);
         console.error('[STRIPE] paymentIntents.create falhou:', msg);
+        await logOrderEvent(orderId, 'pay_error', 'Stripe recusou criar PaymentIntent', msg, {
+          method: 'card',
+        });
         return NextResponse.json(
           {
             error: `Stripe recusou criar o pagamento: ${msg}`,
@@ -462,6 +503,14 @@ export async function POST(req: NextRequest) {
           paymentId: paymentIntent.id,
         },
       });
+
+      await logOrderEvent(
+        orderId,
+        'pay_ok',
+        'PaymentIntent Stripe criado',
+        `Aguardando confirmação do cartão · ${paymentIntent.id}`,
+        { paymentIntentId: paymentIntent.id, amount: paymentIntent.amount }
+      );
 
       return NextResponse.json({
         success: true,
@@ -522,6 +571,14 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     console.error('Payment error', e);
     const msg = e instanceof Error ? e.message : 'Erro no processamento do pagamento';
+    if (logOrderId) {
+      try {
+        const { logOrderEvent } = await import('@/lib/order-log');
+        await logOrderEvent(logOrderId, 'pay_error', 'Erro no processamento do pagamento', msg);
+      } catch {
+        /* ignore */
+      }
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -372,6 +372,17 @@ export async function cleanupPendingOrders(options: {
         feeDetails: label.slice(0, 250),
       },
     });
+    try {
+      const { logOrderEvent } = await import('@/lib/order-log');
+      await logOrderEvent(
+        row.id,
+        'cancelled',
+        'Pedido cancelado (limpeza pending)',
+        `${label} · ${result.ticketsReleased} ingresso(s) devolvido(s)`
+      );
+    } catch {
+      /* ignore */
+    }
     orderIds.push(row.id);
   }
 

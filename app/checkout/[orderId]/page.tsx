@@ -493,6 +493,22 @@ export default function CheckoutPage() {
 
     if (error) {
       toast.error(error.message || 'Erro ao confirmar cartão');
+      // Histórico no admin: recusa do cartão / 3DS / etc.
+      try {
+        await fetch('/api/orders/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId,
+            kind: 'client_error',
+            title: 'Erro ao confirmar cartão (Stripe)',
+            detail: error.message || 'erro desconhecido',
+            code: error.code || error.type || undefined,
+          }),
+        });
+      } catch {
+        /* ignore */
+      }
       setProcessing(false);
       return;
     }
