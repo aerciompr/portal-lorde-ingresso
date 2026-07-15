@@ -136,13 +136,17 @@ export default function AdminDashboard() {
   }, [orders, periodRange]);
 
   async function cleanupPendings() {
+    const ttl = cronInfo?.pendingOrderTtlMinutes ?? 30;
+    const eligible = cronInfo?.pendingOlderThanTtl;
     if (
       !confirm(
-        'Limpar pendentes abandonados?\n\n' +
-          '• Cancela pending com mais de 15 min\n' +
+        `Limpar pendentes com mais de ${ttl} minutos?\n\n` +
+          (eligible != null ? `Elegíveis agora: ${eligible}\n\n` : '') +
           '• Devolve estoque\n' +
-          '• Repara cancelados que ainda prendiam estoque\n\n' +
-          'Pedidos já pagos no Stripe NÃO são cancelados.'
+          '• Repara cancelados com estoque preso\n\n' +
+          'O tempo mínimo vem de Configurações → Regras → “Expirar pending”.\n' +
+          'Pedidos pagos no Stripe NÃO são cancelados.\n' +
+          'Para limpar TODOS os pending (qualquer idade): Ferramentas → Limpeza → minutos 0.'
       )
     ) {
       return;
@@ -154,7 +158,7 @@ export default function AdminDashboard() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          minutes: 15,
+          minutes: ttl,
           repairCancelled: true,
         }),
       });
@@ -163,10 +167,11 @@ export default function AdminDashboard() {
       toast.success(data.message || 'Limpeza concluída');
       if (data.cleaned === 0 && !data.repair?.fixed) {
         toast.message(
-          'Nada a limpar com 15 min. Use Ferramentas → limpeza com menos minutos, ou “todos os pending”.'
+          `Nada com mais de ${ttl} min. Pending mais novos não são limpos (aguarde ou use Ferramentas com minutos 0).`
         );
       }
       load();
+      loadCron();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -291,8 +296,12 @@ export default function AdminDashboard() {
           </div>
         </div>
         <p className="text-[11px] text-zinc-500">
-          A pasta <code className="text-zinc-400">scripts/</code> no Git <strong>não agenda</strong>{' '}
-          cron. Configure HTTP no{' '}
+          Limpeza automática (cron HTTP) e o botão usam o TTL de{' '}
+          <strong className="text-zinc-400">
+            Configurações → Regras → Expirar pending ({cronInfo?.pendingOrderTtlMinutes ?? 30} min)
+          </strong>
+          . Pending mais novos <strong className="text-zinc-400">não</strong> são cancelados.
+          A pasta <code className="text-zinc-400">scripts/</code> não agenda nada sozinha — use{' '}
           <a
             href="https://cron-job.org"
             target="_blank"
@@ -301,8 +310,8 @@ export default function AdminDashboard() {
           >
             cron-job.org
           </a>{' '}
-          com header <code className="text-zinc-400">Authorization: Bearer CRON_SECRET</code>, ou use
-          o botão abaixo (não precisa de secret).
+          com <code className="text-zinc-400">Authorization: Bearer CRON_SECRET</code>, ou o botão
+          abaixo.
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
           <button
@@ -319,7 +328,9 @@ export default function AdminDashboard() {
             onClick={cleanupPendings}
             className="text-xs px-3 py-2 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
           >
-            {cleaning ? 'Limpando…' : 'Limpar pendentes + reparar estoque'}
+            {cleaning
+              ? 'Limpando…'
+              : `Limpar pendentes (>${cronInfo?.pendingOrderTtlMinutes ?? 30} min)`}
           </button>
         </div>
       </div>
@@ -352,18 +363,19 @@ export default function AdminDashboard() {
           >
             Rodar crons agora
           </button>
-          {dash.pendingCount > 0 && (
+          {(cronInfo?.pendingOlderThanTtl ?? 0) > 0 || (cronInfo?.pendingCount ?? 0) > 0 ? (
             <button
               type="button"
               disabled={cleaning}
               onClick={cleanupPendings}
               className="text-xs px-3 py-2 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
+              title={`Só cancela pending com mais de ${cronInfo?.pendingOrderTtlMinutes ?? 30} min (TTL das configurações), não o filtro de período do dashboard`}
             >
               {cleaning
                 ? 'Limpando…'
-                : `Limpar pendentes antigos (${dash.pendingCount} no período)`}
+                : `Limpar pendentes (>${cronInfo?.pendingOrderTtlMinutes ?? 30} min: ${cronInfo?.pendingOlderThanTtl ?? 0})`}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
