@@ -1,17 +1,20 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { verifyAdminSessionCookie } from '@/lib/auth';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
   title: 'Check-in | Lorde Nelson',
   manifest: '/manifest.webmanifest',
-  themeColor: '#10b981',
   appleWebApp: {
     capable: true,
     title: 'LN Check-in',
     statusBarStyle: 'black-translucent',
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#10b981',
 };
 
 export default async function CheckinLayout({
