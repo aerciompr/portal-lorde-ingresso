@@ -170,11 +170,6 @@ export default function TicketSelector({ event }: Props) {
             <div className="flex justify-between items-start gap-3">
               <div>
                 <div className="text-xl font-semibold tracking-tight text-white">{activeName}</div>
-                {loteDisponivel > 0 && loteDisponivel <= 10 && (
-                  <div className="text-xs text-amber-400 mt-1">
-                    Restam {loteDisponivel} ingresso{loteDisponivel === 1 ? '' : 's'}
-                  </div>
-                )}
               </div>
               <div className="text-right shrink-0">
                 <div className="text-xl font-semibold tabular-nums">{formatPrice(price)}</div>
