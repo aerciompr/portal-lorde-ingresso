@@ -169,23 +169,23 @@ export default function AdminPedidos() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Pedidos</h1>
-        <p className="text-sm text-zinc-400">
-          Busque, reenvie e-mails, baixe PDFs e faça estornos. Reenvio usa Resend (mesmo da confirmação).
+    <div className="max-w-7xl mx-auto w-full min-w-0">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Pedidos</h1>
+        <p className="text-sm text-zinc-400 mt-1">
+          Busque, reenvie e-mails, baixe PDFs e faça estornos.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 mb-4">
         <input
-          className="input w-full max-w-xs"
-          placeholder="Buscar por nome, email ou evento..."
+          className="input w-full sm:max-w-xs min-w-0"
+          placeholder="Buscar nome, e-mail ou evento..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
         <select
-          className="input w-40"
+          className="input w-full sm:w-40"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
         >
@@ -300,8 +300,11 @@ export default function AdminPedidos() {
         </a>
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm min-w-[800px]">
+      <p className="text-[10px] text-zinc-500 mb-2 sm:hidden">
+        ← Deslize a tabela na horizontal →
+      </p>
+      <div className="card overflow-x-auto overscroll-x-contain max-w-full -mx-0">
+        <table className="w-full text-sm min-w-[720px]">
           <thead className="text-left text-zinc-400 border-b border-white/10">
             <tr>
               <th className="p-3">Cliente</th>

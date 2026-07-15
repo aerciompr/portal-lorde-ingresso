@@ -25,6 +25,46 @@ body {
   @apply bg-zinc-900 border border-white/10 rounded-2xl overflow-hidden transition-all hover:border-white/20 hover:shadow-xl;
 }
 
+/* Admin mobile: área de conteúdo e tabelas */
+.admin-shell {
+  /* evita bounce do body atrás do layout fixo */
+  position: relative;
+}
+
+.admin-main {
+  /* scroll nativo no main; filhos largos (tabelas) rolam no eixo X */
+  touch-action: pan-x pan-y;
+}
+
+.admin-main-inner {
+  /* impede filhos de forçarem largura infinita sem scroll */
+  max-width: 100%;
+}
+
+/* Tabelas no admin: wrapper horizontal com toque */
+.admin-main .card.overflow-x-auto,
+.admin-main [class*="overflow-x-auto"] {
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.admin-main table {
+  /* garante min-width das tabelas largas, mas o pai faz o scroll */
+  max-width: none;
+}
+
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* No mobile, cards com tabela: padding interno zero na borda para scroll full-bleed */
+@media (max-width: 640px) {
+  .admin-main .card {
+    /* hover shadow não atrapalha toque */
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
 .btn {
   @apply inline-flex items-center justify-center rounded-2xl px-6 py-3 text-sm font-medium transition-all active:scale-[0.985] disabled:opacity-60 cursor-pointer;
 }

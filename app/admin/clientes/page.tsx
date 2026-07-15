@@ -146,7 +146,7 @@ export default function AdminClientesPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl w-full min-w-0">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
