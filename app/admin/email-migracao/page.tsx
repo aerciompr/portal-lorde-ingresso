@@ -42,10 +42,20 @@ export default function AdminEmailMigracaoPage() {
     try {
       const q = eventId ? `?action=stats&eventId=${encodeURIComponent(eventId)}` : '?action=stats';
       const res = await fetch(`/api/admin/migration-email${q}`, { credentials: 'include' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha ao carregar');
-      setStats(data);
-      if (!introHtml && data.defaultIntro) setIntroHtml(data.defaultIntro);
+      let data: Record<string, unknown> = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          `Resposta inválida do servidor (HTTP ${res.status}). Pode faltar coluna no MySQL (emailSentAt).`
+        );
+      }
+      if (!res.ok) {
+        const detail = [data.error, data.detail, data.hint].filter(Boolean).join(' — ');
+        throw new Error(detail || `Falha ao carregar (${res.status})`);
+      }
+      setStats(data as unknown as Stats);
+      if (!introHtml && data.defaultIntro) setIntroHtml(String(data.defaultIntro));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -71,8 +81,13 @@ export default function AdminEmailMigracaoPage() {
           subject: subject || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Falha no preview');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          [data.error, data.detail, data.hint].filter(Boolean).join(' — ') ||
+            `Falha no preview (${res.status})`
+        );
+      }
       setPreviewHtml(data.html || '');
       setPreviewMeta({
         subject: data.subject,
