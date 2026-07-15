@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import Header from "@/components/Header";
 import SiteFooter from "@/components/SiteFooter";
+import SiteChrome from "@/components/SiteChrome";
 import { getAppSettings } from "@/lib/settings";
 import { absoluteMediaUrl, mimeFromUrl } from "@/lib/media-url";
 import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from "@/lib/contact";
@@ -99,26 +100,31 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-200">
-        <Header
-          initialBranding={initialBranding}
-          whatsappDisplay={waDisplay}
-          whatsappHref={waHref}
-        />
-
-        <main className="flex-1">{children}</main>
-
-        <SiteFooter
-          layout={footerLayout}
-          contact={{
-            siteName,
-            logoUrl: (b.logoUrl || "").trim() || "/logo-lordenelson.jpg",
-            year,
-            whatsappDisplay: waDisplay,
-            whatsappHref: waHref || WHATSAPP_HREF,
-            instagramUrl,
-            contactEmail,
-          }}
-        />
+        <SiteChrome
+          header={
+            <Header
+              initialBranding={initialBranding}
+              whatsappDisplay={waDisplay}
+              whatsappHref={waHref}
+            />
+          }
+          footer={
+            <SiteFooter
+              layout={footerLayout}
+              contact={{
+                siteName,
+                logoUrl: (b.logoUrl || "").trim() || "/logo-lordenelson.jpg",
+                year,
+                whatsappDisplay: waDisplay,
+                whatsappHref: waHref || WHATSAPP_HREF,
+                instagramUrl,
+                contactEmail,
+              }}
+            />
+          }
+        >
+          {children}
+        </SiteChrome>
 
         <Toaster position="top-center" richColors closeButton />
 

@@ -41,26 +41,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       });
   }, [pathname]);
 
-  // Trava scroll do body quando o menu mobile está aberto
+  const isLoginPage = pathname === '/admin/login' || pathname?.endsWith('/login');
+
+  // Um único scroll: trava html/body; só .admin-main rola (evita scroll-dentro-de-scroll)
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (sidebarOpen) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = prev;
-      };
-    }
-    document.body.style.overflow = '';
-    return undefined;
-  }, [sidebarOpen]);
+    if (typeof document === 'undefined' || isLoginPage) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    html.classList.add('admin-locked');
+    return () => {
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+      html.classList.remove('admin-locked');
+    };
+  }, [isLoginPage]);
 
   // Fecha menu ao mudar de rota
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
-
-  const isLoginPage = pathname === '/admin/login' || pathname?.endsWith('/login');
 
   const navItems = [
     { href: '/admin', label: 'Dashboard', icon: '📊' },
@@ -89,7 +92,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="admin-shell h-[100dvh] max-h-[100dvh] bg-zinc-950 text-white flex overflow-hidden">
+    <div className="admin-shell fixed inset-0 z-20 h-[100dvh] max-h-[100dvh] bg-zinc-950 text-white flex overflow-hidden">
       {/* Overlay mobile — fecha o menu ao tocar */}
       {sidebarOpen && (
         <button
