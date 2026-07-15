@@ -22,35 +22,41 @@ export async function releaseOrderStock(orderId: string): Promise<{ ticketsRelea
   }
 
   const total = Object.values(byType).reduce((s, n) => s + n, 0);
-  if (total === 0) {
-    // Ainda marca pedido se necessário
-    return { ticketsReleased: 0 };
-  }
 
-  for (const [ticketTypeId, qty] of Object.entries(byType)) {
-    const tt = await prisma.ticketType.findUnique({ where: { id: ticketTypeId } });
-    if (tt) {
-      await prisma.ticketType.update({
-        where: { id: ticketTypeId },
-        data: { sold: Math.max(0, tt.sold - qty) },
-      });
+  if (total > 0) {
+    for (const [ticketTypeId, qty] of Object.entries(byType)) {
+      const tt = await prisma.ticketType.findUnique({ where: { id: ticketTypeId } });
+      if (tt) {
+        await prisma.ticketType.update({
+          where: { id: ticketTypeId },
+          data: { sold: Math.max(0, tt.sold - qty) },
+        });
+      }
     }
-  }
 
-  if (order.loteId) {
-    const lote = await prisma.lote.findUnique({ where: { id: order.loteId } });
-    if (lote) {
-      await prisma.lote.update({
-        where: { id: order.loteId },
-        data: { sold: Math.max(0, lote.sold - total) },
-      });
+    if (order.loteId) {
+      const lote = await prisma.lote.findUnique({ where: { id: order.loteId } });
+      if (lote) {
+        await prisma.lote.update({
+          where: { id: order.loteId },
+          data: { sold: Math.max(0, lote.sold - total) },
+        });
+      }
     }
+
+    await prisma.ticket.updateMany({
+      where: { orderId, status: { not: 'cancelled' } },
+      data: { status: 'cancelled' },
+    });
   }
 
-  await prisma.ticket.updateMany({
-    where: { orderId, status: { not: 'cancelled' } },
-    data: { status: 'cancelled' },
-  });
+  // Libera reserva de cupom (mesmo se tickets já cancelados)
+  try {
+    const { releasePromoReservation } = await import('@/lib/promo');
+    await releasePromoReservation(orderId);
+  } catch (e) {
+    console.error('[STOCK] release promo failed', orderId, e);
+  }
 
   return { ticketsReleased: total };
 }
@@ -100,6 +106,14 @@ export async function restoreStockOnRefund(orderId: string): Promise<{
     where: { orderId, status: { not: 'cancelled' } },
     data: { status: 'cancelled' },
   });
+
+  // Devolve uso do cupom em pedido pago estornado
+  try {
+    const { releasePromoReservation } = await import('@/lib/promo');
+    await releasePromoReservation(orderId);
+  } catch (e) {
+    console.error('[STOCK] release promo on refund failed', orderId, e);
+  }
 
   if (!order.loteId) {
     // Pedido sem lote: devolve só TicketType

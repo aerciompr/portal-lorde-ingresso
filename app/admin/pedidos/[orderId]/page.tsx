@@ -37,6 +37,8 @@ type OrderDetail = {
   buyerCity?: string | null;
   buyerState?: string | null;
   totalCents: number;
+  discountCents?: number;
+  promoCodeLabel?: string | null;
   grossCents?: number;
   netCents?: number;
   feeCents?: number;
@@ -368,6 +370,12 @@ export default function AdminPedidoDetailPage() {
       {order.paymentId && (
         <div className="text-xs text-zinc-600 break-all">
           Payment ID: <code className="text-zinc-400">{order.paymentId}</code>
+        </div>
+      )}
+      {(order.discountCents || 0) > 0 && (
+        <div className="text-xs text-emerald-400/90">
+          Cupom{order.promoCodeLabel ? ` ${order.promoCodeLabel}` : ''}: −
+          {formatPrice(order.discountCents || 0)}
         </div>
       )}
       {order.feeDetails && (

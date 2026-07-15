@@ -74,6 +74,13 @@ export async function finalizePaidOrder(
   });
 
   try {
+    const { markPromoApplied } = await import('@/lib/promo');
+    await markPromoApplied(orderId, order.buyerEmail);
+  } catch (e) {
+    console.error('[FINALIZE] promo mark applied failed', e);
+  }
+
+  try {
     const { logOrderEvent } = await import('@/lib/order-log');
     await logOrderEvent(
       orderId,

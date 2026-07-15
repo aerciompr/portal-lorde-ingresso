@@ -29,6 +29,11 @@ export async function GET(
   const admin = await isAdmin();
   const code = (req.nextUrl.searchParams.get('code') || '').toUpperCase().trim();
 
+  const promoFields = {
+    discountCents: (order as { discountCents?: number }).discountCents || 0,
+    promoCodeLabel: (order as { promoCodeLabel?: string | null }).promoCodeLabel || null,
+  };
+
   if (status === 'pending') {
     // Público mínimo para checkout
     return NextResponse.json({
@@ -40,6 +45,7 @@ export async function GET(
       accessCode: order.accessCode,
       buyerEmail: order.buyerEmail || undefined,
       buyerName: order.buyerName || undefined,
+      ...promoFields,
     });
   }
 
@@ -53,6 +59,7 @@ export async function GET(
       accessCode: order.accessCode,
       buyerEmail: order.buyerEmail,
       buyerName: order.buyerName,
+      ...promoFields,
     });
   }
 
@@ -70,6 +77,7 @@ export async function GET(
       accessCode: order.accessCode,
       buyerEmail: order.buyerEmail,
       buyerName: order.buyerName,
+      ...promoFields,
     });
   }
 

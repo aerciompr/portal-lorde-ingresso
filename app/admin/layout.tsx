@@ -65,6 +65,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { href: '/admin', label: 'Dashboard', icon: '📊' },
     { href: '/admin/eventos', label: 'Eventos', icon: '🎟️' },
+    { href: '/admin/cupons', label: 'Cupons', icon: '🏷️' },
     { href: '/admin/pedidos', label: 'Pedidos', icon: '📋' },
     { href: '/admin/clientes', label: 'Clientes', icon: '👥' },
     { href: '/admin/cancelamentos', label: 'Cancelamentos', icon: '↩️' },

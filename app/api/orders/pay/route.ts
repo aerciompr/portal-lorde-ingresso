@@ -172,6 +172,16 @@ export async function POST(req: NextRequest) {
 
     const buyerEmailNorm = String(buyer.email || '').trim().toLowerCase();
 
+    // Cupom com limite por e-mail (validado no pay — e-mail só existe aqui)
+    if (buyerEmailNorm) {
+      const { assertPromoEmailAllowed } = await import('@/lib/promo');
+      const promoEmail = await assertPromoEmailAllowed(orderId, buyerEmailNorm);
+      if (!promoEmail.ok) {
+        await logOrderEvent(orderId, 'pay_error', 'Cupom bloqueado por e-mail', promoEmail.error);
+        return NextResponse.json({ error: promoEmail.error }, { status: 400 });
+      }
+    }
+
     const addressData = {
       buyerZip: zip || null,
       buyerStreet: street || null,

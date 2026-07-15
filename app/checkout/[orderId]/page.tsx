@@ -26,6 +26,8 @@ interface OrderData {
   event: { title: string; date: string };
   tickets: { id: string }[];
   status: string;
+  discountCents?: number;
+  promoCodeLabel?: string | null;
 }
 
 const UF_LIST = [
@@ -555,7 +557,28 @@ export default function CheckoutPage() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-10">
       <h1 className="text-3xl font-semibold tracking-tight mb-2">Finalizar Compra</h1>
-      <p className="text-zinc-400 mb-6">Pedido #{order.id.slice(0, 8)} • {order.event.title} • {formatPrice(order.totalCents)}</p>
+      <p className="text-zinc-400 mb-2">
+        Pedido #{order.id.slice(0, 8)} • {order.event.title}
+      </p>
+      {(order.discountCents || 0) > 0 ? (
+        <div className="text-sm text-zinc-400 mb-6 space-y-0.5">
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <span>
+              Subtotal{' '}
+              {formatPrice((order.totalCents || 0) + (order.discountCents || 0))}
+            </span>
+            <span className="text-emerald-400">
+              Cupom{order.promoCodeLabel ? ` ${order.promoCodeLabel}` : ''} −
+              {formatPrice(order.discountCents || 0)}
+            </span>
+            <span className="text-white font-medium">
+              Total {formatPrice(order.totalCents)}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <p className="text-zinc-400 mb-6">Total {formatPrice(order.totalCents)}</p>
+      )}
 
       {/* Buyer form */}
       <div className="card p-6 mb-6">

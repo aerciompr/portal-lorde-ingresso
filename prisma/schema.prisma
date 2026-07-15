@@ -42,6 +42,7 @@ model Event {
 
   ticketTypes TicketType[]
   orders      Order[]
+  promoCodes  PromoCode[]
 }
 
 model TicketType {
@@ -105,14 +106,22 @@ model Order {
    */
   allowClientCancel Boolean @default(true)
 
+  /** Cupom aplicado no checkout */
+  promoCodeId    String?
+  promoCode      PromoCode? @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  promoCodeLabel String?    @db.VarChar(64)
+  discountCents  Int        @default(0)
+
   tickets              Ticket[]
   cancellationRequests CancellationRequest[]
   logs                 OrderLog[]
+  promoRedemption      PromoRedemption?
 
   @@index([eventId])
   @@index([buyerEmail])
   @@index([status])
   @@index([source, externalId])
+  @@index([promoCodeId])
 }
 
 /**
@@ -195,6 +204,59 @@ model Lote {
   activeForEvent Event?  @relation("EventToActiveLote")
 
   @@index([eventId])
+}
+
+/**
+ * Cupom promocional (vários códigos, regras de uso e desconto).
+ * discountType: PERCENT | FIXED_ORDER | FIXED_PER_TICKET
+ * maxUses null = ilimitado; reservedUses conta pending+paid que ainda seguram o cupom.
+ */
+model PromoCode {
+  id                   String    @id @default(cuid())
+  code                 String    @unique @db.VarChar(64)
+  name                 String?   @db.VarChar(255)
+  description          String?   @db.Text
+  active               Boolean   @default(true)
+  eventId              String?
+  event                Event?    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  discountType         String    @db.VarChar(32)
+  discountValue        Int
+  minTickets           Int?
+  maxTicketsDiscounted Int?
+  minSubtotalCents     Int?
+  maxUses              Int?
+  maxUsesPerEmail      Int?
+  reservedUses         Int       @default(0)
+  redeemedUses         Int       @default(0)
+  startsAt             DateTime?
+  endsAt               DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  orders      Order[]
+  redemptions PromoRedemption[]
+
+  @@index([active, code])
+  @@index([eventId])
+}
+
+model PromoRedemption {
+  id            String    @id @default(cuid())
+  promoCodeId   String
+  promoCode     PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  orderId       String    @unique
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  buyerEmail    String?   @db.VarChar(255)
+  discountCents Int
+  ticketQty     Int
+  /** reserved | applied | released */
+  status        String    @db.VarChar(32)
+  createdAt     DateTime  @default(now())
+  appliedAt     DateTime?
+  releasedAt    DateTime?
+
+  @@index([promoCodeId, status])
+  @@index([buyerEmail, promoCodeId])
 }
 
 /**
