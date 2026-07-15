@@ -23,7 +23,13 @@ function isAuthorized(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json(
+      {
+        error: 'Unauthorized',
+        hint: 'Defina CRON_SECRET e use Authorization: Bearer $CRON_SECRET ou ?secret=',
+      },
+      { status: 401 }
+    );
   }
 
   const s = await getAppSettings();
@@ -104,6 +110,22 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const ranAt = new Date().toISOString();
+  try {
+    await prisma.setting.upsert({
+      where: { key: 'cron_last_run_at' },
+      update: { value: ranAt },
+      create: { key: 'cron_last_run_at', value: ranAt },
+    });
+    await prisma.setting.upsert({
+      where: { key: 'cron_last_run_source' },
+      update: { value: 'http-sync-payments' },
+      create: { key: 'cron_last_run_source', value: 'http-sync-payments' },
+    });
+  } catch {
+    /* ignore */
+  }
+
   console.log(
     `[CRON sync-payments] finalized=${finalized} cancelled=${cancelled} viradas=${viradas}`
   );
@@ -115,7 +137,7 @@ export async function GET(req: NextRequest) {
     viradas,
     pendingChecked: pending.length,
     errors: errors.slice(0, 10),
-    ranAt: new Date().toISOString(),
+    ranAt,
   });
 }
 

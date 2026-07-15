@@ -30,29 +30,52 @@ function isAuthorized(req: NextRequest): boolean {
 
 async function runCleanup(req: NextRequest) {
   if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json(
+      {
+        error: 'Unauthorized',
+        hint: 'Defina CRON_SECRET no Environment do EasyPanel e chame com Authorization: Bearer … ou ?secret=…',
+      },
+      { status: 401 }
+    );
   }
 
   const settings = await getAppSettings();
   const minutesParam = req.nextUrl.searchParams.get('minutes');
   const minutes = minutesParam
-    ? Math.max(5, parseInt(minutesParam, 10) || settings.pendingOrderTtlMinutes)
-    : settings.pendingOrderTtlMinutes;
+    ? Math.max(0, parseInt(minutesParam, 10) || 0)
+    : Math.max(1, settings.pendingOrderTtlMinutes || 30);
 
   const result = await cleanupPendingOrders({ minutes });
 
+  const ranAt = new Date().toISOString();
+  try {
+    const { prisma } = await import('@/lib/prisma');
+    await prisma.setting.upsert({
+      where: { key: 'cron_last_run_at' },
+      update: { value: ranAt },
+      create: { key: 'cron_last_run_at', value: ranAt },
+    });
+    await prisma.setting.upsert({
+      where: { key: 'cron_last_run_source' },
+      update: { value: 'http-cleanup-pending' },
+      create: { key: 'cron_last_run_source', value: 'http-cleanup-pending' },
+    });
+  } catch {
+    /* ignore */
+  }
+
   console.log(
-    `[CRON cleanup] minutes=${minutes} cleaned=${result.cleaned} ticketsReleased=${result.ticketsReleased}`
+    `[CRON cleanup] minutes=${minutes} cleaned=${result.cleaned} ticketsReleased=${result.ticketsReleased} scanned=${result.scanned}`
   );
 
   return NextResponse.json({
     success: true,
     minutes,
     ...result,
-    ranAt: new Date().toISOString(),
+    ranAt,
     message:
       result.cleaned === 0
-        ? `Nenhum pending com mais de ${minutes} min.`
+        ? `Nenhum pending com mais de ${minutes} min (varridos: ${result.scanned}).`
         : `${result.cleaned} pedido(s) cancelado(s); ${result.ticketsReleased} ingresso(s) devolvido(s).`,
   });
 }

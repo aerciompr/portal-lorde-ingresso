@@ -45,6 +45,14 @@ export default function AdminDashboard() {
   const [customTo, setCustomTo] = useState('');
   const [cleaning, setCleaning] = useState(false);
   const [syncingStripe, setSyncingStripe] = useState(false);
+  const [cronInfo, setCronInfo] = useState<{
+    cronSecretConfigured?: boolean;
+    lastRunAt?: string | null;
+    lastRunSource?: string | null;
+    pendingCount?: number;
+    pendingOlderThanTtl?: number;
+    pendingOrderTtlMinutes?: number;
+  } | null>(null);
   const [Recharts, setRecharts] = useState<RechartsModule | null>(null);
 
   useEffect(() => {
@@ -56,9 +64,19 @@ export default function AdminDashboard() {
     if (res.ok) setOrders(await res.json());
   }, []);
 
+  const loadCron = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/cron-status', { credentials: 'include' });
+      if (res.ok) setCronInfo(await res.json());
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadCron();
+  }, [load, loadCron]);
 
   const periodRange = useMemo(() => {
     const r = periodToRange(period, customFrom, customTo);
@@ -197,6 +215,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(data.error || 'Falha');
       toast.success(data.message || 'Crons ok');
       load();
+      loadCron();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -238,6 +257,70 @@ export default function AdminDashboard() {
         </a>
         <div className="text-[10px] mt-1 text-zinc-500">
           Login de staff (mesmo do Admin). Eventos, pedidos e configs nas páginas do menu lateral.
+        </div>
+      </div>
+
+      {/* Status das crons */}
+      <div className="mb-6 p-4 border border-white/10 bg-zinc-900/80 rounded-2xl text-sm space-y-2">
+        <div className="font-medium text-zinc-200">⏱ Crons (limpeza + sync pagamento)</div>
+        <div className="grid sm:grid-cols-2 gap-2 text-xs text-zinc-400">
+          <div>
+            Secret no servidor:{' '}
+            {cronInfo?.cronSecretConfigured ? (
+              <span className="text-emerald-400">configurado</span>
+            ) : (
+              <span className="text-amber-400">
+                ausente — URLs /api/cron/* retornam 401 em produção
+              </span>
+            )}
+          </div>
+          <div>
+            Última execução:{' '}
+            {cronInfo?.lastRunAt
+              ? new Date(cronInfo.lastRunAt).toLocaleString('pt-BR')
+              : 'nunca registrada'}
+            {cronInfo?.lastRunSource ? (
+              <span className="text-zinc-600"> ({cronInfo.lastRunSource})</span>
+            ) : null}
+          </div>
+          <div>
+            Pending agora: <strong className="text-zinc-300">{cronInfo?.pendingCount ?? '—'}</strong>
+            {' · '}
+            elegíveis (&gt;{cronInfo?.pendingOrderTtlMinutes ?? 30} min):{' '}
+            <strong className="text-amber-300">{cronInfo?.pendingOlderThanTtl ?? '—'}</strong>
+          </div>
+        </div>
+        <p className="text-[11px] text-zinc-500">
+          A pasta <code className="text-zinc-400">scripts/</code> no Git <strong>não agenda</strong>{' '}
+          cron. Configure HTTP no{' '}
+          <a
+            href="https://cron-job.org"
+            target="_blank"
+            rel="noreferrer"
+            className="text-emerald-400 hover:underline"
+          >
+            cron-job.org
+          </a>{' '}
+          com header <code className="text-zinc-400">Authorization: Bearer CRON_SECRET</code>, ou use
+          o botão abaixo (não precisa de secret).
+        </p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button
+            type="button"
+            disabled={syncingStripe}
+            onClick={runAllCrons}
+            className="text-xs px-3 py-2 rounded-xl border border-violet-500/40 text-violet-200 hover:bg-violet-950/40 disabled:opacity-50"
+          >
+            {syncingStripe ? 'Executando…' : 'Rodar crons agora (manual)'}
+          </button>
+          <button
+            type="button"
+            disabled={cleaning}
+            onClick={cleanupPendings}
+            className="text-xs px-3 py-2 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
+          >
+            {cleaning ? 'Limpando…' : 'Limpar pendentes + reparar estoque'}
+          </button>
         </div>
       </div>
 

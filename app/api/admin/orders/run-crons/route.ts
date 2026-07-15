@@ -95,7 +95,9 @@ export async function POST(req: NextRequest) {
     const cleanup = await cleanupPendingOrders({
       minutes: s.pendingOrderTtlMinutes || 30,
     });
-    summary.cleanup = cleanup;
+    const { repairCancelledOrdersStock } = await import('@/lib/order-stock');
+    const repair = await repairCancelledOrdersStock();
+    summary.cleanup = { ...cleanup, repair };
   } catch (e) {
     summary.cleanupError = e instanceof Error ? e.message : 'erro';
   }
@@ -120,14 +122,40 @@ export async function POST(req: NextRequest) {
     | { finalized?: number; cancelled?: number; feesUpdated?: number }
     | undefined;
 
+  const ranAt = new Date().toISOString();
+  try {
+    await prisma.setting.upsert({
+      where: { key: 'cron_last_run_at' },
+      update: { value: ranAt },
+      create: { key: 'cron_last_run_at', value: ranAt },
+    });
+    await prisma.setting.upsert({
+      where: { key: 'cron_last_run_source' },
+      update: { value: 'admin-run-crons' },
+      create: { key: 'cron_last_run_source', value: 'admin-run-crons' },
+    });
+  } catch {
+    /* ignore */
+  }
+
+  const cleanup = summary.cleanup as
+    | { cleaned?: number; ticketsReleased?: number; repair?: { fixed?: number } }
+    | undefined;
+
   return NextResponse.json({
     success: true,
+    ranAt,
     ...summary,
     message: [
-      `Stripe: +${stripe?.finalized ?? 0} pagos, ${stripe?.cancelled ?? 0} cancelados, ${stripe?.feesUpdated ?? 0} taxas atualizadas`,
+      `Stripe: +${stripe?.finalized ?? 0} pagos, ${stripe?.cancelled ?? 0} cancelados, ${stripe?.feesUpdated ?? 0} taxas`,
       `PIX: +${pixFinalized} pagos, ${pixCancelled} cancelados`,
-      `Cleanup: ${(summary.cleanup as { cleaned?: number })?.cleaned ?? 0} expirados`,
+      `Cleanup: ${cleanup?.cleaned ?? 0} cancelados, ${cleanup?.ticketsReleased ?? 0} estoque`,
+      cleanup?.repair?.fixed
+        ? `Reparo: ${cleanup.repair.fixed} cancelados com estoque preso`
+        : null,
       `Viradas: ${viradas}`,
-    ].join(' · '),
+    ]
+      .filter(Boolean)
+      .join(' · '),
   });
 }
