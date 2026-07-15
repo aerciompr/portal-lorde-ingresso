@@ -111,6 +111,18 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
 
   if (!event) notFound();
 
+  // Self-heal: após virada o TicketType pode ficar esgotado enquanto o lote tem vaga
+  if (event.activeLote?.ativo) {
+    try {
+      const { syncTicketTypeCapacityForEvent } = await import('@/lib/lote-ticket-sync');
+      await syncTicketTypeCapacityForEvent(event.id);
+      const types = await prisma.ticketType.findMany({ where: { eventId: event.id } });
+      (event as { ticketTypes: typeof types }).ticketTypes = types;
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Esgotado: prioriza LOTE ATIVO (não o 1º ticketType — isso bloqueava Lote 1 após migração)
   const loteAtivo = event.activeLote;
   const hasLotes = (event.lotes?.length || 0) > 0;

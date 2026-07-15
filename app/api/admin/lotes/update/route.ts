@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (gate !== true) return gate;
 
   const body = await req.json();
-  const { id, precoCents, totalQty, viradaAutomatica, ativo } = body;
+  const { id, precoCents, totalQty, viradaAutomatica, ativo, nome } = body;
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
   }
@@ -22,7 +22,19 @@ export async function POST(req: NextRequest) {
     totalQty?: number;
     viradaAutomatica?: boolean;
     ativo?: boolean;
+    nome?: string;
   } = {};
+
+  if (nome !== undefined) {
+    const n = String(nome || '').trim();
+    if (n.length < 1) {
+      return NextResponse.json({ error: 'Nome do lote inválido' }, { status: 400 });
+    }
+    if (n.length > 255) {
+      return NextResponse.json({ error: 'Nome do lote muito longo' }, { status: 400 });
+    }
+    data.nome = n;
+  }
 
   if (precoCents !== undefined) {
     const p = parseInt(String(precoCents), 10);
@@ -57,28 +69,22 @@ export async function POST(req: NextRequest) {
 
   const lote = await prisma.lote.update({ where: { id }, data });
 
-  // Cards usam lote ativo / lotes; sincroniza TicketType do evento para não ficar preço velho
-  if (data.precoCents !== undefined) {
-    const event = await prisma.event.findUnique({
-      where: { id: lote.eventId },
-      select: { activeLoteId: true },
-    });
-    // Se for o lote ativo (ou o único preço de venda), alinha os tipos de ingresso
-    if (event?.activeLoteId === lote.id || data.ativo === true) {
-      await prisma.ticketType.updateMany({
-        where: { eventId: lote.eventId },
-        data: { priceCents: lote.precoCents },
+  // Preço/qtd/ativo: alinha TicketType com lote ativo (evita site “esgotado” com vaga no lote)
+  try {
+    const { syncTicketTypeCapacityForEvent } = await import('@/lib/lote-ticket-sync');
+    await syncTicketTypeCapacityForEvent(lote.eventId);
+  } catch (e) {
+    console.error('[lote update] sync ticket type', e);
+    // Fallback só de preço
+    if (data.precoCents !== undefined) {
+      const event = await prisma.event.findUnique({
+        where: { id: lote.eventId },
+        select: { activeLoteId: true },
       });
-    } else if (event?.activeLoteId == null) {
-      // sem lote ativo: usa o menor preço entre lotes com vaga como referência dos types
-      const lotes = await prisma.lote.findMany({ where: { eventId: lote.eventId } });
-      const withStock = lotes.filter((l) => l.sold < l.totalQty);
-      const pool = withStock.length ? withStock : lotes;
-      if (pool.length) {
-        const min = Math.min(...pool.map((l) => l.precoCents));
+      if (event?.activeLoteId === lote.id || data.ativo === true) {
         await prisma.ticketType.updateMany({
           where: { eventId: lote.eventId },
-          data: { priceCents: min },
+          data: { priceCents: lote.precoCents },
         });
       }
     }

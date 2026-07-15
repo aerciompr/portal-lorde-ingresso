@@ -61,6 +61,7 @@ export default function AdminEventos() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: editingLote.id,
+        nome: loteForm.nome.trim(),
         precoCents: parseBRLToCents(loteForm.preco),
         totalQty: parseInt(loteForm.qty, 10),
       }),
@@ -383,8 +384,17 @@ export default function AdminEventos() {
       {showLoteModal && editingLote && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 rounded-2xl w-full max-w-sm p-6">
-            <h3 className="font-semibold mb-4">Editar lote: {editingLote.nome}</h3>
+            <h3 className="font-semibold mb-4">Editar lote</h3>
             <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-zinc-400">Nome do lote</label>
+                <input
+                  className="input"
+                  value={loteForm.nome}
+                  onChange={(e) => setLoteForm({ ...loteForm, nome: e.target.value })}
+                  placeholder="Lote 2"
+                />
+              </div>
               <div>
                 <label className="block text-xs text-zinc-400">Preço (R$)</label>
                 <input
@@ -399,9 +409,13 @@ export default function AdminEventos() {
                 <input
                   className="input"
                   type="number"
+                  min={1}
                   value={loteForm.qty}
                   onChange={(e) => setLoteForm({ ...loteForm, qty: e.target.value })}
                 />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Não pode ser menor que o já vendido neste lote.
+                </p>
               </div>
             </div>
             <div className="flex gap-3 mt-6">

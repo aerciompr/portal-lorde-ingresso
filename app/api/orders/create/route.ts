@@ -28,12 +28,28 @@ export async function POST(req: NextRequest) {
     const loteAvail = event.activeLote
       ? Math.max(0, event.activeLote.totalQty - event.activeLote.sold)
       : null;
+    // Com lote ativo: estoque do LOTE manda; alinha TicketType se ficou para trás na virada
+    if (loteAvail != null && event.activeLote?.id) {
+      try {
+        const { syncTicketTypeCapacityForEvent } = await import('@/lib/lote-ticket-sync');
+        await syncTicketTypeCapacityForEvent(eventId);
+        const refreshed = await prisma.ticketType.findMany({ where: { eventId } });
+        event.ticketTypes = refreshed as typeof event.ticketTypes;
+      } catch (e) {
+        console.error('[CREATE ORDER] sync ticket type', e);
+      }
+    }
+
     let qtyTotal = 0;
     for (const item of items) {
       const tt = event.ticketTypes.find((t: { id: string }) => t.id === item.ticketTypeId);
       if (!tt) throw new Error('Tipo de ingresso inválido');
+
+      // Com lote: só o restante do lote limita a venda
       const typeAvail = Math.max(0, tt.totalQty - tt.sold);
-      const avail = loteAvail != null ? Math.min(typeAvail, loteAvail - qtyTotal) : typeAvail;
+      const avail =
+        loteAvail != null ? Math.max(0, loteAvail - qtyTotal) : typeAvail;
+
       if (item.quantity > avail || item.quantity < 1) {
         return NextResponse.json(
           {
@@ -45,6 +61,20 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+
+      // Self-heal: totalQty do tipo precisa aceitar o sold++ desta compra
+      if (tt.sold + item.quantity > tt.totalQty) {
+        const newTotal =
+          tt.sold +
+          item.quantity +
+          Math.max(0, (loteAvail != null ? loteAvail - qtyTotal : 0) - item.quantity);
+        await prisma.ticketType.update({
+          where: { id: tt.id },
+          data: { totalQty: newTotal },
+        });
+        tt.totalQty = newTotal;
+      }
+
       qtyTotal += item.quantity;
       const price = currentPrice ?? tt.priceCents;
       subtotalCents += price * item.quantity;

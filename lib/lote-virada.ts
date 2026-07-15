@@ -64,6 +64,14 @@ export async function activateNewLote(options: {
     data: { activeLoteId: newLote.id },
   });
 
+  // Alinha TicketType (preço + capacidade) com o novo lote — senão o site fica "esgotado"
+  try {
+    const { syncTicketTypeCapacityForEvent } = await import('@/lib/lote-ticket-sync');
+    await syncTicketTypeCapacityForEvent(options.eventId);
+  } catch (e) {
+    console.error('[VIRADA] sync ticket type falhou', e);
+  }
+
   return newLote;
 }
 

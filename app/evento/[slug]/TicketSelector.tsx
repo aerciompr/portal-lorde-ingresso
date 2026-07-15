@@ -70,10 +70,10 @@ export default function TicketSelector({ event }: Props) {
 
   const typeDisponivel = (tt: TicketType) => Math.max(0, tt.totalQty - tt.sold);
 
-  // Com lotes: disponibilidade = vagas do lote (fonte da verdade da venda em lote)
+  // Com lotes: o LOTE é a fonte da verdade (TicketType pode ficar defasado após virada)
   const sellableQty =
-    currentLote && matchedType
-      ? Math.max(0, Math.min(loteDisponivel, typeDisponivel(matchedType)))
+    currentLote && currentLote.ativo
+      ? loteDisponivel
       : matchedType
         ? typeDisponivel(matchedType)
         : 0;
@@ -140,13 +140,11 @@ export default function TicketSelector({ event }: Props) {
   if (hasLotes) {
     // Esgotado = lote sem vaga (NÃO o primeiro ticket type da lista)
     const soldOutActive =
-      !currentLote ||
-      !currentLote.ativo ||
-      loteDisponivel < 1 ||
-      sellableQty < 1;
+      !currentLote || !currentLote.ativo || loteDisponivel < 1 || sellableQty < 1;
 
     const activeName = currentLote?.nome || 'Ingresso';
-    const qtyId = matchedType?.id;
+    // Precisa de um ticketType id para o create; se matching falhar, usa o primeiro
+    const qtyId = matchedType?.id || event.ticketTypes[0]?.id;
 
     return (
       <div>

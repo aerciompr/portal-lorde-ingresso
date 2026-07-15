@@ -155,19 +155,26 @@ export default function EditEventPage() {
     if (!lote?.id) return;
     const priceCents = parseBRLToCents(editLoteForm?.preco || '0');
     const totalQty = parseInt(editLoteForm?.qty || '0');
+    const nome = String(editLoteForm?.nome || '').trim();
     try {
       const res = await fetch('/api/admin/lotes/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: lote.id, precoCents: priceCents, totalQty }),
+        body: JSON.stringify({
+          id: lote.id,
+          nome: nome || undefined,
+          precoCents: priceCents,
+          totalQty,
+        }),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Falha ao atualizar');
       toast.success('Lote atualizado');
       setEditingLote(null);
       setEditLoteForm(null);
       await refreshEventData();
-    } catch {
-      toast.error('Erro ao atualizar');
+    } catch (e) {
+      toast.error((e as Error).message || 'Erro ao atualizar');
     }
   }
 
@@ -343,12 +350,52 @@ export default function EditEventPage() {
           {/* Inline edit form */}
           {editingLote && editLoteForm && (
             <div className="mb-4 p-3 bg-zinc-950 border border-emerald-500/30 rounded-lg">
-              <div className="text-xs text-emerald-400 mb-2">Editando: {editingLote.nome || editingLote.name}</div>
-              <div className="flex gap-2 text-xs">
-                <input className="input py-1.5 text-sm w-28" placeholder="35,00" inputMode="decimal" value={editLoteForm.preco} onChange={e=>setEditLoteForm({...editLoteForm, preco:e.target.value})} />
-                <input className="input py-1.5 text-sm w-24" placeholder="Qtd" type="number" value={editLoteForm.qty} onChange={e=>setEditLoteForm({...editLoteForm, qty:e.target.value})} />
-                <button onClick={() => updateLote(editingLote)} className="btn btn-primary text-xs px-5">Salvar</button>
-                <button onClick={() => { setEditingLote(null); setEditLoteForm(null); }} className="btn btn-secondary text-xs px-4">Fechar</button>
+              <div className="text-xs text-emerald-400 mb-2">Editando lote</div>
+              <div className="flex flex-wrap gap-2 text-xs items-center">
+                <input
+                  className="input py-1.5 text-sm min-w-[12rem] flex-1"
+                  placeholder="Nome do lote"
+                  value={editLoteForm.nome || ''}
+                  onChange={(e) =>
+                    setEditLoteForm({ ...editLoteForm, nome: e.target.value })
+                  }
+                />
+                <input
+                  className="input py-1.5 text-sm w-28"
+                  placeholder="35,00"
+                  inputMode="decimal"
+                  value={editLoteForm.preco}
+                  onChange={(e) =>
+                    setEditLoteForm({ ...editLoteForm, preco: e.target.value })
+                  }
+                />
+                <input
+                  className="input py-1.5 text-sm w-24"
+                  placeholder="Qtd"
+                  type="number"
+                  min={1}
+                  value={editLoteForm.qty}
+                  onChange={(e) =>
+                    setEditLoteForm({ ...editLoteForm, qty: e.target.value })
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() => updateLote(editingLote)}
+                  className="btn btn-primary text-xs px-5"
+                >
+                  Salvar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingLote(null);
+                    setEditLoteForm(null);
+                  }}
+                  className="btn btn-secondary text-xs px-4"
+                >
+                  Fechar
+                </button>
               </div>
             </div>
           )}
