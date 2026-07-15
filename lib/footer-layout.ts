@@ -279,9 +279,23 @@ export function newWidget(type: FooterWidgetType, col = 0): FooterWidget {
   }
 }
 
+/** Remove classes/attrs pesados do TipTap para caber no MySQL e limpar HTML */
+function minifyFooterHtml(html: string): string {
+  return (html || '')
+    .replace(/\sclass="[^"]*"/gi, '')
+    .replace(/\sclass='[^']*'/gi, '')
+    .replace(/\sstyle="[^"]*"/gi, '')
+    .replace(/\sdata-[a-z-]+="[^"]*"/gi, '')
+    .replace(/>\s+</g, '><')
+    .trim();
+}
+
 export function serializeFooterLayout(layout: FooterLayout): string {
   // Garante socialItems sempre serializado (array, mesmo vazio)
   const widgets = (layout.widgets || []).map((w) => {
+    if (w.type === 'richtext') {
+      return { ...w, html: minifyFooterHtml(w.html || '') };
+    }
     if (w.type !== 'social') return w;
     return {
       ...w,

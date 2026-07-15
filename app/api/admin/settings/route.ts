@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
 
   let saved = 0;
   const errors: string[] = [];
+  let tooLong = false;
 
   for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
     if (!k || typeof k !== 'string' || k.length > 120) continue;
@@ -97,20 +98,31 @@ export async function POST(req: NextRequest) {
       await prisma.setting.upsert({
         where: { key: k },
         update: { value },
-        create: { key: k, value },
+        create: { key, value },
       });
       saved += 1;
     } catch (e) {
       console.error('[settings POST]', k, e);
       errors.push(k);
+      const err = e as { code?: string; meta?: { column_name?: string } };
+      if (err?.code === 'P2000') tooLong = true;
     }
   }
 
   bustSettingsCache();
 
-  if (saved === 0 && errors.length) {
+  if (errors.length) {
+    const cols = errors.join(', ');
+    const hint = tooLong
+      ? ` Valor longo demais na coluna Setting.value (MySQL). No phpMyAdmin rode: ALTER TABLE \`Setting\` MODIFY COLUMN \`value\` LONGTEXT NOT NULL;  (ou scripts/sql-setting-value-longtext.sql)`
+      : '';
     return NextResponse.json(
-      { error: `Falha ao gravar: ${errors.join(', ')}` },
+      {
+        error: `Falha ao gravar: ${cols}.${hint}`,
+        saved,
+        partialErrors: errors,
+        code: tooLong ? 'VALUE_TOO_LONG' : 'UPSERT_FAILED',
+      },
       { status: 500 }
     );
   }
@@ -118,6 +130,5 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     saved,
-    ...(errors.length ? { partialErrors: errors } : {}),
   });
 }
