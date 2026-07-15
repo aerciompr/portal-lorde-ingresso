@@ -45,6 +45,8 @@ export type AppSettings = {
   contact: {
     whatsappDisplay: string;
     whatsappE164: string;
+    /** false = esconde WhatsApp no header (e pode alinhar com rodapé) */
+    showWhatsApp: boolean;
     /** E-mail público exibido e destino do formulário de contato */
     contactEmail: string;
     instagramUrl: string;
@@ -96,6 +98,7 @@ const DEFAULTS: AppSettings = {
   contact: {
     whatsappDisplay: '(82) 99647-1998',
     whatsappE164: '5582996471998',
+    showWhatsApp: true,
     contactEmail: 'contato@lordenelson.com.br',
     instagramUrl: '',
     contactNote: 'Respondemos em horário comercial. Para ingressos, use também Meus Ingressos.',
@@ -174,6 +177,9 @@ export async function getAppSettings(force = false): Promise<AppSettings> {
         raw.WHATSAPP_E164 ||
         DEFAULTS.contact.whatsappE164
       ).replace(/\D/g, ''),
+      showWhatsApp: !['0', 'false', 'off', 'no'].includes(
+        String(raw.show_whatsapp ?? '1').toLowerCase()
+      ),
       contactEmail:
         raw.contact_email ||
         raw.CONTACT_EMAIL ||

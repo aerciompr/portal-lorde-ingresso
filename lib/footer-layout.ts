@@ -280,9 +280,45 @@ export function newWidget(type: FooterWidgetType, col = 0): FooterWidget {
 }
 
 export function serializeFooterLayout(layout: FooterLayout): string {
+  // Garante socialItems sempre serializado (array, mesmo vazio)
+  const widgets = (layout.widgets || []).map((w) => {
+    if (w.type !== 'social') return w;
+    return {
+      ...w,
+      socialItems: Array.isArray(w.socialItems)
+        ? w.socialItems
+        : (['whatsapp', 'instagram', 'email'] as FooterWidget['socialItems']),
+    };
+  });
   return JSON.stringify({
     columns: layout.columns,
     showLogo: layout.showLogo,
-    widgets: layout.widgets,
+    widgets,
   });
+}
+
+/** Remove whatsapp de todos os blocos social + linhas de texto que citam WhatsApp */
+export function stripWhatsAppFromFooterLayout(layout: FooterLayout): FooterLayout {
+  return {
+    ...layout,
+    widgets: layout.widgets.map((w) => {
+      if (w.type === 'social') {
+        const items = (w.socialItems ?? ['whatsapp', 'instagram', 'email']).filter(
+          (i) => i !== 'whatsapp'
+        );
+        return { ...w, socialItems: items };
+      }
+      if (w.type === 'richtext' && w.html) {
+        let html = w.html;
+        // remove parágrafos / list items que mencionam WhatsApp
+        html = html.replace(
+          /<(p|li)(\s[^>]*)?>[\s\S]*?whatsapp[\s\S]*?<\/\1>/gi,
+          ''
+        );
+        html = html.replace(/whatsapp\s*[:\-]?\s*[\d\s().+-]{8,}/gi, '');
+        return { ...w, html };
+      }
+      return w;
+    }),
+  };
 }

@@ -53,7 +53,15 @@ export default function AdminConfiguracoes() {
           const row = (await check.json()) as Record<string, string>;
           const saved = row.footer_layout || '';
           const want = override.footer_layout || '';
-          if (saved !== want) {
+          // compara estrutura JSON (ordem de chaves pode variar)
+          let same = saved === want;
+          try {
+            same =
+              JSON.stringify(JSON.parse(saved)) === JSON.stringify(JSON.parse(want));
+          } catch {
+            /* keep string compare */
+          }
+          if (!same) {
             console.error('[footer save] mismatch', {
               wantLen: want.length,
               savedLen: saved.length,
@@ -63,8 +71,26 @@ export default function AdminConfiguracoes() {
             );
             return false;
           }
-          setSettings(row);
-          toast.success(`Rodapé salvo (${Math.round(saved.length / 1024) || 1} KB no banco)`);
+          setSettings((s) => ({ ...s, ...override, ...row }));
+          // resumo das redes salvas
+          let socialHint = '';
+          try {
+            const parsed = JSON.parse(saved) as {
+              widgets?: Array<{ type?: string; socialItems?: string[] }>;
+            };
+            const social = parsed.widgets?.find((w) => w.type === 'social');
+            if (social) {
+              const items = social.socialItems || [];
+              socialHint = items.length
+                ? ` · redes: ${items.join(', ')}`
+                : ' · redes: nenhuma';
+            }
+          } catch {
+            /* ignore */
+          }
+          toast.success(
+            `Rodapé salvo (${Math.round(saved.length / 1024) || 1} KB)${socialHint}`
+          );
           return true;
         }
       }
@@ -495,6 +521,30 @@ export default function AdminConfiguracoes() {
 
             <div className="space-y-3 rounded-2xl border border-white/10 p-4">
               <div className="text-sm font-medium text-zinc-300">WhatsApp</div>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 rounded border-white/20"
+                  checked={
+                    !['0', 'false', 'off', 'no'].includes(
+                      String(settings.show_whatsapp ?? '1').toLowerCase()
+                    )
+                  }
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      show_whatsapp: e.target.checked ? '1' : '0',
+                    })
+                  }
+                />
+                <span>
+                  <span className="text-sm text-zinc-200">Exibir WhatsApp no menu (header)</span>
+                  <span className="block text-[11px] text-zinc-500 mt-0.5">
+                    Desmarque para esconder o ícone no topo do site. No rodapé use o bloco Redes
+                    ou o botão &quot;Remover WhatsApp…&quot;.
+                  </span>
+                </span>
+              </label>
               <div>
                 <div className="label">Número exibido</div>
                 <input

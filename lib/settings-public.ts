@@ -41,6 +41,7 @@ export const PUBLIC_SETTING_KEYS = new Set([
   // Contato público
   'whatsapp_display',
   'whatsapp_e164',
+  'show_whatsapp',
   'contact_email',
   'instagram_url',
   'contact_note',

@@ -24,10 +24,13 @@ export default function Header({
   initialBranding = {},
   whatsappDisplay,
   whatsappHref,
+  showWhatsApp = true,
 }: {
   initialBranding?: { siteName?: string; logoUrl?: string; faviconUrl?: string };
   whatsappDisplay?: string;
   whatsappHref?: string;
+  /** false = esconde ícone no menu (config show_whatsapp) */
+  showWhatsApp?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [siteName, setSiteName] = useState(initialBranding.siteName || 'Lorde Nelson');
@@ -36,6 +39,7 @@ export default function Header({
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [waDisplay, setWaDisplay] = useState(whatsappDisplay || DEFAULT_WA_DISPLAY);
   const [waHref, setWaHref] = useState(whatsappHref || DEFAULT_WA_HREF);
+  const [waVisible, setWaVisible] = useState(showWhatsApp);
 
   // Se o SSR veio sem logo (cache / falha de DB), busca nas configs públicas
   useEffect(() => {
@@ -45,6 +49,10 @@ export default function Header({
       .then((data) => {
         if (cancelled || !data) return;
         if (data.site_name) setSiteName(String(data.site_name));
+        if (data.show_whatsapp != null) {
+          const v = String(data.show_whatsapp).toLowerCase();
+          setWaVisible(!['0', 'false', 'off', 'no'].includes(v));
+        }
         if (data.logo_url) {
           setRemoteLogo(String(data.logo_url).trim());
           setCandidateIndex(0);
@@ -127,11 +135,15 @@ export default function Header({
               {l.label}
             </Link>
           ))}
-          <WhatsAppIconLink className="text-[#25D366] hover:text-[#3be07a] text-[1.35rem] leading-none transition -mt-0.5" />
+          {waVisible && (
+            <WhatsAppIconLink className="text-[#25D366] hover:text-[#3be07a] text-[1.35rem] leading-none transition -mt-0.5" />
+          )}
         </nav>
 
         <div className="flex md:hidden items-center gap-1">
-          <WhatsAppIconLink className="text-[#25D366] hover:text-[#3be07a] text-[1.5rem] leading-none p-2 transition" />
+          {waVisible && (
+            <WhatsAppIconLink className="text-[#25D366] hover:text-[#3be07a] text-[1.5rem] leading-none p-2 transition" />
+          )}
           <button
             type="button"
             onClick={() => setOpen(!open)}
@@ -155,16 +167,18 @@ export default function Header({
               {l.label}
             </Link>
           ))}
-          <a
-            href={waHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 normal-case tracking-normal text-[#25D366]"
-            onClick={() => setOpen(false)}
-          >
-            <i className="fa-brands fa-whatsapp text-xl" aria-hidden />
-            <span className="text-zinc-300 text-sm font-medium">{waDisplay}</span>
-          </a>
+          {waVisible && (
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 normal-case tracking-normal text-[#25D366]"
+              onClick={() => setOpen(false)}
+            >
+              <i className="fa-brands fa-whatsapp text-xl" aria-hidden />
+              <span className="text-zinc-300 text-sm font-medium">{waDisplay}</span>
+            </a>
+          )}
         </nav>
       )}
     </header>

@@ -9,6 +9,7 @@ import {
   newWidget,
   parseFooterLayout,
   serializeFooterLayout,
+  stripWhatsAppFromFooterLayout,
 } from '@/lib/footer-layout';
 
 const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), {
@@ -158,6 +159,50 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
     setOpenId(w.id);
   }
 
+  function toggleSocialItem(
+    widgetId: string,
+    key: 'whatsapp' | 'instagram' | 'email',
+    checked: boolean
+  ) {
+    const base = layoutRef.current;
+    const widget = base.widgets.find((x) => x.id === widgetId);
+    if (!widget || widget.type !== 'social') return;
+    const current =
+      widget.socialItems ??
+      (['whatsapp', 'instagram', 'email'] as Array<'whatsapp' | 'instagram' | 'email'>);
+    const set = new Set(current);
+    if (checked) set.add(key);
+    else set.delete(key);
+    // array explícito (pode ser []) — nunca undefined
+    updateWidget(widgetId, {
+      socialItems: Array.from(set) as Array<'whatsapp' | 'instagram' | 'email'>,
+    });
+  }
+
+  async function removeWhatsAppEverywhere() {
+    const flushed = flushRichTextEditors();
+    const next = stripWhatsAppFromFooterLayout(flushed);
+    commit(next);
+    if (!onSaveFooter) return;
+    setSavingFooter(true);
+    try {
+      const json = serializeFooterLayout(layoutRef.current);
+      const ok = await onSaveFooter({
+        footer_layout: json,
+        footer_left: '',
+        footer_right: '',
+        // esconde também o ícone do header
+        show_whatsapp: '0',
+      });
+      if (ok !== false) {
+        dirtyRef.current = false;
+        lastServerJson.current = json;
+      }
+    } finally {
+      setSavingFooter(false);
+    }
+  }
+
   const registerEditorApi = useCallback((widgetId: string) => {
     return (api: { getHTML: () => string } | null) => {
       if (api) editorApis.current.set(widgetId, api.getHTML);
@@ -170,9 +215,17 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
       <div>
         <div className="font-medium text-emerald-400 mb-1">Rodapé (widgets)</div>
         <p className="text-xs text-zinc-500">
-          Edite o texto e clique em <strong className="text-zinc-300">Salvar rodapé agora</strong>.
-          Sem esse botão o site público não atualiza.
+          O WhatsApp pode aparecer em <strong className="text-zinc-400">3 lugares</strong>: texto
+          rico, bloco Redes e menu (header). Use o botão abaixo para remover dos três de uma vez.
         </p>
+        <button
+          type="button"
+          className="mt-2 text-xs px-3 py-1.5 rounded-lg border border-amber-500/40 text-amber-200 hover:bg-amber-950/40"
+          disabled={savingFooter}
+          onClick={() => void removeWhatsAppEverywhere()}
+        >
+          Remover WhatsApp do rodapé + esconder no menu
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-4 items-end">
@@ -245,6 +298,39 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                 Remover
               </button>
             </div>
+
+            {/* Redes: checkboxes sempre visíveis (não precisa expandir o bloco) */}
+            {w.type === 'social' && (
+              <div className="px-3 py-2.5 flex flex-wrap gap-4 text-sm text-zinc-300 border-b border-white/5 bg-zinc-900/40">
+                {(['whatsapp', 'instagram', 'email'] as const).map((key) => {
+                  const items =
+                    w.socialItems ??
+                    (['whatsapp', 'instagram', 'email'] as Array<
+                      'whatsapp' | 'instagram' | 'email'
+                    >);
+                  const checked = items.includes(key);
+                  return (
+                    <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          toggleSocialItem(w.id, key, e.target.checked)
+                        }
+                      />
+                      {key === 'whatsapp'
+                        ? 'WhatsApp'
+                        : key === 'instagram'
+                          ? 'Instagram'
+                          : 'E-mail'}
+                    </label>
+                  );
+                })}
+                <span className="text-[10px] text-zinc-600 self-center">
+                  Desmarque e clique em Salvar rodapé
+                </span>
+              </div>
+            )}
 
             {openId === w.id && (
               <div className="p-3 space-y-3">
@@ -333,50 +419,11 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                 )}
 
                 {w.type === 'social' && (
-                  <div className="space-y-2">
-                    <p className="text-[11px] text-zinc-500">
-                      Desmarque para ocultar no site. Dados vêm da aba Contato.
-                    </p>
-                    <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
-                      {(['whatsapp', 'instagram', 'email'] as const).map((key) => {
-                        const items = w.socialItems ?? [
-                          'whatsapp',
-                          'instagram',
-                          'email',
-                        ];
-                        const checked = items.includes(key);
-                        return (
-                          <label
-                            key={key}
-                            className="flex items-center gap-2 cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                const base =
-                                  w.socialItems ??
-                                  (['whatsapp', 'instagram', 'email'] as const).slice();
-                                const set = new Set(base);
-                                if (e.target.checked) set.add(key);
-                                else set.delete(key);
-                                updateWidget(w.id, {
-                                  socialItems: Array.from(set) as Array<
-                                    'whatsapp' | 'instagram' | 'email'
-                                  >,
-                                });
-                              }}
-                            />
-                            {key === 'whatsapp'
-                              ? 'WhatsApp'
-                              : key === 'instagram'
-                                ? 'Instagram'
-                                : 'E-mail / Contato'}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <p className="text-[11px] text-zinc-500">
+                    Os checkboxes ficam sempre visíveis acima. Números/links vêm da aba Contato.
+                    O texto &quot;WhatsApp (82)…&quot; no bloco <strong>Texto rico</strong> é
+                    outro conteúdo — apague lá ou use &quot;Remover WhatsApp…&quot;.
+                  </p>
                 )}
 
                 {w.type === 'links' && (

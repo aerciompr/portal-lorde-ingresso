@@ -77,6 +77,7 @@ export default async function RootLayout({
   const waDigits =
     (s.contact?.whatsappE164 || "").replace(/\D/g, "") || "5582996471998";
   const waHref = `https://wa.me/${waDigits}`;
+  const showWhatsApp = s.contact?.showWhatsApp !== false;
   const contactEmail =
     s.contact?.contactEmail || "contato@lordenelson.com.br";
   const instagramUrl = (s.contact?.instagramUrl || "").trim();
@@ -106,6 +107,7 @@ export default async function RootLayout({
               initialBranding={initialBranding}
               whatsappDisplay={waDisplay}
               whatsappHref={waHref}
+              showWhatsApp={showWhatsApp}
             />
           }
           footer={
