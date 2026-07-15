@@ -1,10 +1,102 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatDate, isPastDeadline, getEventFooterNotice } from "@/lib/utils";
+import { getAppSettings } from "@/lib/settings";
+import { absoluteMediaUrl } from "@/lib/media-url";
 import TicketSelector from "./TicketSelector";
 import { MapPin, Clock, Calendar } from "lucide-react";
 
 export const dynamic = 'force-dynamic';
+
+function stripHtml(html: string): string {
+  return (html || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const [event, s] = await Promise.all([
+    prisma.event.findUnique({
+      where: { slug },
+      select: {
+        title: true,
+        description: true,
+        imageUrl: true,
+        slug: true,
+        address: true,
+        date: true,
+      },
+    }),
+    getAppSettings(),
+  ]);
+
+  if (!event) {
+    return { title: "Evento não encontrado" };
+  }
+
+  const siteName = s.branding.siteName || "Lorde Nelson";
+  const base = (
+    s.publicUrl ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://portal.lordenelson.com.br"
+  ).replace(/\/$/, "");
+
+  const plain = stripHtml(event.description || "");
+  const when = formatDate(event.date);
+  const description =
+    plain.slice(0, 160) ||
+    `${event.title} — ${when}${event.address ? ` · ${event.address}` : ""}. Ingressos no ${siteName}.`;
+
+  const title = `${event.title} | ${siteName}`;
+  const pageUrl = `${base}/evento/${event.slug}`;
+  const imageRaw = (event.imageUrl || "").trim();
+  const image = imageRaw
+    ? absoluteMediaUrl(imageRaw, base)
+    : absoluteMediaUrl(
+        (s.branding.logoUrl || "/logo-lordenelson.jpg").trim(),
+        base
+      );
+
+  return {
+    title,
+    description,
+    alternates: { canonical: pageUrl },
+    openGraph: {
+      type: "website",
+      locale: "pt_BR",
+      url: pageUrl,
+      siteName,
+      title: event.title,
+      description,
+      images: image
+        ? [
+            {
+              url: image,
+              alt: event.title,
+            },
+          ]
+        : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: event.title,
+      description,
+      images: image ? [image] : undefined,
+    },
+  };
+}
 
 export default async function EventPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
