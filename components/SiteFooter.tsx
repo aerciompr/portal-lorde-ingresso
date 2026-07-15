@@ -82,7 +82,10 @@ function WidgetBlock({
   }
 
   if (w.type === 'social') {
-    const items = w.socialItems || ['whatsapp', 'instagram', 'email'];
+    // undefined = legado (mostra as 3); [] = nenhuma (usuário desmarcou tudo)
+    const items = Array.isArray(w.socialItems)
+      ? w.socialItems
+      : (['whatsapp', 'instagram', 'email'] as const);
     const ig = (contact.instagramUrl || '').trim();
     const igHref = ig
       ? ig.startsWith('http')

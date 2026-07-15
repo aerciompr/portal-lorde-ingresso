@@ -21,8 +21,17 @@ export default function AdminConfiguracoes() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function saveSettings(override?: Record<string, string>) {
-    const payload = override ? { ...settings, ...override } : settings;
+  async function saveSettings(
+    override?: Record<string, string>,
+    opts?: { onlyKeys?: boolean }
+  ) {
+    // onlyKeys: grava só o override (ex. rodapé) — não reenvia estado stale
+    const payload =
+      override && opts?.onlyKeys
+        ? override
+        : override
+          ? { ...settings, ...override }
+          : settings;
     try {
       const res = await fetch('/api/admin/settings', {
         method: 'POST',
@@ -35,8 +44,9 @@ export default function AdminConfiguracoes() {
         toast.error(data.error || `Falha ao salvar (${res.status})`);
         return false;
       }
-      toast.success('Configurações salvas no banco');
-      // atualiza estado local com o que mandamos (evita race com load)
+      toast.success(
+        opts?.onlyKeys ? 'Rodapé salvo no banco' : 'Configurações salvas no banco'
+      );
       if (override) setSettings((s) => ({ ...s, ...override }));
       await load();
       return true;
@@ -773,8 +783,8 @@ export default function AdminConfiguracoes() {
                 settings={settings}
                 onChange={(patch) => setSettings((s) => ({ ...s, ...patch }))}
                 onSaveFooter={async (footerPayload) => {
-                  // grava só chaves do rodapé (evita perder edição se estado geral estiver desatualizado)
-                  const ok = await saveSettings(footerPayload);
+                  // só footer_layout (+ limpa legado) — não reenvia settings inteiro
+                  const ok = await saveSettings(footerPayload, { onlyKeys: true });
                   return ok;
                 }}
               />

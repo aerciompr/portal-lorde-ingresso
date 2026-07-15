@@ -226,11 +226,19 @@ export function parseFooterLayout(
           showLogo: parsed.showLogo !== false,
           widgets: parsed.widgets
             .filter((w) => w && w.type && typeof w.col === 'number')
-            .map((w) => ({
-              ...w,
-              id: w.id || uid(),
-              col: Math.max(0, Math.min(2, Number(w.col) || 0)),
-            })),
+            .map((w) => {
+              const base = {
+                ...w,
+                id: w.id || uid(),
+                col: Math.max(0, Math.min(2, Number(w.col) || 0)),
+              };
+              // social sem lista explícita = legado com as 3 redes (UI e site iguais)
+              if (base.type === 'social' && !Array.isArray(base.socialItems)) {
+                base.socialItems = ['whatsapp', 'instagram', 'email'];
+              }
+              // socialItems: [] = nenhuma rede (respeitar)
+              return base;
+            }),
         };
       }
     } catch {

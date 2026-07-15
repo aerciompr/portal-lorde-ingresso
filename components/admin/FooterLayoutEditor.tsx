@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   type FooterLayout,
@@ -34,40 +34,42 @@ type Props = {
   onSaveFooter?: (payload: Record<string, string>) => Promise<boolean | void>;
 };
 
+function parseFromSettings(settings: Record<string, string>): FooterLayout {
+  return parseFooterLayout(settings.footer_layout, {
+    left: settings.footer_left,
+    right: settings.footer_right,
+    year: String(new Date().getFullYear()),
+    siteName: settings.site_name || 'Lorde Nelson',
+  });
+}
+
 export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }: Props) {
   const year = String(new Date().getFullYear());
   const siteName = settings.site_name || 'Lorde Nelson';
 
-  const layout = useMemo(
-    () =>
-      parseFooterLayout(settings.footer_layout, {
-        left: settings.footer_left,
-        right: settings.footer_right,
-        year,
-        siteName,
-      }),
-    // re-parse when footer_layout or legacy changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.footer_layout, settings.footer_left, settings.footer_right, settings.site_name]
+  // Estado local + ref: evita perder a última tecla/clique no "Salvar"
+  const [layout, setLayout] = useState<FooterLayout>(() => parseFromSettings(settings));
+  const layoutRef = useRef(layout);
+  const [openId, setOpenId] = useState<string | null>(
+    () => parseFromSettings(settings).widgets[0]?.id || null
   );
-
-  const [openId, setOpenId] = useState<string | null>(layout.widgets[0]?.id || null);
   const [savingFooter, setSavingFooter] = useState(false);
-  // espelho local do JSON — garante que o que está na tela é o que grava
-  const [layoutJson, setLayoutJson] = useState(() =>
-    serializeFooterLayout(
-      parseFooterLayout(settings.footer_layout, {
-        left: settings.footer_left,
-        right: settings.footer_right,
-        year,
-        siteName,
-      })
-    )
-  );
+  /** Só re-sincroniza do servidor quando a string do banco muda (após load) */
+  const lastServerJson = useRef(settings.footer_layout || '');
+
+  useEffect(() => {
+    const server = settings.footer_layout || '';
+    if (server === lastServerJson.current) return;
+    lastServerJson.current = server;
+    const next = parseFromSettings(settings);
+    layoutRef.current = next;
+    setLayout(next);
+  }, [settings.footer_layout, settings.footer_left, settings.footer_right, settings.site_name]);
 
   function commit(next: FooterLayout) {
+    layoutRef.current = next;
+    setLayout(next);
     const json = serializeFooterLayout(next);
-    setLayoutJson(json);
     onChange({ footer_layout: json });
   }
 
@@ -75,44 +77,54 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
     if (!onSaveFooter) return;
     setSavingFooter(true);
     try {
-      // usa layoutJson atual (última edição), não settings possivelmente stale
-      await onSaveFooter({
-        footer_layout: layoutJson || settings.footer_layout || '',
+      const json = serializeFooterLayout(layoutRef.current);
+      // grava JSON atual + limpa legado que reintroduzia WhatsApp no fallback
+      const ok = await onSaveFooter({
+        footer_layout: json,
+        footer_left: '',
+        footer_right: '',
       });
+      if (ok !== false) {
+        lastServerJson.current = json;
+      }
     } finally {
       setSavingFooter(false);
     }
   }
 
   function updateWidget(id: string, patch: Partial<FooterWidget>) {
+    const base = layoutRef.current;
     commit({
-      ...layout,
-      widgets: layout.widgets.map((w) => (w.id === id ? { ...w, ...patch } : w)),
+      ...base,
+      widgets: base.widgets.map((w) => (w.id === id ? { ...w, ...patch } : w)),
     });
   }
 
   function removeWidget(id: string) {
     if (!confirm('Remover este bloco do rodapé?')) return;
+    const base = layoutRef.current;
     commit({
-      ...layout,
-      widgets: layout.widgets.filter((w) => w.id !== id),
+      ...base,
+      widgets: base.widgets.filter((w) => w.id !== id),
     });
     if (openId === id) setOpenId(null);
   }
 
   function moveWidget(id: string, dir: -1 | 1) {
-    const idx = layout.widgets.findIndex((w) => w.id === id);
+    const base = layoutRef.current;
+    const idx = base.widgets.findIndex((w) => w.id === id);
     if (idx < 0) return;
     const j = idx + dir;
-    if (j < 0 || j >= layout.widgets.length) return;
-    const widgets = [...layout.widgets];
+    if (j < 0 || j >= base.widgets.length) return;
+    const widgets = [...base.widgets];
     [widgets[idx], widgets[j]] = [widgets[j], widgets[idx]];
-    commit({ ...layout, widgets });
+    commit({ ...base, widgets });
   }
 
   function addWidget(type: FooterWidgetType) {
-    const w = newWidget(type, Math.min(layout.columns - 1, 0));
-    commit({ ...layout, widgets: [...layout.widgets, w] });
+    const base = layoutRef.current;
+    const w = newWidget(type, Math.min(base.columns - 1, 0));
+    commit({ ...base, widgets: [...base.widgets, w] });
     setOpenId(w.id);
   }
 
@@ -121,8 +133,8 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
       <div>
         <div className="font-medium text-emerald-400 mb-1">Rodapé (widgets)</div>
         <p className="text-xs text-zinc-500">
-          Monte o rodapé em blocos. Texto usa o editor avançado. Redes puxam WhatsApp / Instagram /
-          e-mail da aba Contato.
+          Monte o rodapé em blocos. Use <strong className="text-zinc-400">Salvar rodapé agora</strong>{' '}
+          após editar. No bloco Redes, desmarque o que não quiser (ex.: WhatsApp).
         </p>
       </div>
 
@@ -134,7 +146,7 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
             value={layout.columns}
             onChange={(e) =>
               commit({
-                ...layout,
+                ...layoutRef.current,
                 columns: Number(e.target.value) as 1 | 2 | 3,
               })
             }
@@ -148,7 +160,9 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
           <input
             type="checkbox"
             checked={layout.showLogo}
-            onChange={(e) => commit({ ...layout, showLogo: e.target.checked })}
+            onChange={(e) =>
+              commit({ ...layoutRef.current, showLogo: e.target.checked })
+            }
           />
           Mostrar logo na 1ª coluna
         </label>
@@ -205,7 +219,10 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                       value={w.col}
                       onChange={(e) =>
                         updateWidget(w.id, {
-                          col: Math.min(layout.columns - 1, Number(e.target.value)),
+                          col: Math.min(
+                            layoutRef.current.columns - 1,
+                            Number(e.target.value)
+                          ),
                         })
                       }
                     >
@@ -239,7 +256,7 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                       />
                     </div>
                     <p className="text-[10px] text-zinc-500 mt-1">
-                      Use {'{year}'} no texto para o ano atual.
+                      Use {'{year}'} no texto para o ano atual. Depois clique em Salvar rodapé.
                     </p>
                   </div>
                 )}
@@ -291,39 +308,53 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                       <option value="sm">Pequeno</option>
                       <option value="md">Médio</option>
                     </select>
-                    <p className="text-[10px] text-zinc-500 mt-1">
-                      Usa a logo da seção acima. Prefira “Mostrar logo na 1ª coluna” se for a marca
-                      principal.
-                    </p>
                   </div>
                 )}
 
                 {w.type === 'social' && (
-                  <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
-                    {(['whatsapp', 'instagram', 'email'] as const).map((key) => {
-                      const checked = (w.socialItems || []).includes(key);
-                      return (
-                        <label key={key} className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              const set = new Set(w.socialItems || []);
-                              if (e.target.checked) set.add(key);
-                              else set.delete(key);
-                              updateWidget(w.id, {
-                                socialItems: Array.from(set),
-                              });
-                            }}
-                          />
-                          {key === 'whatsapp'
-                            ? 'WhatsApp'
-                            : key === 'instagram'
-                              ? 'Instagram'
-                              : 'E-mail / Contato'}
-                        </label>
-                      );
-                    })}
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-zinc-500">
+                      Desmarque para ocultar no site. Números/links vêm da aba Contato.
+                    </p>
+                    <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
+                      {(['whatsapp', 'instagram', 'email'] as const).map((key) => {
+                        const items = w.socialItems ?? [
+                          'whatsapp',
+                          'instagram',
+                          'email',
+                        ];
+                        const checked = items.includes(key);
+                        return (
+                          <label
+                            key={key}
+                            className="flex items-center gap-2 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const base =
+                                  w.socialItems ??
+                                  (['whatsapp', 'instagram', 'email'] as const).slice();
+                                const set = new Set(base);
+                                if (e.target.checked) set.add(key);
+                                else set.delete(key);
+                                updateWidget(w.id, {
+                                  socialItems: Array.from(set) as Array<
+                                    'whatsapp' | 'instagram' | 'email'
+                                  >,
+                                });
+                              }}
+                            />
+                            {key === 'whatsapp'
+                              ? 'WhatsApp'
+                              : key === 'instagram'
+                                ? 'Instagram'
+                                : 'E-mail / Contato'}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -408,8 +439,7 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
           </button>
         )}
         <p className="text-[10px] text-zinc-600">
-          Ou use <strong className="text-zinc-400">Salvar configurações</strong> no final da página
-          (grava tudo, inclusive rodapé).
+          Prefira este botão após editar o rodapé (grava o JSON completo e limpa o legado).
         </p>
       </div>
     </div>

@@ -227,4 +227,5 @@ export async function getFeeForMethod(method: 'pix' | 'card' | string): Promise<
 // Invalidate settings cache (call after admin updates keys)
 export function bustSettingsCache() {
   cachedSettings = null;
+  lastFetch = 0;
 }
