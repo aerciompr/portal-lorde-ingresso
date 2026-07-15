@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       await prisma.setting.upsert({
         where: { key: k },
         update: { value },
-        create: { key, value },
+        create: { key: k, value },
       });
       saved += 1;
     } catch (e) {
