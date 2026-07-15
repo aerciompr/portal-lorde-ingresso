@@ -26,10 +26,12 @@ interface Order {
   netCents?: number;
   feeCents?: number;
   feeDetails?: string | null;
-  event: { title: string };
+  event: { id?: string; title: string };
   lote?: { nome: string } | null;
   tickets?: TicketRow[];
 }
+
+type EventOpt = { id: string; title: string; date?: string };
 
 type ResendMode = 'confirmation' | 'access_code' | 'both';
 type StatusFilter = 'all' | 'paid' | 'refunded' | 'pending' | 'cancelled';
@@ -52,9 +54,16 @@ const STATUS_TABS: { id: StatusFilter; label: string }[] = [
 
 export default function AdminPedidos() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [events, setEvents] = useState<EventOpt[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [eventId, setEventId] = useState('');
+  const [source, setSource] = useState<'all' | 'portal' | 'woocommerce'>('all');
+  const [gateway, setGateway] = useState<'all' | 'stripe' | 'mercadopago'>('all');
+  const [method, setMethod] = useState<'all' | 'card' | 'pix'>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [statusCounts, setStatusCounts] = useState<StatusCounts | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -66,6 +75,7 @@ export default function AdminPedidos() {
   const [syncingStripe, setSyncingStripe] = useState(false);
   const [runningCrons, setRunningCrons] = useState(false);
   const [recalcStock, setRecalcStock] = useState(false);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const limit = 50;
 
   useEffect(() => {
@@ -75,7 +85,7 @@ export default function AdminPedidos() {
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, searchDebounced]);
+  }, [statusFilter, searchDebounced, eventId, source, gateway, method, dateFrom, dateTo]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,6 +97,13 @@ export default function AdminPedidos() {
         status: statusFilter,
       });
       if (searchDebounced) params.set('q', searchDebounced);
+      if (eventId) params.set('eventId', eventId);
+      if (source !== 'all') params.set('source', source);
+      if (gateway !== 'all') params.set('gateway', gateway);
+      if (method !== 'all') params.set('method', method);
+      if (dateFrom) params.set('from', dateFrom);
+      if (dateTo) params.set('to', dateTo);
+
       const res = await fetch(`/api/admin/orders?${params}`, {
         credentials: 'include',
       });
@@ -101,17 +118,48 @@ export default function AdminPedidos() {
         setTotalPages(data.totalPages || 1);
         setTotal(data.total || 0);
         if (data.statusCounts) setStatusCounts(data.statusCounts);
+        if (Array.isArray(data.events)) setEvents(data.events);
       }
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, searchDebounced]);
+  }, [
+    page,
+    statusFilter,
+    searchDebounced,
+    eventId,
+    source,
+    gateway,
+    method,
+    dateFrom,
+    dateTo,
+  ]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const filteredOrders = orders;
+
+  const hasExtraFilters =
+    Boolean(eventId) ||
+    source !== 'all' ||
+    gateway !== 'all' ||
+    method !== 'all' ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo);
+
+  function clearFilters() {
+    setStatusFilter('all');
+    setSearchTerm('');
+    setSearchDebounced('');
+    setEventId('');
+    setSource('all');
+    setGateway('all');
+    setMethod('all');
+    setDateFrom('');
+    setDateTo('');
+  }
 
   async function refund(orderId: string) {
     if (!confirm('Confirmar estorno real via gateway?')) return;
@@ -254,26 +302,108 @@ export default function AdminPedidos() {
         })}
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 mb-4">
-        <input
-          className="input w-full sm:max-w-sm min-w-0"
-          placeholder="Buscar nome, e-mail, evento, código LN-, id…"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-        {(statusFilter !== 'all' || searchDebounced) && (
+      {/* Busca + evento + mais filtros */}
+      <div className="card p-3 sm:p-4 mb-4 space-y-3">
+        <div className="flex flex-col lg:flex-row gap-2 lg:items-center">
+          <input
+            className="input w-full lg:max-w-sm min-w-0"
+            placeholder="Buscar nome, e-mail, CPF, código LN-, payment id…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <select
+            className="input w-full lg:max-w-md min-w-0"
+            value={eventId}
+            onChange={(e) => setEventId(e.target.value)}
+          >
+            <option value="">Todos os eventos</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>
+                {ev.title}
+                {ev.date
+                  ? ` · ${new Date(ev.date).toLocaleDateString('pt-BR')}`
+                  : ''}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
-            className="btn btn-secondary text-sm"
-            onClick={() => {
-              setStatusFilter('all');
-              setSearchTerm('');
-              setSearchDebounced('');
-            }}
+            className="btn btn-secondary text-sm whitespace-nowrap"
+            onClick={() => setShowMoreFilters((v) => !v)}
           >
-            Limpar filtros
+            {showMoreFilters ? 'Menos filtros' : 'Mais filtros'}
+            {hasExtraFilters && !showMoreFilters ? ' ·' : ''}
           </button>
+          {(statusFilter !== 'all' || searchDebounced || hasExtraFilters) && (
+            <button type="button" className="btn btn-secondary text-sm" onClick={clearFilters}>
+              Limpar filtros
+            </button>
+          )}
+        </div>
+
+        {showMoreFilters && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1 border-t border-white/5">
+            <div>
+              <div className="label mb-1">Origem</div>
+              <select
+                className="input"
+                value={source}
+                onChange={(e) => setSource(e.target.value as typeof source)}
+              >
+                <option value="all">Todas</option>
+                <option value="portal">Portal</option>
+                <option value="woocommerce">Importado (Woo)</option>
+              </select>
+            </div>
+            <div>
+              <div className="label mb-1">Gateway</div>
+              <select
+                className="input"
+                value={gateway}
+                onChange={(e) => setGateway(e.target.value as typeof gateway)}
+              >
+                <option value="all">Todos</option>
+                <option value="stripe">Stripe</option>
+                <option value="mercadopago">Mercado Pago</option>
+              </select>
+            </div>
+            <div>
+              <div className="label mb-1">Método</div>
+              <select
+                className="input"
+                value={method}
+                onChange={(e) => setMethod(e.target.value as typeof method)}
+              >
+                <option value="all">Todos</option>
+                <option value="card">Cartão</option>
+                <option value="pix">PIX</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="label mb-1">De</div>
+                <input
+                  type="date"
+                  className="input"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <div className="label mb-1">Até</div>
+                <input
+                  type="date"
+                  className="input"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
         )}
+      </div>
+
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 mb-4">
         <button
           type="button"
           disabled={syncingStripe}
@@ -384,8 +514,16 @@ export default function AdminPedidos() {
           {loading
             ? 'Carregando…'
             : `${total} pedido${total === 1 ? '' : 's'}${
-                statusFilter !== 'all' ? ` · ${STATUS_TABS.find((t) => t.id === statusFilter)?.label}` : ''
-              }${searchDebounced ? ` · “${searchDebounced}”` : ''}`}
+                statusFilter !== 'all'
+                  ? ` · ${STATUS_TABS.find((t) => t.id === statusFilter)?.label}`
+                  : ''
+              }${
+                eventId
+                  ? ` · ${events.find((e) => e.id === eventId)?.title?.slice(0, 28) || 'evento'}`
+                  : ''
+              }${searchDebounced ? ` · “${searchDebounced}”` : ''}${
+                hasExtraFilters && !eventId ? ' · filtros extras' : ''
+              }`}
         </span>
         <span className="sm:hidden text-[10px]">← Deslize a tabela →</span>
       </div>
