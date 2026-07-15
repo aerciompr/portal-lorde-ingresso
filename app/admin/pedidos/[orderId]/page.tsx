@@ -4,7 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { formatPrice, ticketStatusLabel } from '@/lib/utils';
+import {
+  formatPrice,
+  formatTimeAgo,
+  formatDateTimeShort,
+  ticketStatusLabel,
+} from '@/lib/utils';
 import StatusBadge from '@/components/StatusBadge';
 import {
   ArrowLeft,
@@ -310,13 +315,43 @@ export default function AdminPedidoDetailPage() {
         )}
         <div className="mt-4 pt-3 border-t border-white/5 grid sm:grid-cols-3 gap-2 text-xs text-zinc-500">
           <div>
-            <span className="text-zinc-600">Criado:</span> {fmt(order.createdAt)}
+            <span className="text-zinc-600">Criado:</span>{' '}
+            <span className="text-zinc-300 font-medium" title={fmt(order.createdAt)}>
+              {formatTimeAgo(order.createdAt)}
+            </span>
+            <div className="text-[10px] text-zinc-600 mt-0.5">
+              {formatDateTimeShort(order.createdAt) || fmt(order.createdAt)}
+            </div>
           </div>
           <div>
-            <span className="text-zinc-600">Pago:</span> {fmt(order.paidAt)}
+            <span className="text-zinc-600">Pago:</span>{' '}
+            {order.paidAt ? (
+              <>
+                <span className="text-zinc-300 font-medium" title={fmt(order.paidAt)}>
+                  {formatTimeAgo(order.paidAt)}
+                </span>
+                <div className="text-[10px] text-zinc-600 mt-0.5">
+                  {formatDateTimeShort(order.paidAt)}
+                </div>
+              </>
+            ) : (
+              '—'
+            )}
           </div>
           <div>
-            <span className="text-zinc-600">E-mail:</span> {fmt(order.emailSentAt)}
+            <span className="text-zinc-600">E-mail:</span>{' '}
+            {order.emailSentAt ? (
+              <>
+                <span className="text-zinc-300 font-medium">
+                  {formatTimeAgo(order.emailSentAt)}
+                </span>
+                <div className="text-[10px] text-zinc-600 mt-0.5">
+                  {formatDateTimeShort(order.emailSentAt)}
+                </div>
+              </>
+            ) : (
+              '—'
+            )}
           </div>
         </div>
       </div>

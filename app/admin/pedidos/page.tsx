@@ -1,7 +1,12 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { formatPrice, ticketStatusLabel } from '@/lib/utils';
+import {
+  formatPrice,
+  formatTimeAgo,
+  formatDateTimeShort,
+  ticketStatusLabel,
+} from '@/lib/utils';
 import { toast } from 'sonner';
 import { Download, FileText, Mail, KeyRound, Loader2 } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
@@ -26,9 +31,20 @@ interface Order {
   netCents?: number;
   feeCents?: number;
   feeDetails?: string | null;
+  createdAt?: string;
+  paidAt?: string | null;
   event: { id?: string; title: string };
   lote?: { nome: string } | null;
   tickets?: TicketRow[];
+}
+
+/** Referência de tempo: pago usa paidAt; senão createdAt */
+function orderMoment(o: Order): { at: string | undefined; label: string } {
+  const st = (o.status || '').toLowerCase();
+  if ((st === 'paid' || st === 'refunded') && o.paidAt) {
+    return { at: o.paidAt, label: st === 'refunded' ? 'Pago' : 'Pago' };
+  }
+  return { at: o.createdAt, label: 'Criado' };
 }
 
 type EventOpt = { id: string; title: string; date?: string };
@@ -528,10 +544,11 @@ export default function AdminPedidos() {
         <span className="sm:hidden text-[10px]">← Deslize a tabela →</span>
       </div>
       <div className="card overflow-x-auto overscroll-x-contain max-w-full -mx-0">
-        <table className="w-full text-sm min-w-[720px]">
+        <table className="w-full text-sm min-w-[820px]">
           <thead className="text-left text-zinc-400 border-b border-white/10">
             <tr>
               <th className="p-3">Cliente</th>
+              <th className="whitespace-nowrap">Quando</th>
               <th>Evento</th>
               <th>Lote</th>
               <th>Bruto</th>
@@ -543,7 +560,7 @@ export default function AdminPedidos() {
           <tbody className="divide-y divide-white/5">
             {!loading && filteredOrders.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-10 text-center text-zinc-500">
+                <td colSpan={8} className="p-10 text-center text-zinc-500">
                   Nenhum pedido com este filtro.
                 </td>
               </tr>
@@ -551,6 +568,7 @@ export default function AdminPedidos() {
             {filteredOrders.map((o) => {
               const canPdf = o.status === 'paid' && (o.tickets?.length || 0) > 0;
               const isOpen = expandedId === o.id;
+              const moment = orderMoment(o);
               return (
                 <Fragment key={o.id}>
                   <tr
@@ -589,6 +607,22 @@ export default function AdminPedidos() {
                           </>
                         );
                       })()}
+                    </td>
+                    <td className="text-xs text-zinc-400 whitespace-nowrap pr-2">
+                      <span
+                        className="text-zinc-200 font-medium tabular-nums"
+                        title={
+                          moment.at
+                            ? `${moment.label}: ${formatDateTimeShort(moment.at)}`
+                            : undefined
+                        }
+                      >
+                        {formatTimeAgo(moment.at)}
+                      </span>
+                      <div className="text-[10px] text-zinc-600 mt-0.5">
+                        {moment.label}
+                        {moment.at ? ` · ${formatDateTimeShort(moment.at)}` : ''}
+                      </div>
                     </td>
                     <td>{o.event.title}</td>
                     <td className="text-xs">{o.lote?.nome || '—'}</td>
@@ -690,7 +724,7 @@ export default function AdminPedidos() {
                   </tr>
                   {isOpen && canPdf && (
                     <tr className="bg-zinc-950/50">
-                      <td colSpan={7} className="p-3">
+                      <td colSpan={8} className="p-3">
                         <div className="text-xs text-zinc-500 mb-2">Ingressos deste pedido</div>
                         <ul className="space-y-1.5">
                           {o.tickets!.map((t) => (

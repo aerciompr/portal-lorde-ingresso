@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
+import type { Prisma } from '@prisma/client';
 
 type Agg = {
   key: string;
@@ -49,6 +50,8 @@ function customerKey(email: string | null | undefined, cpf: string | null | unde
 /**
  * GET /api/admin/customers
  * Agrega compradores a partir de pedidos (e-mail ou CPF).
+ * Mantido por design: sem tabela Customer separada.
+ * Otimizado: ignora pending abandonados; tickets via _count (sem carregar cada ingresso).
  * ?q=  &page=1&limit=50&sort=recent|spent|orders|name
  */
 export async function GET(req: NextRequest) {
@@ -62,7 +65,28 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50));
   const sort = (searchParams.get('sort') || 'recent').toLowerCase();
 
+  // Só pedidos com comprador identificável; pula "Checkout em andamento" pending
+  const where: Prisma.OrderWhereInput = {
+    AND: [
+      {
+        OR: [
+          { buyerEmail: { contains: '@' } },
+          { buyerCpf: { not: null } },
+        ],
+      },
+      {
+        NOT: {
+          AND: [{ buyerName: 'Checkout em andamento' }, { status: 'pending' }],
+        },
+      },
+    ],
+  };
+
+  // Hard cap defensivo: se passar disso, ainda agrega (admin raro), mas evita timeout extremo
+  const MAX_ORDERS = 50_000;
+
   const orders = await prisma.order.findMany({
+    where,
     select: {
       id: true,
       buyerName: true,
@@ -84,12 +108,14 @@ export async function GET(req: NextRequest) {
       paidAt: true,
       source: true,
       event: { select: { title: true } },
-      tickets: { select: { id: true, status: true } },
+      _count: { select: { tickets: true } },
     },
     orderBy: { createdAt: 'desc' },
+    take: MAX_ORDERS,
   });
 
   const map = new Map<string, Agg>();
+  const truncated = orders.length >= MAX_ORDERS;
 
   for (const o of orders) {
     const key = customerKey(o.buyerEmail, o.buyerCpf);
@@ -97,7 +123,7 @@ export async function GET(req: NextRequest) {
 
     const email = (o.buyerEmail || '').trim().toLowerCase();
     const status = (o.status || '').toLowerCase();
-    const ticketCount = (o.tickets || []).filter((t) => t.status !== 'cancelled').length;
+    const ticketCount = o._count?.tickets ?? 0;
     const createdIso = o.createdAt.toISOString();
     const paidIso = o.paidAt ? o.paidAt.toISOString() : null;
 
@@ -185,7 +211,6 @@ export async function GET(req: NextRequest) {
 
   let list = Array.from(map.values());
 
-  // Esconde placeholders sem compra real e sem dados úteis
   list = list.filter((c) => {
     if (c.name === 'Checkout em andamento' && c.paidCount === 0 && c.ordersCount <= 1) {
       return false;
@@ -202,7 +227,8 @@ export async function GET(req: NextRequest) {
       if (c.cpf && qDigits && c.cpf.replace(/\D/g, '').includes(qDigits)) return true;
       if (c.city && c.city.toLowerCase().includes(q)) return true;
       if (c.recentOrders.some((o) => o.eventTitle.toLowerCase().includes(q))) return true;
-      if (c.recentOrders.some((o) => o.accessCode && o.accessCode.toLowerCase().includes(q))) return true;
+      if (c.recentOrders.some((o) => o.accessCode && o.accessCode.toLowerCase().includes(q)))
+        return true;
       return false;
     });
   }
@@ -214,7 +240,6 @@ export async function GET(req: NextRequest) {
   } else if (sort === 'name') {
     list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   } else {
-    // recent
     list.sort((a, b) => (b.lastOrderAt || '').localeCompare(a.lastOrderAt || ''));
   }
 
@@ -230,7 +255,6 @@ export async function GET(req: NextRequest) {
     totalPaidOrders: list.reduce((s, c) => s + c.paidCount, 0),
   };
 
-  // Nunca vazar hash de senha
   return NextResponse.json({
     customers: slice,
     page: pageSafe,
@@ -238,5 +262,11 @@ export async function GET(req: NextRequest) {
     total,
     totalPages,
     summary,
+    ...(truncated
+      ? {
+          warning:
+            'Lista limitada aos 50 mil pedidos mais recentes com cliente. Volume alto — se ficar lento no futuro, dá para extrair tabela Customer.',
+        }
+      : {}),
   });
 }

@@ -141,6 +141,59 @@ export function formatTime(date: Date | string | null): string {
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+/**
+ * Tempo relativo em pt-BR: "agora", "há 5 min", "há 3 h", "há 2 dias", "há 3 meses", "há 1 ano".
+ * Até 24h usa minutos/horas; depois dias; ~30+ dias → meses; ~365+ → anos.
+ */
+export function formatTimeAgo(
+  date: Date | string | null | undefined,
+  now: Date = new Date()
+): string {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return '—';
+
+  let diffMs = now.getTime() - d.getTime();
+  // futuro próximo (clock skew)
+  if (diffMs < 0 && diffMs > -60_000) diffMs = 0;
+  if (diffMs < 0) {
+    // data no futuro (evento agendado etc.) — não esperado em pedidos
+    return 'em breve';
+  }
+
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 45) return 'agora';
+
+  const min = Math.floor(sec / 60);
+  if (min < 60) return min === 1 ? 'há 1 min' : `há ${min} min`;
+
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return hours === 1 ? 'há 1 h' : `há ${hours} h`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 30) return days === 1 ? 'há 1 dia' : `há ${days} dias`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return months === 1 ? 'há 1 mês' : `há ${months} meses`;
+
+  const years = Math.floor(days / 365);
+  return years === 1 ? 'há 1 ano' : `há ${years} anos`;
+}
+
+/** Data/hora absoluta curta pt-BR (tooltip) */
+export function formatDateTimeShort(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function generateUniqueCode(prefix = 'LN'): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
