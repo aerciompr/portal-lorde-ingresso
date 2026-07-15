@@ -32,49 +32,86 @@ interface Order {
 }
 
 type ResendMode = 'confirmation' | 'access_code' | 'both';
+type StatusFilter = 'all' | 'paid' | 'refunded' | 'pending' | 'cancelled';
+
+type StatusCounts = {
+  all: number;
+  paid: number;
+  pending: number;
+  refunded: number;
+  cancelled: number;
+};
+
+const STATUS_TABS: { id: StatusFilter; label: string }[] = [
+  { id: 'all', label: 'Todos' },
+  { id: 'paid', label: 'Pagos' },
+  { id: 'pending', label: 'Pendentes' },
+  { id: 'cancelled', label: 'Cancelados' },
+  { id: 'refunded', label: 'Estornados' },
+];
 
 export default function AdminPedidos() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'refunded' | 'pending' | 'cancelled'>('all');
+  const [searchDebounced, setSearchDebounced] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusCounts, setStatusCounts] = useState<StatusCounts | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [syncingStripe, setSyncingStripe] = useState(false);
   const [runningCrons, setRunningCrons] = useState(false);
   const [recalcStock, setRecalcStock] = useState(false);
   const limit = 50;
 
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, searchDebounced]);
+
   const load = useCallback(async () => {
-    const res = await fetch(`/api/admin/orders?page=${page}&limit=${limit}&paged=1`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      setOrders(data);
-      setTotalPages(1);
-      setTotal(data.length);
-    } else {
-      setOrders(data.orders || []);
-      setTotalPages(data.totalPages || 1);
-      setTotal(data.total || 0);
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+        paged: '1',
+        status: statusFilter,
+      });
+      if (searchDebounced) params.set('q', searchDebounced);
+      const res = await fetch(`/api/admin/orders?${params}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setOrders(data);
+        setTotalPages(1);
+        setTotal(data.length);
+      } else {
+        setOrders(data.orders || []);
+        setTotalPages(data.totalPages || 1);
+        setTotal(data.total || 0);
+        if (data.statusCounts) setStatusCounts(data.statusCounts);
+      }
+    } finally {
+      setLoading(false);
     }
-  }, [page]);
+  }, [page, statusFilter, searchDebounced]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const filteredOrders = orders.filter((o) => {
-    const matchesSearch =
-      (o.buyerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (o.buyerEmail || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.event.title.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredOrders = orders;
 
   async function refund(orderId: string) {
     if (!confirm('Confirmar estorno real via gateway?')) return;
@@ -177,24 +214,66 @@ export default function AdminPedidos() {
         </p>
       </div>
 
+      {/* Filtros por status */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {STATUS_TABS.map((tab) => {
+          const count =
+            statusCounts == null
+              ? null
+              : tab.id === 'all'
+                ? statusCounts.all
+                : statusCounts[tab.id];
+          const active = statusFilter === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setStatusFilter(tab.id)}
+              className={`text-xs sm:text-sm px-3 py-1.5 rounded-full border transition ${
+                active
+                  ? tab.id === 'paid'
+                    ? 'border-emerald-500/50 bg-emerald-950/50 text-emerald-300'
+                    : tab.id === 'pending'
+                      ? 'border-amber-500/50 bg-amber-950/40 text-amber-300'
+                      : tab.id === 'cancelled'
+                        ? 'border-zinc-500/50 bg-zinc-800 text-zinc-200'
+                        : tab.id === 'refunded'
+                          ? 'border-red-500/40 bg-red-950/40 text-red-300'
+                          : 'border-white/20 bg-white/10 text-white'
+                  : 'border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-200'
+              }`}
+            >
+              {tab.label}
+              {count != null && (
+                <span className={`ml-1.5 tabular-nums ${active ? 'opacity-90' : 'opacity-60'}`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 mb-4">
         <input
-          className="input w-full sm:max-w-xs min-w-0"
-          placeholder="Buscar nome, e-mail ou evento..."
+          className="input w-full sm:max-w-sm min-w-0"
+          placeholder="Buscar nome, e-mail, evento, código LN-, id…"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-        <select
-          className="input w-full sm:w-40"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-        >
-          <option value="all">Todos os status</option>
-          <option value="paid">Pagos</option>
-          <option value="refunded">Estornados</option>
-          <option value="pending">Pendentes</option>
-          <option value="cancelled">Cancelados</option>
-        </select>
+        {(statusFilter !== 'all' || searchDebounced) && (
+          <button
+            type="button"
+            className="btn btn-secondary text-sm"
+            onClick={() => {
+              setStatusFilter('all');
+              setSearchTerm('');
+              setSearchDebounced('');
+            }}
+          >
+            Limpar filtros
+          </button>
+        )}
         <button
           type="button"
           disabled={syncingStripe}
@@ -300,9 +379,16 @@ export default function AdminPedidos() {
         </a>
       </div>
 
-      <p className="text-[10px] text-zinc-500 mb-2 sm:hidden">
-        ← Deslize a tabela na horizontal →
-      </p>
+      <div className="flex items-center justify-between gap-2 mb-2 text-xs text-zinc-500">
+        <span>
+          {loading
+            ? 'Carregando…'
+            : `${total} pedido${total === 1 ? '' : 's'}${
+                statusFilter !== 'all' ? ` · ${STATUS_TABS.find((t) => t.id === statusFilter)?.label}` : ''
+              }${searchDebounced ? ` · “${searchDebounced}”` : ''}`}
+        </span>
+        <span className="sm:hidden text-[10px]">← Deslize a tabela →</span>
+      </div>
       <div className="card overflow-x-auto overscroll-x-contain max-w-full -mx-0">
         <table className="w-full text-sm min-w-[720px]">
           <thead className="text-left text-zinc-400 border-b border-white/10">
@@ -317,6 +403,13 @@ export default function AdminPedidos() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
+            {!loading && filteredOrders.length === 0 && (
+              <tr>
+                <td colSpan={7} className="p-10 text-center text-zinc-500">
+                  Nenhum pedido com este filtro.
+                </td>
+              </tr>
+            )}
             {filteredOrders.map((o) => {
               const canPdf = o.status === 'paid' && (o.tickets?.length || 0) > 0;
               const isOpen = expandedId === o.id;
