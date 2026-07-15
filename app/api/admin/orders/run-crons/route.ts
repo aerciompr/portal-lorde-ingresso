@@ -25,6 +25,14 @@ export async function POST(req: NextRequest) {
     ranAt: new Date().toISOString(),
   };
 
+  // 0) Alertas de lote quase esgotado (≤2 → e-mail)
+  try {
+    const { scanLowStockAlerts } = await import('@/lib/lote-stock-alerts');
+    summary.loteAlerts = await scanLowStockAlerts();
+  } catch (e) {
+    summary.loteAlertsError = e instanceof Error ? e.message : 'erro';
+  }
+
   // 1) Stripe
   try {
     const stripe = await reconcileAllPendingStripe(100);

@@ -54,6 +54,23 @@ export default function AdminDashboard() {
     pendingOrderTtlMinutes?: number;
   } | null>(null);
   const [Recharts, setRecharts] = useState<RechartsModule | null>(null);
+  const [lowStock, setLowStock] = useState<{
+    items: Array<{
+      id: string;
+      nome: string;
+      remaining: number;
+      totalQty: number;
+      sold: number;
+      eventTitle: string;
+      eventSlug: string;
+      level: 'critical' | 'low' | 'soldout';
+      emailAlerted: boolean;
+    }>;
+    warnAt: number;
+    emailAt: number;
+    alertEmail: string | null;
+    counts: { total: number; critical: number; low: number };
+  } | null>(null);
 
   useEffect(() => {
     import('recharts').then(setRecharts).catch(() => undefined);
@@ -73,10 +90,20 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const loadLowStock = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/lotes/low-stock', { credentials: 'include' });
+      if (res.ok) setLowStock(await res.json());
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     load();
     loadCron();
-  }, [load, loadCron]);
+    loadLowStock();
+  }, [load, loadCron, loadLowStock]);
 
   const periodRange = useMemo(() => {
     const r = periodToRange(period, customFrom, customTo);
@@ -263,6 +290,113 @@ export default function AdminDashboard() {
         <div className="text-[10px] mt-1 text-zinc-500">
           Login de staff (mesmo do Admin). Eventos, pedidos e configs nas páginas do menu lateral.
         </div>
+      </div>
+
+      {/* Lotes perto de acabar */}
+      <div className="mb-6 p-4 border border-amber-500/25 bg-amber-950/20 rounded-2xl text-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+          <div>
+            <div className="font-medium text-amber-200 flex items-center gap-2">
+              <span>⚠️</span> Lotes com poucas vagas
+            </div>
+            <p className="text-[11px] text-zinc-500 mt-0.5">
+              Exibe lotes ativos com ≤{lowStock?.warnAt ?? 5} restantes.
+              E-mail automático em ≤{lowStock?.emailAt ?? 2}
+              {lowStock?.alertEmail ? (
+                <>
+                  {' '}
+                  → <span className="text-zinc-400">{lowStock.alertEmail}</span>
+                </>
+              ) : (
+                <>
+                  {' '}
+                  · configure em{' '}
+                  <a href="/admin/configuracoes" className="text-emerald-400 hover:underline">
+                    Configurações → Regras
+                  </a>
+                </>
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadLowStock()}
+            className="text-[11px] px-2.5 py-1 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5"
+          >
+            Atualizar
+          </button>
+        </div>
+
+        {!lowStock ? (
+          <p className="text-xs text-zinc-500">Carregando estoque…</p>
+        ) : lowStock.items.length === 0 ? (
+          <p className="text-xs text-emerald-400/90">
+            Nenhum lote ativo com ≤{lowStock.warnAt} vagas. Tudo folgado.
+          </p>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {lowStock.items.map((item) => {
+              const tone =
+                item.level === 'soldout' || item.level === 'critical'
+                  ? 'border-red-500/40 bg-red-950/40'
+                  : 'border-amber-500/30 bg-amber-950/30';
+              const chip =
+                item.remaining <= 0
+                  ? 'Esgotado'
+                  : item.remaining === 1
+                    ? '1 resto'
+                    : `${item.remaining} restam`;
+              const chipClass =
+                item.remaining <= 2
+                  ? 'bg-red-500/20 text-red-300'
+                  : 'bg-amber-500/20 text-amber-200';
+              return (
+                <a
+                  key={item.id}
+                  href={`/admin/eventos`}
+                  className={`rounded-xl border p-3 hover:brightness-110 transition ${tone}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-zinc-100 truncate">
+                        {item.eventTitle}
+                      </div>
+                      <div className="text-[11px] text-zinc-400 mt-0.5 truncate">
+                        {item.nome}
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full tabular-nums ${chipClass}`}
+                    >
+                      {chip}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500">
+                    <span>
+                      {item.sold}/{item.totalQty} vendidos
+                    </span>
+                    {item.emailAlerted && item.remaining <= 2 && (
+                      <span className="text-violet-400">e-mail ok</span>
+                    )}
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        item.remaining <= 2 ? 'bg-red-500' : 'bg-amber-500'
+                      }`}
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round((item.sold / Math.max(1, item.totalQty)) * 100)
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Status das crons */}

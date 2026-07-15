@@ -41,6 +41,12 @@ export async function releaseOrderStock(orderId: string): Promise<{ ticketsRelea
           where: { id: order.loteId },
           data: { sold: Math.max(0, lote.sold - total) },
         });
+        try {
+          const { checkLoteLowStockAlert } = await import('@/lib/lote-stock-alerts');
+          await checkLoteLowStockAlert(order.loteId);
+        } catch {
+          /* ignore */
+        }
       }
     }
 
@@ -289,6 +295,12 @@ export async function createAdminOrder(input: CreateAdminOrderInput) {
       where: { id: activeLoteId },
       data: { sold: { increment: qty } },
     });
+    try {
+      const { checkLoteLowStockAlert } = await import('@/lib/lote-stock-alerts');
+      await checkLoteLowStockAlert(activeLoteId);
+    } catch {
+      /* ignore */
+    }
   }
 
   try {

@@ -318,6 +318,22 @@ export default function AdminConfiguracoes() {
                 <div className="label">E-mail remetente</div>
                 <input className="input" placeholder="ingressos@lordenelson.com.br" value={settings.from_email || ''} onChange={e => setSettings({...settings, from_email: e.target.value})} />
               </div>
+              <div className="md:col-span-2">
+                <div className="label">E-mail alerta de lote (quase esgotado)</div>
+                <input
+                  className="input"
+                  type="email"
+                  placeholder="ex: seu@email.com (avisos quando restam ≤2)"
+                  value={settings.lote_alert_email || ''}
+                  onChange={(e) =>
+                    setSettings({ ...settings, lote_alert_email: e.target.value })
+                  }
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Dashboard mostra lotes com ≤5 restantes. E-mail automático ao chegar em ≤2.
+                  Se vazio, usa o e-mail de contato do site.
+                </p>
+              </div>
               <div>
                 <div className="label">Horas para cancelamento</div>
                 <div className="flex items-center gap-2">

@@ -175,6 +175,13 @@ export async function POST(req: NextRequest) {
           },
         },
       });
+      // Alerta e-mail se restam ≤2 no lote
+      try {
+        const { checkLoteLowStockAlert } = await import('@/lib/lote-stock-alerts');
+        await checkLoteLowStockAlert(activeLoteId);
+      } catch (e) {
+        console.error('[CREATE ORDER] lote low-stock alert falhou', e);
+      }
     }
 
     try {

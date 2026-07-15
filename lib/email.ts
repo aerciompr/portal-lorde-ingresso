@@ -311,6 +311,105 @@ export async function sendContactFormMessage(params: {
   }
 }
 
+/** Alerta admin: lote com poucas vagas (≤2) */
+export async function sendLoteLowStockAlert(params: {
+  to: string;
+  eventTitle: string;
+  eventSlug: string;
+  loteNome: string;
+  remaining: number;
+  totalQty: number;
+  sold: number;
+  eventDate: Date | string;
+}) {
+  const apiKey = getResendKey();
+  if (!apiKey) {
+    console.log('[EMAIL] Skipped lote low-stock (no RESEND_API_KEY)');
+    return { ok: false, skipped: true as const, error: 'RESEND_API_KEY ausente' };
+  }
+
+  const to = (params.to || '').trim();
+  if (!to.includes('@')) {
+    return { ok: false, error: 'Destino inválido' };
+  }
+
+  let publicUrl = '';
+  try {
+    const s = await getAppSettings();
+    publicUrl = (s.publicUrl || process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+  } catch {
+    publicUrl = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+  }
+
+  const when =
+    params.eventDate instanceof Date
+      ? params.eventDate.toLocaleString('pt-BR')
+      : new Date(params.eventDate).toLocaleString('pt-BR');
+
+  const remLabel =
+    params.remaining <= 0
+      ? 'ESGOTADO (0 restantes)'
+      : params.remaining === 1
+        ? '1 ingresso restante'
+        : `${params.remaining} ingressos restantes`;
+
+  const adminUrl = publicUrl ? `${publicUrl}/admin/eventos` : '/admin/eventos';
+  const eventUrl = publicUrl
+    ? `${publicUrl}/evento/${params.eventSlug}`
+    : `/evento/${params.eventSlug}`;
+
+  const resend = new Resend(apiKey);
+  const from = getFromEmail();
+
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0a0a0a;color:#eee;border-radius:12px;">
+      <p style="margin:0 0 8px;font-size:12px;color:#f59e0b;text-transform:uppercase;letter-spacing:1px;">Alerta de estoque</p>
+      <h1 style="margin:0 0 16px;font-size:22px;color:#fff;">Lote quase esgotado</h1>
+      <p style="margin:0 0 12px;line-height:1.5;">
+        O lote <strong style="color:#34d399;">${params.loteNome}</strong> do evento
+        <strong>${params.eventTitle}</strong> está com <strong style="color:#fbbf24;">${remLabel}</strong>.
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
+        <tr><td style="padding:6px 0;color:#888;">Evento</td><td style="padding:6px 0;text-align:right;">${params.eventTitle}</td></tr>
+        <tr><td style="padding:6px 0;color:#888;">Data</td><td style="padding:6px 0;text-align:right;">${when}</td></tr>
+        <tr><td style="padding:6px 0;color:#888;">Lote</td><td style="padding:6px 0;text-align:right;">${params.loteNome}</td></tr>
+        <tr><td style="padding:6px 0;color:#888;">Vendidos</td><td style="padding:6px 0;text-align:right;">${params.sold} / ${params.totalQty}</td></tr>
+        <tr><td style="padding:6px 0;color:#888;">Restantes</td><td style="padding:6px 0;text-align:right;font-weight:700;color:#fbbf24;">${params.remaining}</td></tr>
+      </table>
+      <p style="margin:16px 0;">
+        <a href="${eventUrl}" style="display:inline-block;padding:10px 16px;background:#059669;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;">Ver página do evento</a>
+        &nbsp;
+        <a href="${adminUrl}" style="display:inline-block;padding:10px 16px;background:#27272a;color:#ddd;text-decoration:none;border-radius:8px;font-size:14px;">Admin eventos</a>
+      </p>
+      <p style="margin-top:28px;font-size:11px;color:#666;">
+        Alerta automático do portal (limite ≤2 restantes). Configure o e-mail em Admin → Configurações → Regras.
+      </p>
+    </div>
+  `;
+
+  try {
+    const result = await resend.emails.send({
+      from: from.includes('<') ? from : `Lorde Nelson Portal <${from}>`,
+      to,
+      subject: `[Estoque] ${params.eventTitle} · ${params.loteNome} · ${remLabel}`,
+      html,
+    });
+    if (result.error) {
+      console.error('[EMAIL] lote low-stock Resend error', result.error);
+      return { ok: false, error: result.error.message };
+    }
+    console.log('[EMAIL] lote low-stock sent to', to, params.loteNome, remainingLabel(params.remaining));
+    return { ok: true };
+  } catch (e) {
+    console.error('[EMAIL] lote low-stock exception', e);
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+function remainingLabel(n: number) {
+  return n <= 0 ? '0 left' : `${n} left`;
+}
+
 export async function sendCancellationApproved(
   order: OrderWithDetails,
   refundAmountCents?: number
