@@ -322,7 +322,15 @@ export default function AdminPedidos() {
               const isOpen = expandedId === o.id;
               return (
                 <Fragment key={o.id}>
-                  <tr className="hover:bg-white/5">
+                  <tr
+                    className="hover:bg-white/5 cursor-pointer"
+                    onClick={(e) => {
+                      // não navega se clicou em botão/link
+                      const t = e.target as HTMLElement;
+                      if (t.closest('button, a, input')) return;
+                      window.location.href = `/admin/pedidos/${o.id}`;
+                    }}
+                  >
                     <td className="p-3">
                       {(() => {
                         const emptyBuyer =
@@ -382,6 +390,13 @@ export default function AdminPedidos() {
                     </td>
                     <td className="p-3 text-right">
                       <div className="flex flex-wrap gap-1.5 justify-end">
+                        <a
+                          href={`/admin/pedidos/${o.id}`}
+                          className="text-xs px-2.5 py-1 rounded bg-sky-600/80 hover:bg-sky-600 cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Detalhe
+                        </a>
                         {canPdf && (
                           <>
                             <button

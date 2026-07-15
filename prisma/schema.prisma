@@ -85,6 +85,8 @@ model Order {
   accessCode        String?   @unique @db.VarChar(64)
   createdAt         DateTime  @default(now())
   paidAt            DateTime?
+  /** Último e-mail de ingresso/confirmação enviado com sucesso */
+  emailSentAt       DateTime?
 
   loteId     String?
   lote       Lote?   @relation(fields: [loteId], references: [id], onDelete: SetNull)

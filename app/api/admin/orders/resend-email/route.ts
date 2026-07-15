@@ -114,6 +114,12 @@ export async function POST(req: NextRequest) {
           skipped: (mail as { skipped?: boolean }).skipped,
           attachments: (mail as { attachments?: number }).attachments,
         };
+        if (mail.ok) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { emailSentAt: new Date() },
+          });
+        }
       } catch (e) {
         results.confirmation = { ok: false, error: (e as Error).message };
       }

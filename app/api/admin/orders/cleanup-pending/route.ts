@@ -59,18 +59,45 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const minutes = Math.max(5, parseInt(String(body.minutes || 30), 10) || 30);
+    // 0 = todos os pending; default 30 min
+    const minutes = Math.max(0, parseInt(String(body.minutes ?? 30), 10) || 0);
     const eventId = body.eventId || null;
+    const onlyAbandoned = body.onlyAbandoned === true || body.onlyAbandoned === '1';
+    const repairCancelled = body.repairCancelled === true || body.repairCancelled === '1';
 
-    const result = await cleanupPendingOrders({ minutes, eventId });
+    const result = await cleanupPendingOrders({
+      minutes,
+      eventId,
+      onlyAbandoned,
+    });
+
+    let repair: { fixed: number; ticketsReleased: number } | null = null;
+    if (repairCancelled) {
+      const { repairCancelledOrdersStock } = await import('@/lib/order-stock');
+      repair = await repairCancelledOrdersStock();
+    }
+
+    const parts = [
+      result.cleaned === 0
+        ? minutes <= 0
+          ? 'Nenhum pending para limpar.'
+          : `Nenhum pending com mais de ${minutes} min.`
+        : `${result.cleaned} cancelado(s), ${result.ticketsReleased} ingresso(s) devolvido(s)`,
+    ];
+    if (result.skippedPaid) {
+      parts.push(`${result.skippedPaid} pago(s) no Stripe (não cancelados)`);
+    }
+    if (repair && repair.fixed > 0) {
+      parts.push(
+        `reparo: ${repair.fixed} cancelado(s) com estoque preso → ${repair.ticketsReleased} liberado(s)`
+      );
+    }
 
     return NextResponse.json({
       success: true,
       ...result,
-      message:
-        result.cleaned === 0
-          ? `Nenhum pedido pendente com mais de ${minutes} minutos.`
-          : `${result.cleaned} pedido(s) cancelado(s). ${result.ticketsReleased} ingresso(s) devolvido(s) ao estoque.`,
+      repair,
+      message: parts.join(' · '),
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Erro na limpeza';

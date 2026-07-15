@@ -164,12 +164,14 @@ export default function AdminFerramentasPage() {
   }
 
   async function runCleanup() {
-    const mins = parseInt(cleanupMinutes, 10) || 30;
+    const mins = Math.max(0, parseInt(cleanupMinutes, 10) || 0);
     if (
       !confirm(
-        `Cancelar todos os pedidos pendentes com mais de ${mins} minutos` +
+        (mins <= 0
+          ? 'Cancelar TODOS os pedidos pending (qualquer idade)'
+          : `Cancelar pending com mais de ${mins} minutos`) +
           (cleanupEventId ? ' neste evento' : ' (todos os eventos)') +
-          ' e devolver os ingressos ao estoque?'
+          ' e devolver estoque?\n\nTambém repara cancelados que ainda prendem estoque.'
       )
     ) {
       return;
@@ -178,10 +180,12 @@ export default function AdminFerramentasPage() {
     try {
       const res = await fetch('/api/admin/orders/cleanup-pending', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           minutes: mins,
           eventId: cleanupEventId || null,
+          repairCancelled: true,
         }),
       });
       const data = await res.json();
@@ -424,11 +428,13 @@ export default function AdminFerramentasPage() {
               <input
                 className="input"
                 type="number"
-                min={5}
+                min={0}
                 value={cleanupMinutes}
                 onChange={(e) => setCleanupMinutes(e.target.value)}
               />
-              <div className="text-[10px] text-zinc-500 mt-1">Mínimo 5 min. Sugestão: 30–60.</div>
+              <div className="text-[10px] text-zinc-500 mt-1">
+                0 = todos os pending. Sugestão: 15–30. Também repara estoque preso em cancelados.
+              </div>
             </div>
             <div>
               <div className="label mb-1">Evento (opcional)</div>

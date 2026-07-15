@@ -120,8 +120,11 @@ export default function AdminDashboard() {
   async function cleanupPendings() {
     if (
       !confirm(
-        'Cancelar pedidos pendentes com mais de 30 minutos e devolver estoque?\n\n' +
-          'Isso limpa reservas abandonadas no checkout.'
+        'Limpar pendentes abandonados?\n\n' +
+          '• Cancela pending com mais de 15 min\n' +
+          '• Devolve estoque\n' +
+          '• Repara cancelados que ainda prendiam estoque\n\n' +
+          'Pedidos já pagos no Stripe NÃO são cancelados.'
       )
     ) {
       return;
@@ -132,11 +135,19 @@ export default function AdminDashboard() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ minutes: 30 }),
+        body: JSON.stringify({
+          minutes: 15,
+          repairCancelled: true,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha na limpeza');
       toast.success(data.message || 'Limpeza concluída');
+      if (data.cleaned === 0 && !data.repair?.fixed) {
+        toast.message(
+          'Nada a limpar com 15 min. Use Ferramentas → limpeza com menos minutos, ou “todos os pending”.'
+        );
+      }
       load();
     } catch (e) {
       toast.error((e as Error).message);

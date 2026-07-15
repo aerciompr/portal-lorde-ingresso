@@ -289,56 +289,128 @@ export async function createAdminOrder(input: CreateAdminOrderInput) {
 
 /**
  * Cancela pedidos pending mais antigos que `minutes` e devolve estoque.
+ * minutes=0 → todos os pending (use com cuidado).
  */
 export async function cleanupPendingOrders(options: {
   minutes: number;
   eventId?: string | null;
-}): Promise<{ cleaned: number; ticketsReleased: number; orderIds: string[] }> {
-  const minutes = Math.max(5, Math.min(7 * 24 * 60, Math.floor(options.minutes || 30)));
-  const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+  /** Só "Checkout em andamento" / sem e-mail */
+  onlyAbandoned?: boolean;
+}): Promise<{
+  cleaned: number;
+  ticketsReleased: number;
+  orderIds: string[];
+  skippedPaid: number;
+  scanned: number;
+}> {
+  const minutesRaw = Math.floor(options.minutes ?? 30);
+  const minutes =
+    minutesRaw <= 0
+      ? 0
+      : Math.max(1, Math.min(7 * 24 * 60, minutesRaw));
+  const cutoff =
+    minutes <= 0 ? new Date() : new Date(Date.now() - minutes * 60 * 1000);
 
   const pending = await prisma.order.findMany({
     where: {
       status: 'pending',
-      createdAt: { lt: cutoff },
+      ...(minutes > 0 ? { createdAt: { lt: cutoff } } : {}),
       ...(options.eventId ? { eventId: options.eventId } : {}),
     },
-    select: { id: true },
+    select: {
+      id: true,
+      buyerName: true,
+      buyerEmail: true,
+      paymentId: true,
+    },
   });
 
+  let list = pending;
+  if (options.onlyAbandoned) {
+    list = pending.filter((o) => {
+      const name = (o.buyerName || '').trim();
+      const email = (o.buyerEmail || '').trim();
+      return (
+        !email ||
+        name === 'Checkout em andamento' ||
+        name === '' ||
+        name === '—'
+      );
+    });
+  }
+
   let ticketsReleased = 0;
+  let skippedPaid = 0;
   const orderIds: string[] = [];
 
-  for (const { id } of pending) {
+  for (const row of list) {
     // Antes de cancelar: se for cartão Stripe e o PI já succeeded, marca pago
     try {
-      const full = await prisma.order.findUnique({
-        where: { id },
-        select: { paymentId: true, paymentGateway: true, paymentMethod: true },
-      });
-      const pi = full?.paymentId || '';
+      const pi = row.paymentId || '';
       if (pi.startsWith('pi_')) {
         const { reconcileStripeOrder } = await import('@/lib/stripe-reconcile');
-        const r = await reconcileStripeOrder(id, { paymentIntentId: pi });
+        const r = await reconcileStripeOrder(row.id, { paymentIntentId: pi });
         if (r.status === 'paid' || r.finalized || r.alreadyPaid) {
-          continue; // não cancela — foi pago
+          skippedPaid += 1;
+          continue;
         }
       }
     } catch {
       /* segue cleanup */
     }
 
-    const result = await releaseOrderStock(id);
+    const result = await releaseOrderStock(row.id);
     ticketsReleased += result.ticketsReleased;
+    const label =
+      minutes <= 0
+        ? 'cancelado admin (limpeza pending)'
+        : `expirado após ${minutes}min (cleanup)`;
     await prisma.order.update({
-      where: { id },
+      where: { id: row.id },
       data: {
         status: 'cancelled',
-        feeDetails: `expirado após ${minutes}min (cleanup automático)`,
+        feeDetails: label.slice(0, 250),
       },
     });
-    orderIds.push(id);
+    orderIds.push(row.id);
   }
 
-  return { cleaned: orderIds.length, ticketsReleased, orderIds };
+  return {
+    cleaned: orderIds.length,
+    ticketsReleased,
+    orderIds,
+    skippedPaid,
+    scanned: list.length,
+  };
+}
+
+/**
+ * Pedidos já cancelados que ainda têm tickets "valid" — devolve estoque.
+ * (Corrige cancelamentos antigos que não liberaram sold.)
+ */
+export async function repairCancelledOrdersStock(): Promise<{
+  fixed: number;
+  ticketsReleased: number;
+}> {
+  const cancelled = await prisma.order.findMany({
+    where: { status: { in: ['cancelled', 'canceled'] } },
+    include: {
+      tickets: { select: { id: true, status: true } },
+    },
+    take: 500,
+    orderBy: { createdAt: 'desc' },
+  });
+
+  let fixed = 0;
+  let ticketsReleased = 0;
+  for (const o of cancelled) {
+    const active = o.tickets.filter((t) => t.status !== 'cancelled');
+    if (active.length === 0) continue;
+    const r = await releaseOrderStock(o.id);
+    if (r.ticketsReleased > 0) {
+      fixed += 1;
+      ticketsReleased += r.ticketsReleased;
+    }
+  }
+  return { fixed, ticketsReleased };
 }

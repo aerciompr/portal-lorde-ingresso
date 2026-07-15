@@ -98,6 +98,11 @@ export async function finalizePaidOrder(
       );
       if (!mail.ok) {
         console.error('[FINALIZE] e-mail não enviado (pedido JÁ está pago):', mail.error || mail);
+      } else {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { emailSentAt: new Date() },
+        });
       }
     } catch (e) {
       console.error('[FINALIZE] e-mail falhou (pedido já está pago):', e);
