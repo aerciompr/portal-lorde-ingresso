@@ -318,272 +318,204 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="mb-6 p-4 border border-emerald-900/50 bg-emerald-950/30 rounded-2xl text-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <span>📱</span>
-          <span className="font-medium text-emerald-400">App Mobile (Check-in)</span>
-        </div>
-        <a
-          href="/checkin"
-          target="_blank"
-          className="inline-block text-emerald-400 hover:underline font-mono text-xs"
-        >
-          /checkin
-        </a>
-        <div className="text-[10px] mt-1 text-zinc-500">
-          Login de staff (mesmo do Admin). Eventos, pedidos e configs nas páginas do menu lateral.
-        </div>
-      </div>
-
-      {/* Lotes perto de acabar */}
-      <div className="mb-6 p-4 border border-amber-500/25 bg-amber-950/20 rounded-2xl text-sm">
-        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-          <div>
-            <div className="font-medium text-amber-200 flex items-center gap-2">
-              <span>⚠️</span> Lotes com poucas vagas
-            </div>
-            <p className="text-[11px] text-zinc-500 mt-0.5">
-              Exibe lotes ativos com ≤{lowStock?.warnAt ?? 5} restantes.
-              E-mail automático em ≤{lowStock?.emailAt ?? 2}
-              {lowStock?.alertEmail ? (
-                <>
-                  {' '}
-                  → <span className="text-zinc-400">{lowStock.alertEmail}</span>
-                </>
-              ) : (
-                <>
-                  {' '}
-                  · configure em{' '}
-                  <a href="/admin/configuracoes" className="text-emerald-400 hover:underline">
-                    Configurações → Regras
-                  </a>
-                </>
-              )}
-            </p>
+      {/* Desktop: 3 colunas · Mobile: empilhado */}
+      <div className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4 lg:items-stretch">
+        {/* Check-in */}
+        <div className="p-4 border border-emerald-900/50 bg-emerald-950/30 rounded-2xl text-sm flex flex-col min-h-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span>📱</span>
+            <span className="font-medium text-emerald-400">App Mobile (Check-in)</span>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadLowStock()}
-            className="text-[11px] px-2.5 py-1 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5"
-          >
-            Atualizar
-          </button>
-        </div>
-
-        {!lowStock ? (
-          <p className="text-xs text-zinc-500">Carregando estoque…</p>
-        ) : lowStock.items.length === 0 ? (
-          <p className="text-xs text-emerald-400/90">
-            Nenhum lote ativo com ≤{lowStock.warnAt} vagas. Tudo folgado.
-          </p>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {lowStock.items.map((item) => {
-              const tone =
-                item.level === 'soldout' || item.level === 'critical'
-                  ? 'border-red-500/40 bg-red-950/40'
-                  : 'border-amber-500/30 bg-amber-950/30';
-              const chip =
-                item.remaining <= 0
-                  ? 'Esgotado'
-                  : item.remaining === 1
-                    ? '1 resto'
-                    : `${item.remaining} restam`;
-              const chipClass =
-                item.remaining <= 2
-                  ? 'bg-red-500/20 text-red-300'
-                  : 'bg-amber-500/20 text-amber-200';
-              return (
-                <a
-                  key={item.id}
-                  href={`/admin/eventos`}
-                  className={`rounded-xl border p-3 hover:brightness-110 transition ${tone}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium text-zinc-100 truncate">
-                        {item.eventTitle}
-                      </div>
-                      <div className="text-[11px] text-zinc-400 mt-0.5 truncate">
-                        {item.nome}
-                      </div>
-                    </div>
-                    <span
-                      className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full tabular-nums ${chipClass}`}
-                    >
-                      {chip}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500">
-                    <span>
-                      {item.sold}/{item.totalQty} vendidos
-                    </span>
-                    {item.emailAlerted && item.remaining <= 2 && (
-                      <span className="text-violet-400">e-mail ok</span>
-                    )}
-                  </div>
-                  <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${
-                        item.remaining <= 2 ? 'bg-red-500' : 'bg-amber-500'
-                      }`}
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          Math.round((item.sold / Math.max(1, item.totalQty)) * 100)
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                </a>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Status / validação das crons */}
-      <div className="mb-6 p-4 border border-white/10 bg-zinc-900/80 rounded-2xl text-sm space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="font-medium text-zinc-200">⏱ Crons — validação</div>
-          <button
-            type="button"
-            onClick={() => void loadCron()}
-            className="text-[11px] px-2.5 py-1 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5"
-          >
-            Atualizar status
-          </button>
-        </div>
-
-        {/* Checklist */}
-        <ul className="space-y-1.5 text-xs">
-          <li className="flex items-start gap-2">
-            <span className={cronInfo?.cronSecretConfigured ? 'text-emerald-400' : 'text-amber-400'}>
-              {cronInfo?.cronSecretConfigured ? '✓' : '!'}
-            </span>
-            <span className="text-zinc-400">
-              <strong className="text-zinc-300">CRON_SECRET</strong> no EasyPanel:{' '}
-              {cronInfo?.cronSecretConfigured ? (
-                <span className="text-emerald-400">presente</span>
-              ) : (
-                <span className="text-amber-400">
-                  ausente — jobs externos dão 401 (adicione e reinicie o app)
-                </span>
-              )}
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className={cronInfo?.lastRunAt ? 'text-emerald-400' : 'text-zinc-500'}>
-              {cronInfo?.lastRunAt ? '✓' : '·'}
-            </span>
-            <span className="text-zinc-400">
-              Última execução:{' '}
-              {cronInfo?.lastRunAt ? (
-                <>
-                  <strong className="text-zinc-200">
-                    {new Date(cronInfo.lastRunAt).toLocaleString('pt-BR')}
-                  </strong>
-                  {cronInfo.lastRunSource ? (
-                    <span className="text-zinc-600"> · fonte: {cronInfo.lastRunSource}</span>
-                  ) : null}
-                </>
-              ) : (
-                <span className="text-zinc-500">nunca — clique em “Rodar crons agora” para testar</span>
-              )}
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-zinc-500">·</span>
-            <span className="text-zinc-400">
-              Pending: <strong className="text-zinc-200">{cronInfo?.pendingCount ?? '—'}</strong>
-              {' · '}
-              elegíveis (&gt;{cronInfo?.pendingOrderTtlMinutes ?? 30} min):{' '}
-              <strong className="text-amber-300">{cronInfo?.pendingOlderThanTtl ?? '—'}</strong>
-              <span className="text-zinc-600">
-                {' '}
-                (só estes o cleanup cancela)
-              </span>
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-zinc-500">·</span>
-            <span className="text-zinc-400">
-              URLs HTTP (cron-job.org / EasyPanel):
-              <br />
-              <code className="text-[10px] text-zinc-500 break-all">
-                {cronInfo?.endpoints?.sync ||
-                  'https://portal.lordenelson.com.br/api/cron/sync-payments'}
-              </code>
-              <br />
-              <code className="text-[10px] text-zinc-500 break-all">
-                {cronInfo?.endpoints?.cleanup ||
-                  'https://portal.lordenelson.com.br/api/cron/cleanup-pending'}
-              </code>
-              <br />
-              <span className="text-[10px] text-zinc-600">
-                Header: Authorization: Bearer &lt;CRON_SECRET&gt; · a cada 5–15 min
-              </span>
-            </span>
-          </li>
-        </ul>
-
-        {cronLastResult && (
-          <div
-            className={`rounded-xl border p-3 text-xs space-y-1 ${
-              cronLastResult.ok
-                ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-100'
-                : 'border-red-500/30 bg-red-950/30 text-red-200'
-            }`}
-          >
-            <div className="font-medium">
-              {cronLastResult.ok ? '✓ Último teste manual OK' : '✗ Falha no teste'}
-              {cronLastResult.ranAt
-                ? ` · ${new Date(cronLastResult.ranAt).toLocaleString('pt-BR')}`
-                : ''}
-            </div>
-            {cronLastResult.details?.map((line, i) => (
-              <div key={i} className="text-zinc-400">
-                {line}
-              </div>
-            ))}
-            {!cronLastResult.ok && (
-              <div className="text-red-300">{cronLastResult.message}</div>
-            )}
-          </div>
-        )}
-
-        <p className="text-[11px] text-zinc-500">
-          <strong className="text-zinc-400">Teste 1 (agora):</strong> botão abaixo — não precisa de
-          secret. <strong className="text-zinc-400">Teste 2 (automático):</strong>{' '}
           <a
-            href="https://cron-job.org"
+            href="/checkin"
             target="_blank"
-            rel="noreferrer"
-            className="text-emerald-400 hover:underline"
+            className="inline-block text-emerald-400 hover:underline font-mono text-xs"
           >
-            cron-job.org
-          </a>{' '}
-          com o header Bearer. Scripts na pasta do projeto <em>não</em> disparam sozinhos.
-        </p>
-        <div className="flex flex-wrap gap-2 pt-1">
-          <button
-            type="button"
-            disabled={syncingStripe}
-            onClick={runAllCrons}
-            className="text-xs px-3 py-2 rounded-xl border border-violet-500/40 text-violet-200 hover:bg-violet-950/40 disabled:opacity-50"
-          >
-            {syncingStripe ? 'Executando…' : '1) Rodar crons agora (validar)'}
-          </button>
-          <button
-            type="button"
-            disabled={cleaning}
-            onClick={cleanupPendings}
-            className="text-xs px-3 py-2 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
-          >
-            {cleaning
-              ? 'Limpando…'
-              : `Limpar pendentes (>${cronInfo?.pendingOrderTtlMinutes ?? 30} min)`}
-          </button>
+            /checkin
+          </a>
+          <div className="text-[10px] mt-1 text-zinc-500 flex-1">
+            Login de staff. Eventos, pedidos e configs no menu lateral.
+          </div>
+        </div>
+
+        {/* Lotes perto de acabar */}
+        <div className="p-4 border border-amber-500/25 bg-amber-950/20 rounded-2xl text-sm flex flex-col min-h-0">
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+            <div className="min-w-0">
+              <div className="font-medium text-amber-200 flex items-center gap-2 text-sm">
+                <span>⚠️</span> Lotes com poucas vagas
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">
+                ≤{lowStock?.warnAt ?? 5} restantes · e-mail em ≤{lowStock?.emailAt ?? 2}
+                {lowStock?.alertEmail ? (
+                  <>
+                    {' '}
+                    → <span className="text-zinc-400 break-all">{lowStock.alertEmail}</span>
+                  </>
+                ) : null}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadLowStock()}
+              className="text-[10px] px-2 py-0.5 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5 shrink-0"
+            >
+              Atualizar
+            </button>
+          </div>
+
+          {!lowStock ? (
+            <p className="text-xs text-zinc-500">Carregando…</p>
+          ) : lowStock.items.length === 0 ? (
+            <p className="text-xs text-emerald-400/90">
+              Nenhum lote ativo com ≤{lowStock.warnAt} vagas. Tudo folgado.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 overflow-y-auto max-h-48 lg:max-h-56">
+              {lowStock.items.map((item) => {
+                const tone =
+                  item.level === 'soldout' || item.level === 'critical'
+                    ? 'border-red-500/40 bg-red-950/40'
+                    : 'border-amber-500/30 bg-amber-950/30';
+                const chip =
+                  item.remaining <= 0
+                    ? 'Esgotado'
+                    : item.remaining === 1
+                      ? '1 resto'
+                      : `${item.remaining} restam`;
+                const chipClass =
+                  item.remaining <= 2
+                    ? 'bg-red-500/20 text-red-300'
+                    : 'bg-amber-500/20 text-amber-200';
+                return (
+                  <a
+                    key={item.id}
+                    href={`/admin/eventos`}
+                    className={`rounded-xl border p-2.5 hover:brightness-110 transition ${tone}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-zinc-100 truncate">
+                          {item.eventTitle}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
+                          {item.nome}
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${chipClass}`}
+                      >
+                        {chip}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1 rounded-full bg-black/40 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          item.remaining <= 2 ? 'bg-red-500' : 'bg-amber-500'
+                        }`}
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round((item.sold / Math.max(1, item.totalQty)) * 100)
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Crons — compacto */}
+        <div className="p-4 border border-white/10 bg-zinc-900/80 rounded-2xl text-sm flex flex-col min-h-0 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-1">
+            <div className="font-medium text-zinc-200 text-sm">⏱ Crons</div>
+            <button
+              type="button"
+              onClick={() => void loadCron()}
+              className="text-[10px] px-2 py-0.5 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5"
+            >
+              Atualizar
+            </button>
+          </div>
+
+          <div className="text-[11px] text-zinc-400 space-y-1 flex-1">
+            <div>
+              Secret:{' '}
+              {cronInfo?.cronSecretConfigured ? (
+                <span className="text-emerald-400">configurado</span>
+              ) : (
+                <span className="text-amber-400">ausente</span>
+              )}
+            </div>
+            <div>
+              Última:{' '}
+              {cronInfo?.lastRunAt ? (
+                <span className="text-zinc-200">
+                  {new Date(cronInfo.lastRunAt).toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              ) : (
+                <span className="text-zinc-500">nunca</span>
+              )}
+              {cronInfo?.lastRunSource ? (
+                <span className="text-zinc-600"> · {cronInfo.lastRunSource}</span>
+              ) : null}
+            </div>
+            <div>
+              Pending:{' '}
+              <strong className="text-zinc-200">{cronInfo?.pendingCount ?? '—'}</strong>
+              {' · '}
+              elegíveis (&gt;{cronInfo?.pendingOrderTtlMinutes ?? 30}m):{' '}
+              <strong className="text-amber-300">{cronInfo?.pendingOlderThanTtl ?? '—'}</strong>
+            </div>
+          </div>
+
+          {cronLastResult && (
+            <div
+              className={`rounded-lg border p-2 text-[10px] space-y-0.5 ${
+                cronLastResult.ok
+                  ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-100'
+                  : 'border-red-500/30 bg-red-950/30 text-red-200'
+              }`}
+            >
+              <div className="font-medium">
+                {cronLastResult.ok ? '✓ Teste OK' : '✗ Falha'}
+              </div>
+              {cronLastResult.details?.slice(0, 3).map((line, i) => (
+                <div key={i} className="text-zinc-400 truncate" title={line}>
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            <button
+              type="button"
+              disabled={syncingStripe}
+              onClick={runAllCrons}
+              className="text-[11px] px-2.5 py-1.5 rounded-xl border border-violet-500/40 text-violet-200 hover:bg-violet-950/40 disabled:opacity-50"
+            >
+              {syncingStripe ? '…' : 'Rodar crons'}
+            </button>
+            <button
+              type="button"
+              disabled={cleaning}
+              onClick={cleanupPendings}
+              className="text-[11px] px-2.5 py-1.5 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
+            >
+              {cleaning
+                ? '…'
+                : `Limpar (>${cronInfo?.pendingOrderTtlMinutes ?? 30}m)`}
+            </button>
+          </div>
         </div>
       </div>
 
