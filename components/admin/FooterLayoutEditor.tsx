@@ -421,8 +421,9 @@ export default function FooterLayoutEditor({ settings, onChange, onSaveFooter }:
                 {w.type === 'social' && (
                   <p className="text-[11px] text-zinc-500">
                     Os checkboxes ficam sempre visíveis acima. Números/links vêm da aba Contato.
-                    O texto &quot;WhatsApp (82)…&quot; no bloco <strong>Texto rico</strong> é
-                    outro conteúdo — apague lá ou use &quot;Remover WhatsApp…&quot;.
+                    No texto rico use o token <code className="text-zinc-400">{'{whatsapp}'}</code>{' '}
+                    para puxar o número de <strong>Admin → Contato</strong> (não digite o telefone
+                    fixo no texto).
                   </p>
                 )}
 

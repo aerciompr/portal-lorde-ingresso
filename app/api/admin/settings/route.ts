@@ -45,8 +45,9 @@ export async function GET() {
       pay_card_label: 'Cartão',
       pay_card_hint: 'Crédito e débito',
       pay_card_provider: 'stripe',
-      whatsapp_display: '(82) 99647-1998',
-      whatsapp_e164: '5582996471998',
+      whatsapp_display: '',
+      whatsapp_e164: '',
+      show_whatsapp: '1',
     };
     for (const [k, v] of Object.entries(defaults)) {
       await prisma.setting.upsert({

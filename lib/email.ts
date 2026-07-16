@@ -68,6 +68,16 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
   const APP_URL = await getAppUrl();
   const from = getFromEmail();
 
+  let contactLine = 'contato@lordenelson.com.br';
+  try {
+    const s = await getAppSettings();
+    const email = (s.contact?.contactEmail || '').trim() || 'contato@lordenelson.com.br';
+    const wa = (s.contact?.whatsappDisplay || '').trim();
+    contactLine = wa ? `${email} ou WhatsApp ${wa}` : email;
+  } catch {
+    /* fallback */
+  }
+
   const ticketLinks = order.tickets
     .map(
       (t) =>
@@ -104,7 +114,7 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
       
       <p style="font-size: 13px; color: #888; margin-top: 32px;">
         Apresente o QR Code na entrada. O código é único e intransferível.<br>
-        Qualquer dúvida: contato@lordenelson.com.br ou WhatsApp (82) 99647-1998
+        Qualquer dúvida: ${contactLine}
       </p>
       
       <p style="margin-top:40px; font-size:12px; color:#555;">Lorde Nelson • Maceió/AL</p>

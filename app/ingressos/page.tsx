@@ -36,7 +36,6 @@ import {
   DoorOpen,
   ExternalLink,
 } from 'lucide-react';
-import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from '@/lib/contact';
 import PurchaseSuccessModal from '@/components/PurchaseSuccessModal';
 import {
   eventDate,
@@ -185,6 +184,7 @@ export default function MeusIngressos() {
   const [resending, setResending] = useState(false);
   const [showResend, setShowResend] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [helpWa, setHelpWa] = useState<{ href: string; display: string } | null>(null);
   const [hidePwBanner, setHidePwBanner] = useState(() => {
     if (typeof window === 'undefined') return false;
     try {
@@ -195,6 +195,29 @@ export default function MeusIngressos() {
   });
 
   const loggedIn = orders.length > 0;
+
+  // WhatsApp de ajuda: Admin → Contato (sem número fixo no código)
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d || typeof d !== 'object') return;
+        const digits = String(d.whatsapp_e164 || '').replace(/\D/g, '');
+        const display = String(d.whatsapp_display || '').trim();
+        const show = !['0', 'false', 'off', 'no'].includes(
+          String(d.show_whatsapp ?? '1').toLowerCase()
+        );
+        if (show && digits) {
+          setHelpWa({
+            href: `https://wa.me/${digits}`,
+            display: display || digits,
+          });
+        } else {
+          setHelpWa(null);
+        }
+      })
+      .catch(() => setHelpWa(null));
+  }, []);
 
   async function handleCopy(key: string, text: string) {
     const ok = await copyText(text);
@@ -1142,15 +1165,17 @@ export default function MeusIngressos() {
         </nav>
 
         <div className="shrink-0 p-4 border-t border-white/10 space-y-2">
-          <a
-            href={WHATSAPP_HREF}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full text-sm py-2.5 rounded-lg border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/10 flex items-center justify-center gap-2 transition"
-          >
-            <i className="fa-brands fa-whatsapp text-base" aria-hidden />
-            Ajuda {WHATSAPP_DISPLAY}
-          </a>
+          {helpWa ? (
+            <a
+              href={helpWa.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full text-sm py-2.5 rounded-lg border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/10 flex items-center justify-center gap-2 transition"
+            >
+              <i className="fa-brands fa-whatsapp text-base" aria-hidden />
+              Ajuda {helpWa.display}
+            </a>
+          ) : null}
           <button
             type="button"
             onClick={logout}

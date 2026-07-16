@@ -96,8 +96,9 @@ const DEFAULTS: AppSettings = {
     footerLayout: '',
   },
   contact: {
-    whatsappDisplay: '(82) 99647-1998',
-    whatsappE164: '5582996471998',
+    // Vazio = configurar em Admin → Contato (fonte única; sem número hardcodado)
+    whatsappDisplay: '',
+    whatsappE164: '',
     showWhatsApp: true,
     contactEmail: 'contato@lordenelson.com.br',
     instagramUrl: '',
@@ -169,25 +170,40 @@ export async function getAppSettings(force = false): Promise<AppSettings> {
       footerRight: raw.footer_right || raw.FOOTER_RIGHT || DEFAULTS.branding.footerRight,
       footerLayout: raw.footer_layout || raw.FOOTER_LAYOUT || DEFAULTS.branding.footerLayout,
     },
-    contact: {
-      whatsappDisplay:
-        raw.whatsapp_display || raw.WHATSAPP_DISPLAY || DEFAULTS.contact.whatsappDisplay,
-      whatsappE164: (
+    contact: (() => {
+      const e164 = (
         raw.whatsapp_e164 ||
         raw.WHATSAPP_E164 ||
-        DEFAULTS.contact.whatsappE164
-      ).replace(/\D/g, ''),
-      showWhatsApp: !['0', 'false', 'off', 'no'].includes(
+        DEFAULTS.contact.whatsappE164 ||
+        ''
+      ).replace(/\D/g, '');
+      const display = (
+        raw.whatsapp_display ||
+        raw.WHATSAPP_DISPLAY ||
+        DEFAULTS.contact.whatsappDisplay ||
+        ''
+      ).trim();
+      const flagOn = !['0', 'false', 'off', 'no'].includes(
         String(raw.show_whatsapp ?? '1').toLowerCase()
-      ),
-      contactEmail:
-        raw.contact_email ||
-        raw.CONTACT_EMAIL ||
-        raw.from_email ||
-        DEFAULTS.contact.contactEmail,
-      instagramUrl: (raw.instagram_url || raw.INSTAGRAM_URL || DEFAULTS.contact.instagramUrl).trim(),
-      contactNote: raw.contact_note || DEFAULTS.contact.contactNote,
-    },
+      );
+      return {
+        whatsappDisplay: display,
+        whatsappE164: e164,
+        // some número configurado + flag ligada
+        showWhatsApp: flagOn && Boolean(e164 || display),
+        contactEmail:
+          raw.contact_email ||
+          raw.CONTACT_EMAIL ||
+          raw.from_email ||
+          DEFAULTS.contact.contactEmail,
+        instagramUrl: (
+          raw.instagram_url ||
+          raw.INSTAGRAM_URL ||
+          DEFAULTS.contact.instagramUrl
+        ).trim(),
+        contactNote: raw.contact_note || DEFAULTS.contact.contactNote,
+      };
+    })(),
     tracking: trackingFromRaw(raw),
   };
 

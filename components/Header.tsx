@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
-import { WHATSAPP_DISPLAY as DEFAULT_WA_DISPLAY, WHATSAPP_HREF as DEFAULT_WA_HREF } from '@/lib/contact';
+
 
 /** Logo empacotada no app — sempre existe no deploy */
 const STATIC_FALLBACK_LOGO = '/logo-lordenelson.jpg';
@@ -37,9 +37,11 @@ export default function Header({
   const [remoteLogo, setRemoteLogo] = useState((initialBranding.logoUrl || '').trim());
   const [remoteFavicon, setRemoteFavicon] = useState((initialBranding.faviconUrl || '').trim());
   const [candidateIndex, setCandidateIndex] = useState(0);
-  const [waDisplay, setWaDisplay] = useState(whatsappDisplay || DEFAULT_WA_DISPLAY);
-  const [waHref, setWaHref] = useState(whatsappHref || DEFAULT_WA_HREF);
-  const [waVisible, setWaVisible] = useState(showWhatsApp);
+  const [waDisplay, setWaDisplay] = useState(whatsappDisplay || '');
+  const [waHref, setWaHref] = useState(whatsappHref || '');
+  const [waVisible, setWaVisible] = useState(
+    Boolean(showWhatsApp && (whatsappHref || whatsappDisplay))
+  );
 
   // Se o SSR veio sem logo (cache / falha de DB), busca nas configs públicas
   useEffect(() => {

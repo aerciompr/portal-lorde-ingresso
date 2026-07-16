@@ -7,7 +7,7 @@ import SiteFooter from "@/components/SiteFooter";
 import SiteChrome from "@/components/SiteChrome";
 import { getAppSettings } from "@/lib/settings";
 import { absoluteMediaUrl, mimeFromUrl } from "@/lib/media-url";
-import { WHATSAPP_DISPLAY, WHATSAPP_HREF } from "@/lib/contact";
+import { waHrefFromE164 } from "@/lib/contact";
 import { parseFooterLayout } from "@/lib/footer-layout";
 import SiteTracking from "@/components/SiteTracking";
 
@@ -73,11 +73,10 @@ export default async function RootLayout({
   const siteName = b.siteName || "Lorde Nelson";
   const year = new Date().getFullYear().toString();
 
-  const waDisplay = s.contact?.whatsappDisplay || WHATSAPP_DISPLAY;
-  const waDigits =
-    (s.contact?.whatsappE164 || "").replace(/\D/g, "") || "5582996471998";
-  const waHref = `https://wa.me/${waDigits}`;
-  const showWhatsApp = s.contact?.showWhatsApp !== false;
+  // Contato: só o que está em Admin → Contato (sem número hardcodado)
+  const waDisplay = (s.contact?.whatsappDisplay || "").trim();
+  const waHref = waHrefFromE164(s.contact?.whatsappE164 || "");
+  const showWhatsApp = Boolean(s.contact?.showWhatsApp && (waHref || waDisplay));
   const contactEmail =
     s.contact?.contactEmail || "contato@lordenelson.com.br";
   const instagramUrl = (s.contact?.instagramUrl || "").trim();
@@ -118,7 +117,7 @@ export default async function RootLayout({
                 logoUrl: (b.logoUrl || "").trim() || "/logo-lordenelson.jpg",
                 year,
                 whatsappDisplay: waDisplay,
-                whatsappHref: waHref || WHATSAPP_HREF,
+                whatsappHref: waHref,
                 instagramUrl,
                 contactEmail,
               }}

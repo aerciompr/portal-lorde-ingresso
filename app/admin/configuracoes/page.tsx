@@ -515,12 +515,21 @@ export default function AdminConfiguracoes() {
             <div>
               <div className="font-semibold text-lg tracking-tight">Contato no site</div>
               <div className="text-xs text-zinc-500 mt-1">
-                WhatsApp, e-mail do formulário /contato, Instagram. Aparecem no menu e rodapé.
+                <strong className="text-zinc-300">Fonte única</strong> de telefone/WhatsApp e
+                e-mail: menu, página Contato, Meus Ingressos, e-mails e ícones do rodapé.
+                Altere aqui e clique em <strong className="text-zinc-400">Salvar configurações</strong>.
               </div>
             </div>
 
+            <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-[11px] text-amber-100/90">
+              O número antigo fixo no código foi removido. Se ainda aparecer no rodapé em{' '}
+              <em>texto livre</em>, apague no editor do rodapé ou use o token{' '}
+              <code className="text-amber-200">{'{whatsapp}'}</code> no texto (preenche com este
+              número).
+            </div>
+
             <div className="space-y-3 rounded-2xl border border-white/10 p-4">
-              <div className="text-sm font-medium text-zinc-300">WhatsApp</div>
+              <div className="text-sm font-medium text-zinc-300">WhatsApp / telefone</div>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -538,27 +547,26 @@ export default function AdminConfiguracoes() {
                   }
                 />
                 <span>
-                  <span className="text-sm text-zinc-200">Exibir WhatsApp no menu (header)</span>
+                  <span className="text-sm text-zinc-200">Exibir WhatsApp no site</span>
                   <span className="block text-[11px] text-zinc-500 mt-0.5">
-                    Desmarque para esconder o ícone no topo do site. No rodapé use o bloco Redes
-                    ou o botão &quot;Remover WhatsApp…&quot;.
+                    Menu, Contato e ajuda. Sem número preenchido o ícone some sozinho.
                   </span>
                 </span>
               </label>
               <div>
-                <div className="label">Número exibido</div>
+                <div className="label">Número exibido (como o cliente vê)</div>
                 <input
                   className="input"
-                  placeholder="(82) 99647-1998"
+                  placeholder="(82) 9XXXX-XXXX"
                   value={settings.whatsapp_display || ''}
                   onChange={(e) => setSettings({ ...settings, whatsapp_display: e.target.value })}
                 />
               </div>
               <div>
-                <div className="label">Número para o link (só dígitos, com 55)</div>
+                <div className="label">Número do link wa.me (só dígitos, com 55)</div>
                 <input
                   className="input font-mono text-sm"
-                  placeholder="5582996471998"
+                  placeholder="55829XXXXXXXX"
                   value={settings.whatsapp_e164 || ''}
                   onChange={(e) =>
                     setSettings({
@@ -567,7 +575,23 @@ export default function AdminConfiguracoes() {
                     })
                   }
                 />
-                <p className="text-[10px] text-zinc-500 mt-1">Gera wa.me — ex.: 55 + DDD + número.</p>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Ex.: 55 + DDD + número. Vazio = WhatsApp oculto em todo o site.
+                  {settings.whatsapp_e164 ? (
+                    <>
+                      {' '}
+                      Preview:{' '}
+                      <a
+                        className="text-emerald-400 hover:underline"
+                        href={`https://wa.me/${settings.whatsapp_e164}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        wa.me/{settings.whatsapp_e164}
+                      </a>
+                    </>
+                  ) : null}
+                </p>
               </div>
             </div>
 

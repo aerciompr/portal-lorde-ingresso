@@ -33,9 +33,13 @@ export default function ContatoPage() {
       .catch(() => {});
   }, []);
 
-  const waDigits = (cfg.whatsapp_e164 || '5582996471998').replace(/\D/g, '');
-  const waHref = `https://wa.me/${waDigits}`;
-  const waDisplay = cfg.whatsapp_display || '(82) 99647-1998';
+  const waDigits = (cfg.whatsapp_e164 || '').replace(/\D/g, '');
+  const waHref = waDigits ? `https://wa.me/${waDigits}` : '';
+  const waDisplay = (cfg.whatsapp_display || '').trim();
+  const showWa =
+    !['0', 'false', 'off', 'no'].includes(
+      String((cfg as { show_whatsapp?: string }).show_whatsapp ?? '1').toLowerCase()
+    ) && Boolean(waHref || waDisplay);
   const contactEmail = cfg.contact_email || 'contato@lordenelson.com.br';
   const ig = (cfg.instagram_url || '').trim();
   const note =
@@ -197,22 +201,26 @@ export default function ContatoPage() {
           )}
         </div>
 
-        {/* Canais */}
+        {/* Canais — números só do Admin → Contato */}
         <aside className="lg:col-span-2 space-y-4">
-          <a
-            href={waHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-4 rounded-2xl border border-[#25D366]/25 bg-[#25D366]/10 hover:bg-[#25D366]/15 p-4 transition"
-          >
-            <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#25D366]/20 text-[#25D366] text-2xl">
-              <i className="fa-brands fa-whatsapp" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-white">WhatsApp</div>
-              <div className="text-sm text-zinc-400 truncate">{waDisplay}</div>
-            </div>
-          </a>
+          {showWa && waHref ? (
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-4 rounded-2xl border border-[#25D366]/25 bg-[#25D366]/10 hover:bg-[#25D366]/15 p-4 transition"
+            >
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#25D366]/20 text-[#25D366] text-2xl">
+                <i className="fa-brands fa-whatsapp" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-white">WhatsApp</div>
+                <div className="text-sm text-zinc-400 truncate">
+                  {waDisplay || waDigits}
+                </div>
+              </div>
+            </a>
+          ) : null}
 
           <a
             href={`mailto:${contactEmail}`}

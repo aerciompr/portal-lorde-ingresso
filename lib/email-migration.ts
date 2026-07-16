@@ -149,7 +149,7 @@ export async function buildMigrationNoticeHtml(
 
     <p style="font-size:13px;color:#888;margin-top:32px;line-height:1.55;">
       Dúvidas: <a href="mailto:contato@lordenelson.com.br" style="color:#22c55e;">contato@lordenelson.com.br</a>
-      ou WhatsApp <strong style="color:#ccc;">(82) 99647-1998</strong>.
+      ou pelo WhatsApp informado no site (Admin → Contato).
     </p>
     <p style="margin-top:28px;font-size:11px;color:#555;border-top:1px solid #222;padding-top:16px;">
       Lorde Nelson Rest Pub · Rua Silvério Jorge, 241 · Jaraguá · Maceió/AL<br/>

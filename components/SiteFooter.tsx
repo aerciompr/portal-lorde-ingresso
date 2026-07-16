@@ -5,6 +5,7 @@ import {
   type FooterWidget,
   sanitizeFooterHtml,
 } from '@/lib/footer-layout';
+import { injectContactTokens } from '@/lib/contact';
 
 type Props = {
   layout: FooterLayout;
@@ -160,8 +161,11 @@ function WidgetBlock({
     );
   }
 
-  // richtext
-  const html = sanitizeFooterHtml(w.html || '', year);
+  // richtext — tokens {whatsapp} {email} etc. vêm do Admin → Contato
+  const html = injectContactTokens(
+    sanitizeFooterHtml(w.html || '', year),
+    contact
+  );
   if (!html.replace(/<[^>]+>/g, '').trim() && !title) return null;
   return (
     <div className="mb-4">
