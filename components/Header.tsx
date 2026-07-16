@@ -98,13 +98,51 @@ export default function Header({
 
   const logoSrc = candidates[Math.min(candidateIndex, candidates.length - 1)] || STATIC_FALLBACK_LOGO;
 
+  /** Cardápio digital (Saipos) — abre em nova aba */
+  const CARDAPIO_URL =
+    'https://lordenelsonbar.saipos.com/lorde-nelson-1096-bar/table/dqmtsst';
+
   // Sem link “ADMIN” no site público (acesso só por /admin/login)
-  const links: { href: string; label: string; className?: string }[] = [
+  const links: {
+    href: string;
+    label: string;
+    className?: string;
+    external?: boolean;
+  }[] = [
     { href: '/#eventos', label: 'Eventos' },
     { href: '/eventos', label: 'Programação' },
+    { href: CARDAPIO_URL, label: 'Cardápio', external: true },
     { href: '/ingressos', label: 'Meus Ingressos' },
     { href: '/contato', label: 'Contato' },
   ];
+
+  function NavLink({
+    l,
+    onClick,
+  }: {
+    l: (typeof links)[number];
+    onClick?: () => void;
+  }) {
+    const cls = l.className || 'hover:text-white transition';
+    if (l.external) {
+      return (
+        <a
+          href={l.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cls}
+          onClick={onClick}
+        >
+          {l.label}
+        </a>
+      );
+    }
+    return (
+      <Link href={l.href} className={cls} onClick={onClick}>
+        {l.label}
+      </Link>
+    );
+  }
 
   return (
     <header className="border-b border-white/10 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
@@ -129,11 +167,9 @@ export default function Header({
           />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-8 text-[13px] font-semibold uppercase tracking-[2.5px] font-[family-name:var(--font-space-grotesk)]">
+        <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-[13px] font-semibold uppercase tracking-[2.5px] font-[family-name:var(--font-space-grotesk)]">
           {links.map((l, i) => (
-            <Link key={i} href={l.href} className={l.className || 'hover:text-white transition'}>
-              {l.label}
-            </Link>
+            <NavLink key={i} l={l} />
           ))}
           {waVisible && (
             <WhatsAppIconLink className="text-[#25D366] hover:text-[#3be07a] text-[1.35rem] leading-none transition -mt-0.5" />
@@ -158,14 +194,7 @@ export default function Header({
       {open && (
         <nav className="md:hidden border-t border-white/10 bg-zinc-950 px-6 py-4 flex flex-col gap-4 text-[13px] font-semibold uppercase tracking-[2.5px] font-[family-name:var(--font-space-grotesk)]">
           {links.map((l, i) => (
-            <Link
-              key={i}
-              href={l.href}
-              className={l.className || 'hover:text-white transition'}
-              onClick={() => setOpen(false)}
-            >
-              {l.label}
-            </Link>
+            <NavLink key={i} l={l} onClick={() => setOpen(false)} />
           ))}
           {waVisible && (
             <a

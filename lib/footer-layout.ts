@@ -148,6 +148,10 @@ export function defaultFooterLayout(siteName = 'Lorde Nelson'): FooterLayout {
         title: 'Links',
         links: [
           { label: 'Programação', href: '/eventos' },
+          {
+            label: 'Cardápio',
+            href: 'https://lordenelsonbar.saipos.com/lorde-nelson-1096-bar/table/dqmtsst',
+          },
           { label: 'Meus Ingressos', href: '/ingressos' },
           { label: 'Contato', href: '/contato' },
         ],
@@ -202,6 +206,10 @@ export function migrateLegacyFooter(
     type: 'links',
     links: [
       { label: 'Programação', href: '/eventos' },
+      {
+        label: 'Cardápio',
+        href: 'https://lordenelsonbar.saipos.com/lorde-nelson-1096-bar/table/dqmtsst',
+      },
       { label: 'Meus Ingressos', href: '/ingressos' },
       { label: 'Contato', href: '/contato' },
     ],

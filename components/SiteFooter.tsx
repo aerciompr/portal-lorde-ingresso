@@ -69,13 +69,27 @@ function WidgetBlock({
       <div className="mb-4">
         {title ? <div className="text-zinc-300 font-medium mb-1.5 text-sm">{title}</div> : null}
         <ul className="space-y-1">
-          {links.map((l, i) => (
-            <li key={i}>
-              <Link href={l.href} className="text-zinc-400 hover:text-white transition">
-                {l.label}
-              </Link>
-            </li>
-          ))}
+          {links.map((l, i) => {
+            const external = /^https?:\/\//i.test(l.href);
+            return (
+              <li key={i}>
+                {external ? (
+                  <a
+                    href={l.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-400 hover:text-white transition"
+                  >
+                    {l.label}
+                  </a>
+                ) : (
+                  <Link href={l.href} className="text-zinc-400 hover:text-white transition">
+                    {l.label}
+                  </Link>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
     );
