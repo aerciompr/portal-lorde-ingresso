@@ -51,6 +51,26 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // HTML do app: não cachear no browser (evita ficar em build antigo após deploy)
+      {
+        source: "/((?!_next/static|_next/image|favicon.ico|uploads/).*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
+        ],
+      },
+      // Service worker do check-in: sempre revalidar
+      {
+        source: "/sw-checkin.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, must-revalidate",
+          },
+        ],
+      },
     ];
   },
 

@@ -77,7 +77,11 @@ function CheckinInner() {
       if (match) setAdminUser(decodeURIComponent(match[1]));
     }
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw-checkin.js').catch(() => undefined);
+      // Re-registra SW; versões antigas (cache-first) eram a causa de “sempre Ctrl+F5”
+      navigator.serviceWorker
+        .register('/sw-checkin.js')
+        .then((reg) => reg.update().catch(() => undefined))
+        .catch(() => undefined);
     }
     return () => document.body.classList.remove('checkin-app');
   }, []);
