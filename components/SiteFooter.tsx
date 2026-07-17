@@ -6,6 +6,7 @@ import {
   sanitizeFooterHtml,
 } from '@/lib/footer-layout';
 import { injectContactTokens } from '@/lib/contact';
+import AppClock from '@/components/AppClock';
 
 type Props = {
   layout: FooterLayout;
@@ -226,6 +227,9 @@ export default function SiteFooter({ layout, contact }: Props) {
             ))}
           </div>
         ))}
+      </div>
+      <div className="max-w-6xl mx-auto px-6 mt-8 pt-4 border-t border-white/5 flex justify-end">
+        <AppClock className="text-[10px] tracking-wide text-zinc-600 tabular-nums select-none" />
       </div>
     </footer>
   );
