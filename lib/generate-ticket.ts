@@ -90,40 +90,51 @@ async function loadImageForPdf(
   }
 }
 
+/**
+ * Ingresso em retrato (vertical) — ~metade de A4 em pé.
+ * QR grande + margem para leitura em celular / impressão.
+ */
 export async function generateTicketPDF(params: TicketPDFParams) {
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([600, 340]);
+  // Retrato: largura 360 × altura 640 (proporção celular / ticket vertical)
+  const page = pdfDoc.addPage([360, 640]);
   const { width, height } = page.getSize();
+  const pad = 28;
+  const contentW = width - pad * 2;
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Background
+  // Fundo
   page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.06, 0.06, 0.07) });
 
-  // Header bar
-  page.drawRectangle({ x: 0, y: height - 60, width, height: 60, color: rgb(0.98, 0.98, 0.98) });
-
+  // Barra superior
+  const headerH = 52;
+  page.drawRectangle({
+    x: 0,
+    y: height - headerH,
+    width,
+    height: headerH,
+    color: rgb(0.98, 0.98, 0.98),
+  });
   page.drawText('LORDE NELSON • REST PUB', {
-    x: 30,
-    y: height - 38,
-    size: 13,
+    x: pad,
+    y: height - 32,
+    size: 12,
     font: fontBold,
     color: rgb(0.1, 0.1, 0.1),
   });
   page.drawText('INGRESSO', {
-    x: width - 110,
-    y: height - 38,
-    size: 12,
+    x: width - pad - 62,
+    y: height - 32,
+    size: 11,
     font,
-    color: rgb(0.3, 0.3, 0.3),
+    color: rgb(0.35, 0.35, 0.35),
   });
 
-  // Coluna direita: imagem do evento (topo) + QR (baixo)
-  const rightColW = 132;
-  const rightX = width - rightColW - 28;
-  let textRightLimit = width - 40;
+  let y = height - headerH - 20;
 
+  // Imagem do evento (topo, centralizada)
   const loaded = await loadImageForPdf(params.imageUrl);
   if (loaded) {
     try {
@@ -132,129 +143,150 @@ export async function generateTicketPDF(params: TicketPDFParams) {
           ? await pdfDoc.embedPng(loaded.bytes)
           : await pdfDoc.embedJpg(loaded.bytes);
 
-      const boxW = rightColW;
-      const boxH = 100;
-      const boxY = height - 60 - 12 - boxH; // abaixo do header
+      const boxW = contentW;
+      const boxH = 140;
       const scale = Math.min(boxW / img.width, boxH / img.height);
       const drawW = img.width * scale;
       const drawH = img.height * scale;
-      const drawX = rightX + (boxW - drawW) / 2;
+      const boxY = y - boxH;
+      const drawX = pad + (boxW - drawW) / 2;
       const drawY = boxY + (boxH - drawH) / 2;
 
-      // fundo sutil da moldura
       page.drawRectangle({
-        x: rightX - 4,
-        y: boxY - 4,
-        width: boxW + 8,
-        height: boxH + 8,
+        x: pad - 2,
+        y: boxY - 2,
+        width: boxW + 4,
+        height: boxH + 4,
         color: rgb(0.12, 0.12, 0.13),
         borderColor: rgb(0.25, 0.25, 0.28),
         borderWidth: 1,
       });
-
-      page.drawImage(img, {
-        x: drawX,
-        y: drawY,
-        width: drawW,
-        height: drawH,
-      });
-
-      textRightLimit = rightX - 16;
+      page.drawImage(img, { x: drawX, y: drawY, width: drawW, height: drawH });
+      y = boxY - 18;
     } catch (e) {
       console.warn('[ticket PDF] embed imagem falhou', e);
     }
   }
 
-  // Event info (esquerda)
-  const title = truncate(params.eventTitle, 42);
+  // Evento
+  const title = truncate(params.eventTitle, 48);
   page.drawText(title, {
-    x: 30,
-    y: height - 95,
-    size: 17,
+    x: pad,
+    y: y,
+    size: 16,
     font: fontBold,
     color: rgb(1, 1, 1),
-    maxWidth: textRightLimit - 30,
+    maxWidth: contentW,
   });
-  page.drawText(truncate(params.eventDate, 48), {
-    x: 30,
-    y: height - 118,
+  y -= 22;
+  page.drawText(truncate(params.eventDate, 52), {
+    x: pad,
+    y,
     size: 11,
     font,
     color: rgb(0.7, 0.7, 0.7),
-    maxWidth: textRightLimit - 30,
+    maxWidth: contentW,
   });
-  page.drawText(truncate(params.address, 55), {
-    x: 30,
-    y: height - 138,
+  y -= 16;
+  page.drawText(truncate(params.address, 56), {
+    x: pad,
+    y,
     size: 10,
     font,
     color: rgb(0.55, 0.55, 0.55),
-    maxWidth: textRightLimit - 30,
+    maxWidth: contentW,
   });
+  y -= 28;
 
-  // Buyer
-  page.drawText('NOME', { x: 30, y: height - 175, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
-  page.drawText(truncate(params.buyerName || '—', 36), {
-    x: 30,
-    y: height - 192,
-    size: 14,
+  // Comprador
+  page.drawText('NOME', { x: pad, y, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+  y -= 16;
+  page.drawText(truncate(params.buyerName || '—', 40), {
+    x: pad,
+    y,
+    size: 13,
     font: fontBold,
     color: rgb(1, 1, 1),
+    maxWidth: contentW,
   });
-
-  page.drawText('E-MAIL', { x: 30, y: height - 220, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
-  page.drawText(truncate(params.buyerEmail || '—', 40), {
-    x: 30,
-    y: height - 235,
-    size: 11,
+  y -= 22;
+  page.drawText('E-MAIL', { x: pad, y, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
+  y -= 15;
+  page.drawText(truncate(params.buyerEmail || '—', 42), {
+    x: pad,
+    y,
+    size: 10,
     font,
     color: rgb(0.85, 0.85, 0.85),
+    maxWidth: contentW,
   });
+  y -= 24;
 
-  // Type + code
-  page.drawText(truncate(params.ticketType, 32), {
-    x: 30,
-    y: height - 270,
+  page.drawText(truncate(params.ticketType, 40), {
+    x: pad,
+    y,
     size: 12,
     font: fontBold,
     color: rgb(0.4, 0.9, 0.6),
+    maxWidth: contentW,
   });
+  y -= 20;
 
-  page.drawText(params.uniqueCode, {
-    x: 30,
-    y: 45,
-    size: 20,
-    font: fontBold,
-    color: rgb(0.95, 0.95, 0.95),
-  });
-
-  // QR Code (canto inferior direito)
-  const qrDataUrl = await QRCode.toDataURL(params.qrPayload || params.uniqueCode, {
-    width: 160,
-    margin: 0,
+  // QR grande no centro (melhor leitura impressa / câmera)
+  const qrPayload = params.qrPayload || params.uniqueCode;
+  const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+    width: 280,
+    margin: 2,
+    errorCorrectionLevel: 'H',
+    color: { dark: '#000000', light: '#ffffff' },
   });
   const qrImageBytes = await fetch(qrDataUrl).then((r) => r.arrayBuffer());
   const qrImage = await pdfDoc.embedPng(qrImageBytes);
 
-  const qrSize = loaded ? 100 : 132;
-  const qrY = 28;
+  const qrSize = 200;
+  // reserva espaço inferior para código + legenda
+  const qrY = Math.max(72, y - qrSize - 8);
+  const qrX = (width - qrSize) / 2;
+
+  // fundo branco sob o QR (quiet zone)
+  page.drawRectangle({
+    x: qrX - 10,
+    y: qrY - 10,
+    width: qrSize + 20,
+    height: qrSize + 20,
+    color: rgb(1, 1, 1),
+  });
   page.drawImage(qrImage, {
-    x: rightX + (rightColW - qrSize) / 2,
+    x: qrX,
     y: qrY,
     width: qrSize,
     height: qrSize,
   });
 
-  page.drawText('APRESENTE ESTE QR NO LOCAL', {
-    x: rightX - 2,
-    y: 14,
-    size: 7,
-    font,
-    color: rgb(0.4, 0.4, 0.4),
+  // Código do ingresso (legível sem câmera)
+  const code = params.uniqueCode || '';
+  const codeSize = 14;
+  const codeW = fontBold.widthOfTextAtSize(code, codeSize);
+  page.drawText(code, {
+    x: Math.max(pad, (width - codeW) / 2),
+    y: 48,
+    size: codeSize,
+    font: fontBold,
+    color: rgb(0.95, 0.95, 0.95),
   });
 
-  // Border accent
-  page.drawRectangle({ x: 0, y: 0, width: 6, height, color: rgb(0.2, 0.75, 0.45) });
+  const hint = 'APRESENTE ESTE QR NO LOCAL';
+  const hintW = font.widthOfTextAtSize(hint, 8);
+  page.drawText(hint, {
+    x: Math.max(pad, (width - hintW) / 2),
+    y: 30,
+    size: 8,
+    font,
+    color: rgb(0.45, 0.45, 0.45),
+  });
+
+  // Faixa lateral
+  page.drawRectangle({ x: 0, y: 0, width: 5, height, color: rgb(0.2, 0.75, 0.45) });
 
   return pdfDoc.save();
 }
