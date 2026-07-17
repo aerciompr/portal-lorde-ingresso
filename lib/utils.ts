@@ -1,3 +1,12 @@
+import {
+  formatDateInAppTz,
+  formatTimeInAppTz,
+  formatDateTimeInAppTz,
+  APP_TIMEZONE,
+} from './timezone';
+
+export { APP_TIMEZONE, formatDateInAppTz, formatTimeInAppTz, formatDateTimeInAppTz };
+
 export function cn(...classes: (string | undefined | null | false)[]) {
   return classes.filter(Boolean).join(' ');
 }
@@ -125,9 +134,9 @@ export function parseBRLToNumber(value: string | number | null | undefined): num
   return parseBRLToCents(value) / 100;
 }
 
+/** Data longa em fuso de Maceió (America/Maceio) */
 export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('pt-BR', {
+  return formatDateInAppTz(date, {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -135,10 +144,10 @@ export function formatDate(date: Date | string): string {
   });
 }
 
+/** Hora em fuso de Maceió */
 export function formatTime(date: Date | string | null): string {
   if (!date) return '';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return formatTimeInAppTz(date);
 }
 
 /**
@@ -180,18 +189,11 @@ export function formatTimeAgo(
   return years === 1 ? 'há 1 ano' : `há ${years} anos`;
 }
 
-/** Data/hora absoluta curta pt-BR (tooltip) */
+/** Data/hora absoluta curta pt-BR no fuso de Maceió */
 export function formatDateTimeShort(date: Date | string | null | undefined): string {
   if (!date) return '';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const s = formatDateTimeInAppTz(date);
+  return s === '—' ? '' : s;
 }
 
 export function generateUniqueCode(prefix = 'LN'): string {

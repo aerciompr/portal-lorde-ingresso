@@ -455,6 +455,7 @@ export default function AdminDashboard() {
               {cronInfo?.lastRunAt ? (
                 <span className="text-zinc-200">
                   {new Date(cronInfo.lastRunAt).toLocaleString('pt-BR', {
+                    timeZone: 'America/Maceio',
                     day: '2-digit',
                     month: '2-digit',
                     hour: '2-digit',

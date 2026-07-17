@@ -46,6 +46,7 @@ function StatsChips({ stats }: { stats: Stats }) {
 function formatEventWhen(date: string, openTime?: string | null) {
   const d = new Date(date);
   const day = d.toLocaleDateString('pt-BR', {
+    timeZone: 'America/Maceio',
     weekday: 'short',
     day: '2-digit',
     month: 'short',

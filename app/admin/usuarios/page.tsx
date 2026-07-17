@@ -331,7 +331,9 @@ export default function AdminUsuariosPage() {
                   {u.lastLoginAt && (
                     <div className="text-[10px] text-zinc-600 mt-0.5">
                       Último login:{' '}
-                      {new Date(u.lastLoginAt).toLocaleString('pt-BR')}
+                      {new Date(u.lastLoginAt).toLocaleString('pt-BR', {
+                        timeZone: 'America/Maceio',
+                      })}
                     </div>
                   )}
                 </div>

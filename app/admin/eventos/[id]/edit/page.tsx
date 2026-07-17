@@ -420,7 +420,9 @@ export default function EditEventPage() {
                     <tr key={t.id} className="hover:bg-white/5">
                       <td className="p-3">
                         <div className="font-medium">{event.title} - {t.name}</div>
-                        <div className="text-[10px] text-zinc-500">{new Date(event.date).toLocaleDateString('pt-BR')}</div>
+                        <div className="text-[10px] text-zinc-500">{new Date(event.date).toLocaleDateString('pt-BR', {
+                          timeZone: 'America/Maceio',
+                        })}</div>
                       </td>
                       <td className="p-3 text-right font-mono">{formatPrice(t.priceCents)}</td>
                       <td className="p-3 text-right tabular-nums">{t.totalQty}</td>
@@ -458,7 +460,9 @@ export default function EditEventPage() {
                             <span className="ml-2 text-[10px] text-zinc-500 font-normal">INATIVO</span>
                           )}
                         </div>
-                        <div className="text-[10px] text-zinc-500">{new Date(event.date).toLocaleDateString('pt-BR')}</div>
+                        <div className="text-[10px] text-zinc-500">{new Date(event.date).toLocaleDateString('pt-BR', {
+                          timeZone: 'America/Maceio',
+                        })}</div>
                       </td>
                       <td className="p-3 text-right font-mono">{formatPrice(l.precoCents)}</td>
                       <td className="p-3 text-right tabular-nums">{l.totalQty}</td>

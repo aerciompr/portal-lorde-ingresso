@@ -255,7 +255,10 @@ export default function AdminFerramentasPage() {
               <option value="">Selecione...</option>
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
-                  {ev.title} — {new Date(ev.date).toLocaleDateString('pt-BR')}
+                  {ev.title} —{' '}
+                  {new Date(ev.date).toLocaleDateString('pt-BR', {
+                    timeZone: 'America/Maceio',
+                  })}
                 </option>
               ))}
             </select>
@@ -487,7 +490,9 @@ export default function AdminFerramentasPage() {
                         {o.event} · {o.tickets} ing. · {o.buyerEmail}
                       </span>
                       <span className="text-zinc-600 shrink-0">
-                        {new Date(o.createdAt).toLocaleString('pt-BR')}
+                        {new Date(o.createdAt).toLocaleString('pt-BR', {
+                          timeZone: 'America/Maceio',
+                        })}
                       </span>
                     </li>
                   ))}

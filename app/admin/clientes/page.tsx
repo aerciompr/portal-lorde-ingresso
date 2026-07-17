@@ -56,6 +56,7 @@ function fmtDate(iso: string | null) {
   if (!iso) return '—';
   try {
     return new Date(iso).toLocaleString('pt-BR', {
+      timeZone: 'America/Maceio',
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',

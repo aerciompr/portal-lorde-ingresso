@@ -246,6 +246,7 @@ export default function CheckinEventoPage() {
             {event && (
               <div className="text-[10px] text-zinc-500 truncate">
                 {new Date(event.date).toLocaleString('pt-BR', {
+                  timeZone: 'America/Maceio',
                   weekday: 'short',
                   day: '2-digit',
                   month: 'short',
@@ -381,6 +382,7 @@ export default function CheckinEventoPage() {
                         <div className="text-[10px] text-emerald-500/80 mt-1">
                           Entrou{' '}
                           {new Date(a.checkedInAt).toLocaleTimeString('pt-BR', {
+                            timeZone: 'America/Maceio',
                             hour: '2-digit',
                             minute: '2-digit',
                           })}

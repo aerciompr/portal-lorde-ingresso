@@ -77,6 +77,7 @@ export async function buildMigrationNoticeHtml(
     .join('');
 
   const eventDate = new Date(order.event.date).toLocaleDateString('pt-BR', {
+    timeZone: 'America/Maceio',
     weekday: 'long',
     day: '2-digit',
     month: 'long',

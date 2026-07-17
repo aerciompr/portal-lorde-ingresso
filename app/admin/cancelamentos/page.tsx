@@ -174,7 +174,10 @@ export default function AdminCancelamentosPage() {
                 )}
 
                 <div className="text-[11px] text-zinc-600 mb-3">
-                  Solicitado em {new Date(cr.requestedAt).toLocaleString('pt-BR')}
+                  Solicitado em{' '}
+                  {new Date(cr.requestedAt).toLocaleString('pt-BR', {
+                    timeZone: 'America/Maceio',
+                  })}
                 </div>
 
                 {cr.status === 'pending' && (

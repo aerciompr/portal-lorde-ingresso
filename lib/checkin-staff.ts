@@ -24,15 +24,14 @@ export function assertCheckinStaff(req: NextRequest): true | NextResponse {
 }
 
 export function dayBoundsSaoPaulo(ref = new Date()): { start: Date; end: Date } {
-  // Meia-noite local BR (UTC-3) aproximada — suficiente para listar “hoje”
+  // Maceió / AL (mesmo offset de SP sem DST: UTC-3)
   const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
+    timeZone: 'America/Maceio',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   });
   const day = fmt.format(ref); // YYYY-MM-DD
-  // America/Sao_Paulo sem DST atual: UTC-3
   const start = new Date(`${day}T00:00:00-03:00`);
   const end = new Date(`${day}T23:59:59.999-03:00`);
   return { start, end };

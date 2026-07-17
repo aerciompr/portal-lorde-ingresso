@@ -45,6 +45,7 @@ export function relativeEventLabel(d: string | Date, refunded = false): string {
 
 export function formatDateShort(d: string | Date) {
   return eventDate(d).toLocaleDateString('pt-BR', {
+    timeZone: 'America/Maceio',
     weekday: 'short',
     day: '2-digit',
     month: 'short',

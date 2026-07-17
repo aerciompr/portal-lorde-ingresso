@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
 import { requireAdminMutation } from '@/lib/request-security';
+import { parseAppLocalDateTime } from '@/lib/timezone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,10 +33,9 @@ function prismaErrorMessage(e: unknown): string {
 
 function parseEventDate(raw: string): Date | null {
   if (!raw || typeof raw !== 'string') return null;
-  // datetime-local: "2026-08-14T20:00" (sem timezone)
-  const d = new Date(raw.length === 16 ? `${raw}:00` : raw);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
+  // datetime-local: "2026-08-14T20:00" = horário de Maceió (não UTC do servidor)
+  const normalized = raw.length === 16 ? `${raw}:00` : raw;
+  return parseAppLocalDateTime(normalized);
 }
 
 export async function GET() {

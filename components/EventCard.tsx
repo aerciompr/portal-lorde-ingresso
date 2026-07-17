@@ -56,6 +56,7 @@ export default function EventCard({
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] sm:text-xs font-semibold">
             <Calendar className="w-3 h-3" />
             {when.toLocaleDateString('pt-BR', {
+              timeZone: 'America/Maceio',
               weekday: 'short',
               day: '2-digit',
               month: 'short',

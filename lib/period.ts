@@ -1,24 +1,29 @@
-/** Helpers de período (dashboard admin + relatórios) */
+/** Helpers de período (dashboard admin + relatórios) — fuso America/Maceio */
+
+import {
+  ymdInAppTz,
+  startOfAppDay,
+  endOfAppDay,
+  parseAppLocalDateTime,
+} from './timezone';
 
 export type PeriodId = 'today' | '7d' | '15d' | '30d' | 'all' | 'custom';
 
 export function ymd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return ymdInAppTz(d);
 }
 
 export function startOfLocalDay(d = new Date()): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+  return startOfAppDay(d);
 }
 
 export function endOfLocalDay(d = new Date()): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
+  return endOfAppDay(d);
+}
+
+/** Parse YYYY-MM-DD como dia em Maceió */
+export function parseYmdInApp(ymdStr: string): Date | null {
+  return parseAppLocalDateTime(`${ymdStr}T00:00:00`);
 }
 
 /** Converte período UI em from/to YYYY-MM-DD (API) */
@@ -40,9 +45,12 @@ export function periodToRange(
     };
   }
   const days = period === '7d' ? 7 : period === '15d' ? 15 : 30;
-  const from = startOfLocalDay(new Date(now));
-  from.setDate(from.getDate() - (days - 1));
-  return { from: ymd(from), to: ymd(now) };
+  const to = ymd(now);
+  const [yy, mm, dd] = to.split('-').map(Number);
+  // aritmética de calendário em UTC (só data, sem hora) — fuso Maceió via ymd()
+  const fromUtc = new Date(Date.UTC(yy, mm - 1, dd - (days - 1)));
+  const from = fromUtc.toISOString().slice(0, 10);
+  return { from, to };
 }
 
 export function isInPeriod(

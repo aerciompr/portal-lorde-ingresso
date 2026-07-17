@@ -337,7 +337,7 @@ export default function AdminPedidos() {
               <option key={ev.id} value={ev.id}>
                 {ev.title}
                 {ev.date
-                  ? ` · ${new Date(ev.date).toLocaleDateString('pt-BR')}`
+                  ? ` · ${new Date(ev.date).toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' })}`
                   : ''}
               </option>
             ))}

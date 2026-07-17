@@ -94,7 +94,7 @@ export async function sendOrderConfirmation(order: OrderWithDetails) {
       
       <p>Seu pedido para <strong>${order.event.title}</strong> foi confirmado com sucesso.</p>
       
-      <p><strong>Data:</strong> ${new Date(order.event.date).toLocaleDateString('pt-BR')} às ${order.event.openTime || '20:00'}<br>
+      <p><strong>Data:</strong> ${new Date(order.event.date).toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' })} às ${order.event.openTime || '20:00'}<br>
       <strong>Local:</strong> ${order.event.address}</p>
 
       ${order.accessCode ? `<p><strong>Código de acesso:</strong> <code style="font-size:18px;background:#222;padding:4px 8px;border-radius:6px;">${order.accessCode}</code><br><span style="font-size:13px;color:#aaa;">Use em Meus Ingressos se ainda não tiver senha.</span></p>` : ''}
@@ -353,8 +353,10 @@ export async function sendLoteLowStockAlert(params: {
 
   const when =
     params.eventDate instanceof Date
-      ? params.eventDate.toLocaleString('pt-BR')
-      : new Date(params.eventDate).toLocaleString('pt-BR');
+      ? params.eventDate.toLocaleString('pt-BR', { timeZone: 'America/Maceio' })
+      : new Date(params.eventDate).toLocaleString('pt-BR', {
+          timeZone: 'America/Maceio',
+        });
 
   const remLabel =
     params.remaining <= 0

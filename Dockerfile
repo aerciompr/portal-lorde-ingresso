@@ -71,6 +71,10 @@ RUN mkdir -p /app/data/uploads /app/public/uploads /tmp/lordenelson-uploads \
   && chmod +x /app/scripts/docker-entrypoint.sh /app/scripts/db-push.sh \
   && ln -sf /app/node_modules/.bin/prisma /usr/local/bin/prisma 2>/dev/null || true
 
+# Fuso Maceió (UTC-3) — formatação de data no Node/logs
+ENV TZ=America/Maceio
+ENV LANG=pt_BR.UTF-8
+
 USER root
 EXPOSE 3000
 

@@ -254,7 +254,10 @@ export default function ReportsPage() {
           </p>
           {data.generatedAt && (
             <p className="text-[11px] text-zinc-600 mt-1">
-              Atualizado {new Date(data.generatedAt).toLocaleString('pt-BR')}
+              Atualizado{' '}
+              {new Date(data.generatedAt).toLocaleString('pt-BR', {
+                timeZone: 'America/Maceio',
+              })}
             </p>
           )}
         </div>

@@ -188,6 +188,7 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
             {event.salesDeadline && (
               <p className="text-xs text-zinc-600">
                 Vendas até {new Date(event.salesDeadline).toLocaleString('pt-BR', {
+                  timeZone: 'America/Maceio',
                   day: '2-digit',
                   month: '2-digit',
                   year: 'numeric',
