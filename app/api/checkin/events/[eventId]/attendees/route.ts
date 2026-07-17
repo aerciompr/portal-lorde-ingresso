@@ -41,7 +41,8 @@ export async function GET(
       status: { in: ['valid', 'used'] },
       order: { eventId, status: 'paid' },
     },
-    orderBy: [{ status: 'asc' }, { uniqueCode: 'asc' }],
+    // Nome A–Z (status/código ordenados em JS com locale pt-BR)
+    orderBy: { order: { buyerName: 'asc' } },
     take: 500,
     select: {
       id: true,
@@ -97,6 +98,15 @@ export async function GET(
       );
     });
   }
+
+  // Ordem alfabética por nome (pt-BR); mesmo nome → código do ingresso
+  list.sort((a, b) => {
+    const byName = (a.buyerName || '').localeCompare(b.buyerName || '', 'pt-BR', {
+      sensitivity: 'base',
+    });
+    if (byName !== 0) return byName;
+    return (a.uniqueCode || '').localeCompare(b.uniqueCode || '', 'pt-BR');
+  });
 
   const total = tickets.length;
   const checkedIn = tickets.filter((t) => t.status === 'used').length;
