@@ -2,15 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { periodToRange, ymd } from './period';
 
 describe('period', () => {
-  const fixed = new Date('2026-07-11T15:00:00');
+  // 15:00 em Maceió = 18:00 UTC (UTC-3)
+  const fixed = new Date('2026-07-11T18:00:00.000Z');
 
-  it('today retorna from=to do dia', () => {
+  it('today retorna from=to do dia em Maceió', () => {
     const r = periodToRange('today', '', '', fixed);
     expect(r.from).toBe('2026-07-11');
     expect(r.to).toBe('2026-07-11');
   });
 
-  it('7d cobre 7 dias inclusive', () => {
+  it('7d cobre 7 dias inclusive (fuso Maceió)', () => {
     const r = periodToRange('7d', '', '', fixed);
     expect(r.to).toBe('2026-07-11');
     expect(r.from).toBe('2026-07-05');
@@ -27,7 +28,10 @@ describe('period', () => {
     });
   });
 
-  it('ymd formata local', () => {
-    expect(ymd(new Date(2026, 6, 11))).toBe('2026-07-11');
+  it('ymd formata no fuso America/Maceio', () => {
+    // 03:00 UTC em 11/jul = 00:00 Maceió no mesmo dia
+    expect(ymd(new Date('2026-07-11T03:00:00.000Z'))).toBe('2026-07-11');
+    // 02:30 UTC em 11/jul = 23:30 Maceió no dia 10
+    expect(ymd(new Date('2026-07-11T02:30:00.000Z'))).toBe('2026-07-10');
   });
 });
