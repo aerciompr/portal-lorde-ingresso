@@ -57,6 +57,43 @@ export function ymdInAppTz(date: Date | string = new Date()): string {
 }
 
 /**
+ * Converte Date/ISO → valor de `<input type="datetime-local">` no fuso de Maceió.
+ * NÃO use `toISOString().slice(0,16)` (isso é UTC e atrasa/adianta 3h no admin).
+ */
+export function toAppDatetimeLocalValue(
+  date: Date | string | null | undefined
+): string {
+  if (date == null || date === '') return '';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return '';
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(d);
+
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '';
+
+  let hour = get('hour');
+  // Alguns engines devolvem "24" à meia-noite com h23
+  if (hour === '24') hour = '00';
+
+  const year = get('year');
+  const month = get('month');
+  const day = get('day');
+  const minute = get('minute');
+  if (!year || !month || !day) return '';
+
+  return `${year}-${month}-${day}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+}
+
+/**
  * Interpreta "YYYY-MM-DD" ou "YYYY-MM-DDTHH:mm" como horário de Maceió
  * e devolve Date (UTC instant correto).
  */

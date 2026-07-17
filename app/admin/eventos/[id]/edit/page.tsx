@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Plus, Ticket, Edit, Copy, Trash2 } from 'lucide-react';
 import RichTextEditor from '@/components/RichTextEditor';
 import { DEFAULT_EVENT_FOOTER_NOTICE, formatPrice, centsToInput, parseBRLToCents } from '@/lib/utils';
+import { toAppDatetimeLocalValue } from '@/lib/timezone';
 
 interface EventData {
   id: string;
@@ -78,8 +79,11 @@ export default function EditEventPage() {
 
         setEvent(found);
 
-        const dateStr = new Date(found.date).toISOString().slice(0, 16);
-        const salesStr = found.salesDeadline ? new Date(found.salesDeadline).toISOString().slice(0, 16) : '';
+        // datetime-local no fuso Maceió (toISOString era UTC e fechava vendas 3h cedo)
+        const dateStr = toAppDatetimeLocalValue(found.date);
+        const salesStr = found.salesDeadline
+          ? toAppDatetimeLocalValue(found.salesDeadline)
+          : '';
 
         setForm({
           title: found.title || '',

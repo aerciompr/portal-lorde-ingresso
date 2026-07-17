@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatDateTimeInAppTz,
   parseAppLocalDateTime,
+  toAppDatetimeLocalValue,
   ymdInAppTz,
 } from './timezone';
 
@@ -16,6 +17,19 @@ describe('timezone America/Maceio', () => {
     const d = parseAppLocalDateTime('2026-08-14T20:00');
     expect(d).not.toBeNull();
     expect(d!.toISOString()).toBe('2026-08-14T23:00:00.000Z');
+  });
+
+  it('toAppDatetimeLocalValue usa Maceió, não UTC', () => {
+    // 22:30 UTC = 19:30 Maceió — NÃO pode virar 22:30 no datetime-local
+    const d = new Date('2026-07-17T22:30:00.000Z');
+    expect(toAppDatetimeLocalValue(d)).toBe('2026-07-17T19:30');
+  });
+
+  it('roundtrip datetime-local Maceió', () => {
+    const local = '2026-07-17T19:30';
+    const d = parseAppLocalDateTime(local);
+    expect(d).not.toBeNull();
+    expect(toAppDatetimeLocalValue(d)).toBe(local);
   });
 
   it('formatDateTimeInAppTz mostra fuso Maceió', () => {
