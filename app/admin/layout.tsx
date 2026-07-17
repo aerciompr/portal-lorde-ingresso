@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import AppClock from '@/components/AppClock';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -190,6 +191,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Admin
           </div>
           <div className="flex items-center gap-2 sm:gap-3 text-sm ml-auto">
+            <AppClock className="text-[10px] sm:text-[11px] tracking-wide text-zinc-500 tabular-nums select-none max-w-[11rem] sm:max-w-none truncate" />
             {adminUser && (
               <span className="text-emerald-400 hidden sm:inline text-xs truncate max-w-[140px]">
                 {adminUser}
@@ -202,7 +204,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             >
               Sair
             </button>
-            <div className="text-xs text-zinc-500 hidden lg:block">Maceió</div>
           </div>
         </header>
 

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatDate, isPastDeadline, getEventFooterNotice } from "@/lib/utils";
-import { formatDateTimeInAppTz } from "@/lib/timezone";
 import { getAppSettings } from "@/lib/settings";
 import { absoluteMediaUrl } from "@/lib/media-url";
 import TicketSelector from "./TicketSelector";
@@ -187,15 +186,15 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
               {getEventFooterNotice(event.footerNotice)}
             </p>
             {event.salesDeadline && (
-              <p className="text-xs text-zinc-600 tabular-nums">
-                Vendas até {formatDateTimeInAppTz(event.salesDeadline)}
-                <span className="text-zinc-700"> · </span>
-                <span
-                  className="text-zinc-700"
-                  title="Horário do servidor no fuso America/Maceió (referência para encerrar vendas)"
-                >
-                  agora {formatDateTimeInAppTz(new Date())}
-                </span>
+              <p className="text-xs text-zinc-600">
+                Vendas até {new Date(event.salesDeadline).toLocaleString('pt-BR', {
+                  timeZone: 'America/Maceio',
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
               </p>
             )}
           </div>
