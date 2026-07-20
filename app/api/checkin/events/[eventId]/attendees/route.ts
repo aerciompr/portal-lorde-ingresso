@@ -111,6 +111,55 @@ export async function GET(
   const total = tickets.length;
   const checkedIn = tickets.filter((t) => t.status === 'used').length;
 
+  // Último ingresso vendido (pedido pago mais recente)
+  let lastSold: {
+    priceCents: number;
+    paidAt: string;
+    loteNome: string | null;
+    ticketTypeName: string | null;
+  } | null = null;
+
+  try {
+    const lastOrder = await prisma.order.findFirst({
+      where: { eventId, status: 'paid' },
+      orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        totalCents: true,
+        paidAt: true,
+        createdAt: true,
+        lote: { select: { precoCents: true, nome: true } },
+        tickets: {
+          take: 1,
+          select: {
+            ticketType: { select: { name: true, priceCents: true } },
+          },
+        },
+        _count: { select: { tickets: true } },
+      },
+    });
+
+    if (lastOrder) {
+      const n = Math.max(1, lastOrder._count.tickets || 1);
+      const fromLote = lastOrder.lote?.precoCents;
+      const fromType = lastOrder.tickets[0]?.ticketType?.priceCents;
+      const priceCents =
+        fromLote != null && fromLote >= 0
+          ? fromLote
+          : fromType != null && fromType >= 0
+            ? fromType
+            : Math.round((lastOrder.totalCents || 0) / n);
+
+      lastSold = {
+        priceCents,
+        paidAt: (lastOrder.paidAt || lastOrder.createdAt).toISOString(),
+        loteNome: lastOrder.lote?.nome || null,
+        ticketTypeName: lastOrder.tickets[0]?.ticketType?.name || null,
+      };
+    }
+  } catch (e) {
+    console.error('[checkin attendees] lastSold', e);
+  }
+
   return NextResponse.json({
     event,
     stats: {
@@ -118,6 +167,7 @@ export async function GET(
       checkedIn,
       notCheckedIn: Math.max(0, total - checkedIn),
     },
+    lastSold,
     attendees: list,
   });
 }

@@ -5,8 +5,16 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Html5Qrcode } from 'html5-qrcode';
 import { toast } from 'sonner';
+import { formatPrice } from '@/lib/utils';
 
 type Stats = { total: number; checkedIn: number; notCheckedIn: number };
+
+type LastSold = {
+  priceCents: number;
+  paidAt: string;
+  loteNome?: string | null;
+  ticketTypeName?: string | null;
+};
 
 type Attendee = {
   ticketId: string;
@@ -28,21 +36,56 @@ type EventInfo = {
   imageUrl?: string | null;
 };
 
-function StatsBar({ stats }: { stats: Stats }) {
+function StatsBar({ stats, lastSold }: { stats: Stats; lastSold: LastSold | null }) {
+  const whenHint = lastSold
+    ? new Date(lastSold.paidAt).toLocaleString('pt-BR', {
+        timeZone: 'America/Maceio',
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+  const detail = lastSold
+    ? [lastSold.loteNome || lastSold.ticketTypeName, whenHint].filter(Boolean).join(' · ')
+    : '';
+
   return (
-    <div className="grid grid-cols-3 gap-2">
-      <div className="rounded-xl bg-zinc-900 border border-white/10 px-2 py-2.5 text-center">
-        <div className="text-lg font-semibold tabular-nums text-white">{stats.total}</div>
-        <div className="text-[10px] text-zinc-500 uppercase tracking-wide">Ingressos</div>
+    <div className="space-y-2">
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-xl bg-zinc-900 border border-white/10 px-2 py-2.5 text-center">
+          <div className="text-lg font-semibold tabular-nums text-white">{stats.total}</div>
+          <div className="text-[10px] text-zinc-500 uppercase tracking-wide">Ingressos</div>
+        </div>
+        <div className="rounded-xl bg-emerald-950/40 border border-emerald-500/25 px-2 py-2.5 text-center">
+          <div className="text-lg font-semibold tabular-nums text-emerald-400">{stats.checkedIn}</div>
+          <div className="text-[10px] text-emerald-500/80 uppercase tracking-wide">Check-in</div>
+        </div>
+        <div className="rounded-xl bg-amber-950/30 border border-amber-500/25 px-2 py-2.5 text-center">
+          <div className="text-lg font-semibold tabular-nums text-amber-300">{stats.notCheckedIn}</div>
+          <div className="text-[10px] text-amber-500/80 uppercase tracking-wide">Faltam</div>
+        </div>
       </div>
-      <div className="rounded-xl bg-emerald-950/40 border border-emerald-500/25 px-2 py-2.5 text-center">
-        <div className="text-lg font-semibold tabular-nums text-emerald-400">{stats.checkedIn}</div>
-        <div className="text-[10px] text-emerald-500/80 uppercase tracking-wide">Check-in</div>
-      </div>
-      <div className="rounded-xl bg-amber-950/30 border border-amber-500/25 px-2 py-2.5 text-center">
-        <div className="text-lg font-semibold tabular-nums text-amber-300">{stats.notCheckedIn}</div>
-        <div className="text-[10px] text-amber-500/80 uppercase tracking-wide">Faltam</div>
-      </div>
+      {lastSold ? (
+        <div
+          className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-sky-500/30 bg-sky-950/30 px-3 py-2"
+          title={detail || 'Último ingresso pago deste evento'}
+        >
+          <span className="text-[10px] uppercase tracking-wide text-sky-400/90">
+            Último vendido
+          </span>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold tabular-nums bg-sky-500/15 text-sky-200 ring-1 ring-sky-500/30">
+            {formatPrice(lastSold.priceCents)}
+          </span>
+          {detail ? (
+            <span className="text-[10px] text-zinc-500 truncate max-w-full">{detail}</span>
+          ) : null}
+        </div>
+      ) : (
+        <div className="text-center text-[10px] text-zinc-600 py-0.5">
+          Nenhum ingresso pago ainda
+        </div>
+      )}
     </div>
   );
 }
@@ -53,6 +96,7 @@ export default function CheckinEventoPage() {
 
   const [event, setEvent] = useState<EventInfo | null>(null);
   const [stats, setStats] = useState<Stats>({ total: 0, checkedIn: 0, notCheckedIn: 0 });
+  const [lastSold, setLastSold] = useState<LastSold | null>(null);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
@@ -97,6 +141,7 @@ export default function CheckinEventoPage() {
       if (!res.ok) throw new Error(data.error || 'Erro');
       setEvent(data.event);
       setStats(data.stats || { total: 0, checkedIn: 0, notCheckedIn: 0 });
+      setLastSold(data.lastSold || null);
       setAttendees(data.attendees || []);
     } catch (e) {
       toast.error((e as Error).message || 'Falha ao carregar');
@@ -271,7 +316,7 @@ export default function CheckinEventoPage() {
       </div>
 
       <div className="flex-1 p-4 max-w-lg mx-auto w-full pb-12 space-y-4">
-        <StatsBar stats={stats} />
+        <StatsBar stats={stats} lastSold={lastSold} />
 
         {/* Check-in por QR / código neste evento */}
         {showGate && (
