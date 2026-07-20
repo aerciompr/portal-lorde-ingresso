@@ -295,11 +295,71 @@ export default function ReportsPage() {
     { id: 'eventos', label: 'Por evento', icon: Calendar },
   ];
 
+  const periodLabels: Record<PeriodId, string> = {
+    today: 'Hoje',
+    '7d': '7 dias',
+    '15d': '15 dias',
+    '30d': '30 dias',
+    all: 'Tudo',
+    custom: 'Personalizado',
+  };
+
+  const filterChipLabel = useMemo(() => {
+    const p =
+      period === 'custom' && (customFrom || customTo)
+        ? `${customFrom || '…'} → ${customTo || '…'}`
+        : periodLabels[period] || period;
+    const ev = filterEventId
+      ? eventOptions.find((e) => e.id === filterEventId)?.title || 'Evento'
+      : 'Todos os eventos';
+    return `${p} · ${ev}`;
+  }, [period, customFrom, customTo, filterEventId, eventOptions]);
+
   const g = data?.general;
 
+  const actionButtons = (
+    <>
+      <button
+        type="button"
+        onClick={() => void load()}
+        disabled={loading}
+        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+      >
+        {loading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+        Gerar relatório
+      </button>
+      {hasGenerated && (
+        <>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
+          >
+            <Download size={14} /> CSV
+          </button>
+          <button
+            type="button"
+            onClick={exportPdf}
+            className="inline-flex items-center gap-2 rounded-xl bg-white text-black px-3 py-2 text-sm font-medium hover:bg-zinc-100"
+          >
+            <FileText size={14} /> Exportar PDF
+          </button>
+        </>
+      )}
+    </>
+  );
+
   return (
-    <div className="max-w-6xl mx-auto pb-10 reports-print-root">
-      {/* Header — some controls hide on print */}
+    <div className="max-w-6xl mx-auto pb-24 reports-print-root">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 print:mb-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Relatórios</h1>
@@ -314,55 +374,36 @@ export default function ReportsPage() {
                 timeZone: 'America/Maceio',
               })}
               {filtersDirty && (
-                <span className="text-amber-400 ml-2 print:hidden">· filtros alterados — gere de novo</span>
+                <span className="text-amber-400 ml-2 print:hidden">
+                  · filtros alterados — gere de novo
+                </span>
               )}
             </p>
           )}
         </div>
-        <div className="flex flex-wrap gap-2 print:hidden">
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {loading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Play size={14} />
-            )}
-            Gerar relatório
-          </button>
-          {hasGenerated && (
-            <>
-              <button
-                type="button"
-                onClick={() => void load()}
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 disabled:opacity-50"
-              >
-                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
-              </button>
-              <button
-                type="button"
-                onClick={exportCsv}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
-              >
-                <Download size={14} /> CSV
-              </button>
-              <button
-                type="button"
-                onClick={exportPdf}
-                className="inline-flex items-center gap-2 rounded-xl bg-white text-black px-3 py-2 text-sm font-medium hover:bg-zinc-100"
-              >
-                <FileText size={14} /> Exportar PDF
-              </button>
-            </>
-          )}
-        </div>
+        <div className="hidden sm:flex flex-wrap gap-2 print:hidden">{actionButtons}</div>
       </div>
 
-      {/* Filtros — sempre visíveis */}
+      {/* Sticky actions (mobile + ao rolar) */}
+      <div className="print:hidden sticky top-0 z-20 -mx-1 mb-4 px-1 py-2 bg-zinc-950/95 backdrop-blur border-b border-white/5 sm:hidden">
+        <div className="flex flex-wrap gap-2">{actionButtons}</div>
+      </div>
+      {hasGenerated && (
+        <div className="print:hidden sticky top-0 z-20 -mx-1 mb-4 px-1 py-2 bg-zinc-950/90 backdrop-blur border-b border-white/5 hidden sm:block">
+          <div className="flex flex-wrap items-center gap-2 justify-between">
+            <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-zinc-400 ring-1 ring-white/10 max-w-md truncate">
+              <span className="text-zinc-500 shrink-0">Recorte:</span>
+              <span className="text-zinc-200 truncate">{filterChipLabel}</span>
+              {filtersDirty && (
+                <span className="text-amber-400 shrink-0">· desatualizado</span>
+              )}
+            </span>
+            <div className="flex flex-wrap gap-2">{actionButtons}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtros */}
       <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/80 p-4 sm:p-5 space-y-4 print:border-0 print:p-0 print:bg-transparent">
         <PeriodFilter
           period={period}
@@ -402,15 +443,34 @@ export default function ReportsPage() {
           </select>
         </div>
         {!hasGenerated && (
-          <p className="text-xs text-zinc-500 print:hidden">
-            Defina o período e clique em <strong className="text-zinc-300">Gerar relatório</strong> para
-            ver KPIs, gráficos e tabelas.
+          <p className="text-xs text-zinc-500 print:hidden sm:hidden">
+            Toque em <strong className="text-zinc-300">Gerar relatório</strong> acima.
           </p>
         )}
       </div>
 
       {!hasGenerated && !loading && (
-        <EmptyState text="Nenhum relatório gerado ainda. Escolha o período (e opcionalmente um evento) e clique em Gerar relatório." />
+        <div className="rounded-2xl border border-dashed border-white/15 bg-zinc-900/40 px-6 py-14 text-center print:hidden">
+          <div className="text-3xl mb-3 opacity-80">📊</div>
+          <h2 className="text-base font-medium text-zinc-200 mb-2">Monte o relatório</h2>
+          <ol className="text-sm text-zinc-500 space-y-1.5 max-w-sm mx-auto text-left list-decimal list-inside mb-6">
+            <li>Escolha o <strong className="text-zinc-400">período</strong></li>
+            <li>
+              (Opcional) Filtre um <strong className="text-zinc-400">evento</strong>
+            </li>
+            <li>
+              Clique em <strong className="text-emerald-400">Gerar relatório</strong>
+            </li>
+          </ol>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            <Play size={16} /> Gerar relatório agora
+          </button>
+        </div>
       )}
 
       {loading && !data && (
@@ -421,7 +481,13 @@ export default function ReportsPage() {
 
       {data && g && (
         <>
-      {/* Tabs */}
+      {/* Chip recorte + tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6 print:mb-3">
+        <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-zinc-300 ring-1 ring-white/10 max-w-full truncate">
+          <span className="text-zinc-500 shrink-0">Recorte:</span>
+          <span className="truncate">{filterChipLabel}</span>
+        </span>
+      </div>
       <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-white/10 w-full sm:w-auto mb-6 max-w-md print:hidden">
         {tabs.map((t) => {
           const Icon = t.icon;

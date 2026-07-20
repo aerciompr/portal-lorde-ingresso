@@ -91,6 +91,7 @@ export default function AdminDashboard() {
     }>;
     error?: string;
   } | null>(null);
+  const [loteTab, setLoteTab] = useState<'stock' | 'viradas'>('stock');
 
   useEffect(() => {
     import('recharts').then(setRecharts).catch(() => undefined);
@@ -324,17 +325,20 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-3xl font-semibold tracking-tighter">Portal Admin</h1>
           <p className="text-zinc-500 text-sm">Lorde Nelson Pub • Maceió</p>
         </div>
-        <div className="flex gap-2">
-          <a href="/admin/reports" className="btn text-sm">
-            Relatórios
+        <div className="flex flex-wrap gap-2">
+          <a href="/admin/eventos" className="btn text-sm">
+            Eventos
           </a>
           <a href="/admin/pedidos" className="btn text-sm">
             Pedidos
+          </a>
+          <a href="/admin/reports" className="btn text-sm">
+            Relatórios
           </a>
           <a href="/checkin" target="_blank" className="btn text-sm">
             Check-in
@@ -342,272 +346,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Desktop: 2×2 · Mobile: empilhado */}
-      <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 lg:items-stretch">
-        {/* Check-in */}
-        <div className="p-4 border border-emerald-900/50 bg-emerald-950/30 rounded-2xl text-sm flex flex-col min-h-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span>📱</span>
-            <span className="font-medium text-emerald-400">App Mobile (Check-in)</span>
-          </div>
-          <a
-            href="/checkin"
-            target="_blank"
-            className="inline-block text-emerald-400 hover:underline font-mono text-xs"
-          >
-            /checkin
-          </a>
-          <div className="text-[10px] mt-1 text-zinc-500 flex-1">
-            Login de staff. Eventos, pedidos e configs no menu lateral.
-          </div>
-        </div>
-
-        {/* Últimas viradas de lote */}
-        <div className="p-4 border border-sky-500/25 bg-sky-950/20 rounded-2xl text-sm flex flex-col min-h-0">
-          <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-            <div className="min-w-0">
-              <div className="font-medium text-sky-200 flex items-center gap-2 text-sm">
-                <span>🔄</span> Últimas viradas de lote
-              </div>
-              <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">
-                Auto e manual · e-mail no mesmo destino do alerta de estoque
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void loadViradas()}
-              className="text-[10px] px-2 py-0.5 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5 shrink-0"
-            >
-              Atualizar
-            </button>
-          </div>
-          {!viradas ? (
-            <p className="text-xs text-zinc-500">Carregando…</p>
-          ) : viradas.error ? (
-            <p className="text-xs text-amber-400/90">{viradas.error}</p>
-          ) : viradas.items.length === 0 ? (
-            <p className="text-xs text-zinc-500">Nenhuma virada registrada ainda.</p>
-          ) : (
-            <div className="space-y-1.5 overflow-y-auto max-h-48 lg:max-h-56">
-              {viradas.items.map((v) => (
-                <a
-                  key={v.id}
-                  href={`/admin/eventos`}
-                  className="block rounded-xl border border-sky-500/20 bg-sky-950/30 p-2.5 hover:brightness-110 transition"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium text-zinc-100 truncate">
-                        {v.eventTitle}
-                      </div>
-                      <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
-                        {v.fromLoteNome || '—'} →{' '}
-                        <span className="text-emerald-400">{v.toLoteNome}</span>
-                        {' · '}
-                        {formatPrice(v.precoCents)}
-                      </div>
-                    </div>
-                    <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-zinc-400">
-                      {v.source === 'auto' ? 'auto' : 'manual'}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-zinc-600 mt-1 tabular-nums">
-                    {new Date(v.createdAt).toLocaleString('pt-BR', {
-                      timeZone: 'America/Maceio',
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Lotes perto de acabar */}
-        <div className="p-4 border border-amber-500/25 bg-amber-950/20 rounded-2xl text-sm flex flex-col min-h-0">
-          <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-            <div className="min-w-0">
-              <div className="font-medium text-amber-200 flex items-center gap-2 text-sm">
-                <span>⚠️</span> Lotes com poucas vagas
-              </div>
-              <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">
-                ≤{lowStock?.warnAt ?? 5} restantes · e-mail em ≤{lowStock?.emailAt ?? 2}
-                {lowStock?.alertEmail ? (
-                  <>
-                    {' '}
-                    → <span className="text-zinc-400 break-all">{lowStock.alertEmail}</span>
-                  </>
-                ) : null}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void loadLowStock()}
-              className="text-[10px] px-2 py-0.5 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5 shrink-0"
-            >
-              Atualizar
-            </button>
-          </div>
-
-          {!lowStock ? (
-            <p className="text-xs text-zinc-500">Carregando…</p>
-          ) : lowStock.items.length === 0 ? (
-            <p className="text-xs text-emerald-400/90">
-              Nenhum lote ativo com ≤{lowStock.warnAt} vagas. Tudo folgado.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-2 overflow-y-auto max-h-48 lg:max-h-56">
-              {lowStock.items.map((item) => {
-                const tone =
-                  item.level === 'soldout' || item.level === 'critical'
-                    ? 'border-red-500/40 bg-red-950/40'
-                    : 'border-amber-500/30 bg-amber-950/30';
-                const chip =
-                  item.remaining <= 0
-                    ? 'Esgotado'
-                    : item.remaining === 1
-                      ? '1 resto'
-                      : `${item.remaining} restam`;
-                const chipClass =
-                  item.remaining <= 2
-                    ? 'bg-red-500/20 text-red-300'
-                    : 'bg-amber-500/20 text-amber-200';
-                return (
-                  <a
-                    key={item.id}
-                    href={`/admin/eventos`}
-                    className={`rounded-xl border p-2.5 hover:brightness-110 transition ${tone}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium text-zinc-100 truncate">
-                          {item.eventTitle}
-                        </div>
-                        <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
-                          {item.nome}
-                        </div>
-                      </div>
-                      <span
-                        className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${chipClass}`}
-                      >
-                        {chip}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-1 rounded-full bg-black/40 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          item.remaining <= 2 ? 'bg-red-500' : 'bg-amber-500'
-                        }`}
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            Math.round((item.sold / Math.max(1, item.totalQty)) * 100)
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                  </a>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Crons — compacto */}
-        <div className="p-4 border border-white/10 bg-zinc-900/80 rounded-2xl text-sm flex flex-col min-h-0 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-1">
-            <div className="font-medium text-zinc-200 text-sm">⏱ Crons</div>
-            <button
-              type="button"
-              onClick={() => void loadCron()}
-              className="text-[10px] px-2 py-0.5 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5"
-            >
-              Atualizar
-            </button>
-          </div>
-
-          <div className="text-[11px] text-zinc-400 space-y-1 flex-1">
-            <div>
-              Secret:{' '}
-              {cronInfo?.cronSecretConfigured ? (
-                <span className="text-emerald-400">configurado</span>
-              ) : (
-                <span className="text-amber-400">ausente</span>
-              )}
-            </div>
-            <div>
-              Última:{' '}
-              {cronInfo?.lastRunAt ? (
-                <span className="text-zinc-200">
-                  {new Date(cronInfo.lastRunAt).toLocaleString('pt-BR', {
-                    timeZone: 'America/Maceio',
-                    day: '2-digit',
-                    month: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-              ) : (
-                <span className="text-zinc-500">nunca</span>
-              )}
-              {cronInfo?.lastRunSource ? (
-                <span className="text-zinc-600"> · {cronInfo.lastRunSource}</span>
-              ) : null}
-            </div>
-            <div>
-              Pending:{' '}
-              <strong className="text-zinc-200">{cronInfo?.pendingCount ?? '—'}</strong>
-              {' · '}
-              elegíveis (&gt;{cronInfo?.pendingOrderTtlMinutes ?? 30}m):{' '}
-              <strong className="text-amber-300">{cronInfo?.pendingOlderThanTtl ?? '—'}</strong>
-            </div>
-          </div>
-
-          {cronLastResult && (
-            <div
-              className={`rounded-lg border p-2 text-[10px] space-y-0.5 ${
-                cronLastResult.ok
-                  ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-100'
-                  : 'border-red-500/30 bg-red-950/30 text-red-200'
-              }`}
-            >
-              <div className="font-medium">
-                {cronLastResult.ok ? '✓ Teste OK' : '✗ Falha'}
-              </div>
-              {cronLastResult.details?.slice(0, 3).map((line, i) => (
-                <div key={i} className="text-zinc-400 truncate" title={line}>
-                  {line}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            <button
-              type="button"
-              disabled={syncingStripe}
-              onClick={runAllCrons}
-              className="text-[11px] px-2.5 py-1.5 rounded-xl border border-violet-500/40 text-violet-200 hover:bg-violet-950/40 disabled:opacity-50"
-            >
-              {syncingStripe ? '…' : 'Rodar crons'}
-            </button>
-            <button
-              type="button"
-              disabled={cleaning}
-              onClick={cleanupPendings}
-              className="text-[11px] px-2.5 py-1.5 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
-            >
-              {cleaning
-                ? '…'
-                : `Limpar (>${cronInfo?.pendingOrderTtlMinutes ?? 30}m)`}
-            </button>
-          </div>
-        </div>
-      </div>
-
+      {/* Período + ações (antes dos KPIs) */}
       <div className="mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <PeriodFilter
           period={period}
@@ -652,7 +391,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      {/* KPIs no topo (números do dia/período) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="card p-6">
           <div className="text-xs text-zinc-500">Bruto (pagos)</div>
           <div className="text-4xl font-semibold tracking-tighter mt-1">
@@ -676,6 +416,287 @@ export default function AdminDashboard() {
         <div className="card p-6">
           <div className="text-xs text-zinc-500">Ingressos pagos</div>
           <div className="text-4xl font-semibold tracking-tighter mt-1">{dash.paidTickets}</div>
+        </div>
+      </div>
+
+      {/* Operação: lotes unificados + check-in/crons */}
+      <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 lg:items-stretch">
+        {/* Lotes: estoque + viradas (abas) */}
+        <div className="p-4 border border-amber-500/25 bg-amber-950/15 rounded-2xl text-sm flex flex-col min-h-0">
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+            <div className="min-w-0">
+              <div className="font-medium text-amber-100 flex items-center gap-2 text-sm">
+                <span>🎟️</span> Operação de lotes
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">
+                Estoque baixo e viradas · e-mail ≤{lowStock?.emailAt ?? 2}
+                {lowStock?.alertEmail ? (
+                  <>
+                    {' '}
+                    → <span className="text-zinc-400 break-all">{lowStock.alertEmail}</span>
+                  </>
+                ) : null}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                void loadLowStock();
+                void loadViradas();
+              }}
+              className="text-[10px] px-2 py-0.5 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5 shrink-0"
+            >
+              Atualizar
+            </button>
+          </div>
+
+          <div className="flex gap-1 p-0.5 rounded-lg bg-black/30 border border-white/5 mb-3 w-fit">
+            <button
+              type="button"
+              onClick={() => setLoteTab('stock')}
+              className={`text-[11px] px-2.5 py-1 rounded-md transition ${
+                loteTab === 'stock'
+                  ? 'bg-amber-500/20 text-amber-200'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              Estoque
+              {lowStock && lowStock.items.length > 0 ? (
+                <span className="ml-1 tabular-nums opacity-80">({lowStock.items.length})</span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLoteTab('viradas')}
+              className={`text-[11px] px-2.5 py-1 rounded-md transition ${
+                loteTab === 'viradas'
+                  ? 'bg-sky-500/20 text-sky-200'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              Viradas
+              {viradas && viradas.items.length > 0 ? (
+                <span className="ml-1 tabular-nums opacity-80">({viradas.items.length})</span>
+              ) : null}
+            </button>
+          </div>
+
+          {loteTab === 'stock' ? (
+            !lowStock ? (
+              <p className="text-xs text-zinc-500">Carregando…</p>
+            ) : lowStock.items.length === 0 ? (
+              <p className="text-xs text-emerald-400/90">
+                Nenhum lote ativo com ≤{lowStock.warnAt} vagas. Tudo folgado.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 overflow-y-auto max-h-48 lg:max-h-56">
+                {lowStock.items.map((item) => {
+                  const tone =
+                    item.level === 'soldout' || item.level === 'critical'
+                      ? 'border-red-500/40 bg-red-950/40'
+                      : 'border-amber-500/30 bg-amber-950/30';
+                  const chip =
+                    item.remaining <= 0
+                      ? 'Esgotado'
+                      : item.remaining === 1
+                        ? '1 resto'
+                        : `${item.remaining} restam`;
+                  const chipClass =
+                    item.remaining <= 2
+                      ? 'bg-red-500/20 text-red-300'
+                      : 'bg-amber-500/20 text-amber-200';
+                  return (
+                    <a
+                      key={item.id}
+                      href={`/admin/eventos`}
+                      className={`rounded-xl border p-2.5 hover:brightness-110 transition ${tone}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium text-zinc-100 truncate">
+                            {item.eventTitle}
+                          </div>
+                          <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
+                            {item.nome}
+                          </div>
+                        </div>
+                        <span
+                          className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${chipClass}`}
+                        >
+                          {chip}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1 rounded-full bg-black/40 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            item.remaining <= 2 ? 'bg-red-500' : 'bg-amber-500'
+                          }`}
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              Math.round((item.sold / Math.max(1, item.totalQty)) * 100)
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </a>
+                  );
+                })}
+              </div>
+            )
+          ) : !viradas ? (
+            <p className="text-xs text-zinc-500">Carregando…</p>
+          ) : viradas.error ? (
+            <p className="text-xs text-amber-400/90">{viradas.error}</p>
+          ) : viradas.items.length === 0 ? (
+            <p className="text-xs text-zinc-500">Nenhuma virada registrada ainda.</p>
+          ) : (
+            <div className="space-y-1.5 overflow-y-auto max-h-48 lg:max-h-56">
+              {viradas.items.map((v) => (
+                <a
+                  key={v.id}
+                  href={`/admin/eventos`}
+                  className="block rounded-xl border border-sky-500/20 bg-sky-950/30 p-2.5 hover:brightness-110 transition"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-zinc-100 truncate">
+                        {v.eventTitle}
+                      </div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
+                        {v.fromLoteNome || '—'} →{' '}
+                        <span className="text-emerald-400">{v.toLoteNome}</span>
+                        {' · '}
+                        {formatPrice(v.precoCents)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-zinc-400">
+                      {v.source === 'auto' ? 'auto' : 'manual'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-zinc-600 mt-1 tabular-nums">
+                    {new Date(v.createdAt).toLocaleString('pt-BR', {
+                      timeZone: 'America/Maceio',
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Check-in + crons compactos */}
+        <div className="flex flex-col gap-3 min-h-0">
+          <div className="p-4 border border-emerald-900/50 bg-emerald-950/30 rounded-2xl text-sm flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <span>📱</span>
+              <span className="font-medium text-emerald-400">Check-in</span>
+            </div>
+            <a
+              href="/checkin"
+              target="_blank"
+              className="inline-block text-emerald-400 hover:underline font-mono text-xs"
+            >
+              /checkin
+            </a>
+            <div className="text-[10px] mt-1 text-zinc-500">
+              Staff na porta · login no app de check-in
+            </div>
+          </div>
+
+          <div className="p-4 border border-white/10 bg-zinc-900/80 rounded-2xl text-sm flex flex-col flex-1 min-h-0 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <div className="font-medium text-zinc-200 text-sm">⏱ Crons</div>
+              <button
+                type="button"
+                onClick={() => void loadCron()}
+                className="text-[10px] px-2 py-0.5 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5"
+              >
+                Atualizar
+              </button>
+            </div>
+
+            <div className="text-[11px] text-zinc-400 space-y-1">
+              <div>
+                Secret:{' '}
+                {cronInfo?.cronSecretConfigured ? (
+                  <span className="text-emerald-400">configurado</span>
+                ) : (
+                  <span className="text-amber-400">ausente</span>
+                )}
+              </div>
+              <div>
+                Última:{' '}
+                {cronInfo?.lastRunAt ? (
+                  <span className="text-zinc-200">
+                    {new Date(cronInfo.lastRunAt).toLocaleString('pt-BR', {
+                      timeZone: 'America/Maceio',
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                ) : (
+                  <span className="text-zinc-500">nunca</span>
+                )}
+                {cronInfo?.lastRunSource ? (
+                  <span className="text-zinc-600"> · {cronInfo.lastRunSource}</span>
+                ) : null}
+              </div>
+              <div>
+                Pending:{' '}
+                <strong className="text-zinc-200">{cronInfo?.pendingCount ?? '—'}</strong>
+                {' · '}
+                elegíveis (&gt;{cronInfo?.pendingOrderTtlMinutes ?? 30}m):{' '}
+                <strong className="text-amber-300">{cronInfo?.pendingOlderThanTtl ?? '—'}</strong>
+              </div>
+            </div>
+
+            {cronLastResult && (
+              <div
+                className={`rounded-lg border p-2 text-[10px] space-y-0.5 ${
+                  cronLastResult.ok
+                    ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-100'
+                    : 'border-red-500/30 bg-red-950/30 text-red-200'
+                }`}
+              >
+                <div className="font-medium">
+                  {cronLastResult.ok ? '✓ Teste OK' : '✗ Falha'}
+                </div>
+                {cronLastResult.details?.slice(0, 3).map((line, i) => (
+                  <div key={i} className="text-zinc-400 truncate" title={line}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <button
+                type="button"
+                disabled={syncingStripe}
+                onClick={runAllCrons}
+                className="text-[11px] px-2.5 py-1.5 rounded-xl border border-violet-500/40 text-violet-200 hover:bg-violet-950/40 disabled:opacity-50"
+              >
+                {syncingStripe ? '…' : 'Rodar crons'}
+              </button>
+              <button
+                type="button"
+                disabled={cleaning}
+                onClick={cleanupPendings}
+                className="text-[11px] px-2.5 py-1.5 rounded-xl border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 disabled:opacity-50"
+              >
+                {cleaning
+                  ? '…'
+                  : `Limpar (>${cronInfo?.pendingOrderTtlMinutes ?? 30}m)`}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
