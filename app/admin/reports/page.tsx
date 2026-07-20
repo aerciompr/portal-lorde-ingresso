@@ -358,50 +358,47 @@ export default function ReportsPage() {
   );
 
   return (
-    <div className="max-w-6xl mx-auto pb-24 reports-print-root">
+    <div className="max-w-6xl mx-auto pb-28 sm:pb-10 reports-print-root min-w-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 print:mb-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Relatórios</h1>
-          <p className="text-sm text-zinc-400 mt-1 print:text-zinc-600">
-            Escolha filtros e gere · bruto/líquido só de pedidos{' '}
-            <strong className="text-zinc-300">pagos</strong>
+      <div className="flex flex-col gap-3 mb-4 print:mb-3 min-w-0">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Relatórios</h1>
+          <p className="text-xs sm:text-sm text-zinc-400 mt-1 print:text-zinc-600">
+            Filtros → Gerar · só pedidos <strong className="text-zinc-300">pagos</strong>
           </p>
           {data?.generatedAt && (
-            <p className="text-[11px] text-zinc-600 mt-1">
+            <p className="text-[11px] text-zinc-600 mt-1 break-words">
               Gerado em{' '}
               {new Date(data.generatedAt).toLocaleString('pt-BR', {
                 timeZone: 'America/Maceio',
               })}
               {filtersDirty && (
-                <span className="text-amber-400 ml-2 print:hidden">
-                  · filtros alterados — gere de novo
+                <span className="text-amber-400 ml-1 print:hidden">
+                  · filtros alterados
                 </span>
               )}
             </p>
           )}
         </div>
+        {/* Desktop actions no header */}
         <div className="hidden sm:flex flex-wrap gap-2 print:hidden">{actionButtons}</div>
       </div>
 
-      {/* Sticky actions (mobile + ao rolar) */}
-      <div className="print:hidden sticky top-0 z-20 -mx-1 mb-4 px-1 py-2 bg-zinc-950/95 backdrop-blur border-b border-white/5 sm:hidden">
-        <div className="flex flex-wrap gap-2">{actionButtons}</div>
-      </div>
+      {/* Chip recorte (quando gerado) */}
       {hasGenerated && (
-        <div className="print:hidden sticky top-0 z-20 -mx-1 mb-4 px-1 py-2 bg-zinc-950/90 backdrop-blur border-b border-white/5 hidden sm:block">
-          <div className="flex flex-wrap items-center gap-2 justify-between">
-            <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-zinc-400 ring-1 ring-white/10 max-w-md truncate">
-              <span className="text-zinc-500 shrink-0">Recorte:</span>
-              <span className="text-zinc-200 truncate">{filterChipLabel}</span>
-              {filtersDirty && (
-                <span className="text-amber-400 shrink-0">· desatualizado</span>
-              )}
-            </span>
-            <div className="flex flex-wrap gap-2">{actionButtons}</div>
-          </div>
+        <div className="print:hidden mb-3 min-w-0">
+          <span className="inline-flex max-w-full items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-zinc-300 ring-1 ring-white/10">
+            <span className="text-zinc-500 shrink-0">Recorte:</span>
+            <span className="truncate min-w-0">{filterChipLabel}</span>
+            {filtersDirty && <span className="text-amber-400 shrink-0">· desat.</span>}
+          </span>
         </div>
       )}
+
+      {/* Mobile: barra fixa inferior (não compete com header admin sticky) */}
+      <div className="print:hidden sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-zinc-950/95 backdrop-blur px-3 py-2.5 safe-bottom">
+        <div className="flex flex-wrap gap-2 max-w-6xl mx-auto">{actionButtons}</div>
+      </div>
 
       {/* Filtros */}
       <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/80 p-4 sm:p-5 space-y-4 print:border-0 print:p-0 print:bg-transparent">
@@ -481,13 +478,6 @@ export default function ReportsPage() {
 
       {data && g && (
         <>
-      {/* Chip recorte + tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6 print:mb-3">
-        <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-zinc-300 ring-1 ring-white/10 max-w-full truncate">
-          <span className="text-zinc-500 shrink-0">Recorte:</span>
-          <span className="truncate">{filterChipLabel}</span>
-        </span>
-      </div>
       <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-white/10 w-full sm:w-auto mb-6 max-w-md print:hidden">
         {tabs.map((t) => {
           const Icon = t.icon;

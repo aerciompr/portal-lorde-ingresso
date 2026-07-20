@@ -391,44 +391,45 @@ export default function AdminEventos() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-zinc-950/50 p-1">
+                <div className="flex flex-wrap items-center gap-1.5 w-full lg:w-auto lg:shrink-0">
+                  <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-zinc-950/50 p-1 w-full sm:w-auto">
                     <Link
                       href={`/admin/eventos/${ev.id}/edit`}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-zinc-200 hover:bg-white/10 transition"
+                      className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium px-2 sm:px-3 py-1.5 rounded-lg text-zinc-200 hover:bg-white/10 transition"
                     >
-                      <Edit size={13} className="opacity-70" />
+                      <Edit size={13} className="opacity-70 shrink-0" />
                       Editar
                     </Link>
                     <Link
                       href={`/admin/eventos/${ev.id}/ingresso/novo?tipo=lote`}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white transition"
+                      className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium px-2 sm:px-3 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white transition"
                     >
-                      <ArrowRightLeft size={13} />
+                      <ArrowRightLeft size={13} className="shrink-0" />
                       Virar
                     </Link>
                     <Link
                       href={`/admin/pedidos?event=${ev.id}`}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-white/10 transition"
+                      className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium px-2 sm:px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-white/10 transition"
                     >
-                      <ExternalLink size={13} className="opacity-70" />
+                      <ExternalLink size={13} className="opacity-70 shrink-0" />
                       Pedidos
                     </Link>
                     <Link
                       href={`/admin/reports?eventId=${ev.id}`}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-white/10 transition"
+                      className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium px-2 sm:px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-white/10 transition"
                       title="Relatório deste evento"
                     >
-                      <BarChart3 size={13} className="opacity-70" />
-                      Relatório
+                      <BarChart3 size={13} className="opacity-70 shrink-0" />
+                      <span className="hidden xs:inline sm:inline">Relatório</span>
+                      <span className="sm:hidden">Rel.</span>
                     </Link>
                     <Link
                       href={`/checkin/evento/${ev.id}`}
                       target="_blank"
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-white/10 transition"
+                      className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium px-2 sm:px-3 py-1.5 rounded-lg text-zinc-300 hover:bg-white/10 transition"
                       title="Check-in do evento"
                     >
-                      <ScanLine size={13} className="opacity-70" />
+                      <ScanLine size={13} className="opacity-70 shrink-0" />
                       Check-in
                     </Link>
                   </div>
@@ -436,7 +437,7 @@ export default function AdminEventos() {
                   <button
                     type="button"
                     onClick={() => deleteEvent(ev.id)}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border border-red-500/25 text-red-400/90 hover:bg-red-950/40 transition cursor-pointer"
+                    className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium px-2.5 py-1.5 rounded-xl border border-red-500/25 text-red-400/90 hover:bg-red-950/40 transition cursor-pointer"
                   >
                     <Trash2 size={13} />
                     Deletar
@@ -478,7 +479,8 @@ export default function AdminEventos() {
                           </Link>
                         </div>
 
-                        <table className="w-full text-sm border border-white/10 rounded-xl overflow-hidden">
+                        <div className="table-scroll overflow-x-auto -mx-1 px-1">
+                        <table className="w-full text-sm border border-white/10 rounded-xl overflow-hidden min-w-[520px]">
                           <thead>
                             <tr className="bg-white/5 text-left text-xs text-zinc-400">
                               <th className="py-2.5 px-3 font-medium">
@@ -589,6 +591,7 @@ export default function AdminEventos() {
                             })}
                           </tbody>
                         </table>
+                        </div>
 
                         <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-zinc-500">
                           <div className="flex flex-wrap items-center gap-3">

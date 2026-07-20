@@ -178,28 +178,42 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Coluna principal: header fixo + conteúdo rolável */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full">
-        <header className="h-14 shrink-0 border-b border-white/10 bg-zinc-900/95 backdrop-blur flex items-center px-3 sm:px-4 justify-between gap-2 z-30">
+        <header className="min-h-14 shrink-0 border-b border-white/10 bg-zinc-900/95 backdrop-blur flex items-center px-2 sm:px-4 gap-1.5 sm:gap-2 z-30 safe-top">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden text-xl p-2 -ml-1 rounded-lg hover:bg-white/10"
+            className="lg:hidden text-xl p-2.5 rounded-lg hover:bg-white/10 shrink-0"
             type="button"
             aria-label="Abrir menu"
           >
             ☰
           </button>
-          <div className="text-sm font-medium text-zinc-300 lg:hidden truncate">
-            Admin
+          <div className="text-sm font-medium text-zinc-300 lg:hidden truncate min-w-0 flex-1">
+            {pathname === '/admin'
+              ? 'Dashboard'
+              : pathname?.startsWith('/admin/eventos')
+                ? 'Eventos'
+                : pathname?.startsWith('/admin/pedidos')
+                  ? 'Pedidos'
+                  : pathname?.startsWith('/admin/reports')
+                    ? 'Relatórios'
+                    : pathname?.startsWith('/admin/clientes')
+                      ? 'Clientes'
+                      : pathname?.startsWith('/admin/configuracoes')
+                        ? 'Config'
+                        : pathname?.startsWith('/admin/cupons')
+                          ? 'Cupons'
+                          : 'Admin'}
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 text-sm ml-auto">
-            <AppClock className="text-[10px] sm:text-[11px] tracking-wide text-zinc-500 tabular-nums select-none max-w-[11rem] sm:max-w-none truncate" />
+          <div className="flex items-center gap-1.5 sm:gap-3 text-sm shrink-0 ml-auto">
+            <AppClock className="text-[10px] tracking-wide text-zinc-500 tabular-nums select-none hidden min-[400px]:inline max-w-[9.5rem] sm:max-w-none truncate" />
             {adminUser && (
-              <span className="text-emerald-400 hidden sm:inline text-xs truncate max-w-[140px]">
+              <span className="text-emerald-400 hidden md:inline text-xs truncate max-w-[120px]">
                 {adminUser}
               </span>
             )}
             <button
               onClick={handleLogout}
-              className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/40 text-red-400"
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/40 text-red-400 shrink-0"
               type="button"
             >
               Sair
@@ -207,7 +221,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        <main className="admin-main flex-1 min-h-0 overflow-y-auto overflow-x-auto overscroll-contain p-3 sm:p-5 lg:p-8 [-webkit-overflow-scrolling:touch]">
+        <main className="admin-main flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-5 lg:p-8 [-webkit-overflow-scrolling:touch]">
           <div className="admin-main-inner min-w-0 w-full max-w-full">{children}</div>
         </main>
       </div>

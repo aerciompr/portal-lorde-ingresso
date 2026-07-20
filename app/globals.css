@@ -10,8 +10,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  /* evita “bagunça” horizontal no mobile (100vw + scrollbar) */
+  overflow-x: clip;
+}
+
 body {
   font-family: var(--font-geist-sans);
+  overflow-x: clip;
+  max-width: 100vw;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* Modern dark elegant theme — Lorde Nelson Pub vibe (dark + emerald/gold accents) */
@@ -39,30 +47,76 @@ html.admin-locked body {
 }
 
 .admin-main {
-  /* único scroll do painel; tabelas largas rolam no eixo X aqui */
-  touch-action: pan-x pan-y;
+  /* scroll vertical principal; NÃO pan-x na página inteira (isso “arrasta” o admin) */
+  touch-action: pan-y;
   overscroll-behavior: contain;
+  overflow-x: hidden;
+  /* safe area iPhone */
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
 
 .admin-main-inner {
-  /* impede filhos de forçarem largura infinita sem scroll */
   max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
 }
 
-/* Tabelas no admin: wrapper horizontal com toque */
-.admin-main .card.overflow-x-auto,
-.admin-main [class*="overflow-x-auto"] {
+/* Tabelas: scroll só no wrapper, não na página */
+.admin-main .table-scroll,
+.admin-main .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
   max-width: 100%;
+  overflow-x: auto;
+  touch-action: pan-x pan-y;
 }
 
 .admin-main table {
-  /* garante min-width das tabelas largas, mas o pai faz o scroll */
   max-width: none;
+}
+
+/* KPIs / títulos grandes não estouram em telas estreitas */
+@media (max-width: 640px) {
+  .admin-main h1 {
+    font-size: 1.5rem;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+  .admin-main .card .text-4xl {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+  .admin-main .card .text-3xl {
+    font-size: 1.35rem;
+    line-height: 1.2;
+  }
+  .admin-main .btn {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+    font-size: 0.75rem;
+  }
 }
 
 .safe-bottom {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.safe-top {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+}
+
+/* Check-in: área segura e sem overflow horizontal */
+body.checkin-app {
+  overflow-x: clip;
+  max-width: 100vw;
+}
+body.checkin-app .checkin-sticky {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
 }
 
 /* Relatórios: Exportar PDF = print do browser */
@@ -168,13 +222,28 @@ html.admin-locked body {
 }
 
 /* Check-in mobile app style: hide public header/footer when on checkin */
-body.checkin-app header,
+body.checkin-app header:not(.checkin-chrome),
 body.checkin-app footer {
   display: none !important;
 }
 body.checkin-app main {
   padding: 0 !important;
   max-width: 100% !important;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+/* Botões de atalho em fileira no mobile não estouram */
+.btn-row-mobile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.btn-row-mobile > .btn,
+.btn-row-mobile > a.btn {
+  flex: 1 1 auto;
+  min-width: min(100%, 6.5rem);
+  text-align: center;
 }
 
 .event-card {

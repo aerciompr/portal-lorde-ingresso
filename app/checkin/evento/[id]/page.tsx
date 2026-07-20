@@ -51,40 +51,52 @@ function StatsBar({ stats, lastSold }: { stats: Stats; lastSold: LastSold | null
     : '';
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-xl bg-zinc-900 border border-white/10 px-2 py-2.5 text-center">
-          <div className="text-lg font-semibold tabular-nums text-white">{stats.total}</div>
-          <div className="text-[10px] text-zinc-500 uppercase tracking-wide">Ingressos</div>
+    <div className="space-y-2 min-w-0">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+        <div className="rounded-xl bg-zinc-900 border border-white/10 px-1.5 sm:px-2 py-2 text-center min-w-0">
+          <div className="text-base sm:text-lg font-semibold tabular-nums text-white">
+            {stats.total}
+          </div>
+          <div className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-wide truncate">
+            Total
+          </div>
         </div>
-        <div className="rounded-xl bg-emerald-950/40 border border-emerald-500/25 px-2 py-2.5 text-center">
-          <div className="text-lg font-semibold tabular-nums text-emerald-400">{stats.checkedIn}</div>
-          <div className="text-[10px] text-emerald-500/80 uppercase tracking-wide">Check-in</div>
+        <div className="rounded-xl bg-emerald-950/40 border border-emerald-500/25 px-1.5 sm:px-2 py-2 text-center min-w-0">
+          <div className="text-base sm:text-lg font-semibold tabular-nums text-emerald-400">
+            {stats.checkedIn}
+          </div>
+          <div className="text-[9px] sm:text-[10px] text-emerald-500/80 uppercase tracking-wide truncate">
+            OK
+          </div>
         </div>
-        <div className="rounded-xl bg-amber-950/30 border border-amber-500/25 px-2 py-2.5 text-center">
-          <div className="text-lg font-semibold tabular-nums text-amber-300">{stats.notCheckedIn}</div>
-          <div className="text-[10px] text-amber-500/80 uppercase tracking-wide">Faltam</div>
+        <div className="rounded-xl bg-amber-950/30 border border-amber-500/25 px-1.5 sm:px-2 py-2 text-center min-w-0">
+          <div className="text-base sm:text-lg font-semibold tabular-nums text-amber-300">
+            {stats.notCheckedIn}
+          </div>
+          <div className="text-[9px] sm:text-[10px] text-amber-500/80 uppercase tracking-wide truncate">
+            Faltam
+          </div>
         </div>
       </div>
       {lastSold ? (
         <div
-          className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-sky-500/30 bg-sky-950/30 px-3 py-2"
+          className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 rounded-xl border border-sky-500/30 bg-sky-950/30 px-2 sm:px-3 py-2 min-w-0"
           title={detail || 'Último ingresso pago deste evento'}
         >
-          <span className="text-[10px] uppercase tracking-wide text-sky-400/90">
-            Último vendido
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-wide text-sky-400/90 shrink-0">
+            Último
           </span>
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold tabular-nums bg-sky-500/15 text-sky-200 ring-1 ring-sky-500/30">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs sm:text-sm font-semibold tabular-nums bg-sky-500/15 text-sky-200 ring-1 ring-sky-500/30">
             {formatPrice(lastSold.priceCents)}
           </span>
           {detail ? (
-            <span className="text-[10px] text-zinc-500 truncate max-w-full">{detail}</span>
+            <span className="text-[9px] sm:text-[10px] text-zinc-500 truncate max-w-full basis-full text-center sm:basis-auto">
+              {detail}
+            </span>
           ) : null}
         </div>
       ) : (
-        <div className="text-center text-[10px] text-zinc-600 py-0.5">
-          Nenhum ingresso pago ainda
-        </div>
+        <div className="text-center text-[10px] text-zinc-600 py-0.5">Sem vendas pagas</div>
       )}
     </div>
   );
@@ -263,12 +275,13 @@ export default function CheckinEventoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
-      <div className="bg-zinc-900 border-b border-white/10 px-3 py-3 sticky top-0 z-20">
-        <div className="flex items-center gap-2 max-w-lg mx-auto">
+    <div className="min-h-[100dvh] bg-zinc-950 text-white flex flex-col max-w-[100vw] overflow-x-clip">
+      <div className="checkin-chrome checkin-sticky bg-zinc-900 border-b border-white/10 px-2 sm:px-3 py-2.5 sticky top-0 z-20">
+        <div className="flex items-center gap-2 max-w-lg mx-auto min-w-0">
           <Link
             href="/checkin"
-            className="text-zinc-400 hover:text-white text-sm px-2 py-1 shrink-0"
+            className="text-zinc-400 hover:text-white text-sm px-2 py-2 shrink-0 rounded-lg hover:bg-white/5"
+            aria-label="Voltar"
           >
             ←
           </Link>
@@ -308,14 +321,14 @@ export default function CheckinEventoPage() {
               setShowGate((v) => !v);
               if (showGate) stopScanner();
             }}
-            className="text-[11px] px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shrink-0"
+            className="text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 max-w-[7.5rem] truncate"
           >
-            {showGate ? 'Lista' : 'Check-in QR'}
+            {showGate ? 'Lista' : 'QR'}
           </button>
         </div>
       </div>
 
-      <div className="flex-1 p-4 max-w-lg mx-auto w-full pb-12 space-y-4">
+      <div className="flex-1 p-3 sm:p-4 max-w-lg mx-auto w-full min-w-0 pb-[max(3rem,env(safe-area-inset-bottom))] space-y-4">
         <StatsBar stats={stats} lastSold={lastSold} />
 
         {/* Check-in por QR / código neste evento */}

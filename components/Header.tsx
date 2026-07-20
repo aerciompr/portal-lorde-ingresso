@@ -146,20 +146,29 @@ export default function Header({
     );
   }
 
+  // Trava scroll do body com menu mobile aberto
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
   return (
-    <header className="border-b border-white/10 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-3">
+    <header className="border-b border-white/10 bg-zinc-950/95 backdrop-blur sticky top-0 z-50 safe-top">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 min-w-0">
         <Link
           href="/"
-          className="flex items-center gap-2.5 font-semibold tracking-tight text-xl hover:opacity-90 transition min-w-0"
+          className="flex items-center gap-2 font-semibold tracking-tight text-xl hover:opacity-90 transition min-w-0"
         >
-          {/* Só a imagem da logo — sem caixa/fundo/anel */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             key={logoSrc}
             src={logoSrc}
             alt={siteName}
-            className="h-10 sm:h-11 w-auto max-w-[min(160px,42vw)] object-contain bg-transparent shrink-0"
+            className="h-9 sm:h-11 w-auto max-w-[min(140px,40vw)] object-contain bg-transparent shrink-0"
             onError={() => {
               setCandidateIndex((i) => {
                 if (i + 1 < candidates.length) return i + 1;
@@ -178,39 +187,52 @@ export default function Header({
           )}
         </nav>
 
-        <div className="flex md:hidden items-center gap-1">
+        <div className="flex md:hidden items-center gap-0.5 shrink-0">
           {waVisible && (
-            <WhatsAppIconLink className="text-[#25D366] hover:text-[#3be07a] text-[1.5rem] leading-none p-2 transition" />
+            <WhatsAppIconLink className="text-[#25D366] hover:text-[#3be07a] text-[1.5rem] leading-none p-2.5 transition" />
           )}
           <button
             type="button"
             onClick={() => setOpen(!open)}
-            className="p-2 cursor-pointer"
-            aria-label="Menu"
+            className="p-2.5 cursor-pointer rounded-lg hover:bg-white/5"
+            aria-label={open ? 'Fechar menu' : 'Abrir menu'}
+            aria-expanded={open}
           >
-            {open ? <X size={20} /> : <Menu size={20} />}
+            {open ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
       </div>
 
       {open && (
-        <nav className="md:hidden border-t border-white/10 bg-zinc-950 px-6 py-4 flex flex-col gap-4 text-[13px] font-semibold uppercase tracking-[2.5px] font-[family-name:var(--font-space-grotesk)]">
-          {links.map((l, i) => (
-            <NavLink key={i} l={l} onClick={() => setOpen(false)} />
-          ))}
-          {waVisible && (
-            <a
-              href={waHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 normal-case tracking-normal text-[#25D366]"
-              onClick={() => setOpen(false)}
-            >
-              <i className="fa-brands fa-whatsapp text-xl" aria-hidden />
-              <span className="text-zinc-300 text-sm font-medium">{waDisplay}</span>
-            </a>
-          )}
-        </nav>
+        <>
+          <button
+            type="button"
+            className="md:hidden fixed inset-0 top-14 z-40 bg-black/50"
+            aria-label="Fechar menu"
+            onClick={() => setOpen(false)}
+          />
+          <nav className="md:hidden relative z-50 border-t border-white/10 bg-zinc-950 px-4 sm:px-6 py-4 flex flex-col gap-1 text-[13px] font-semibold uppercase tracking-[2px] font-[family-name:var(--font-space-grotesk)] max-h-[min(70vh,calc(100dvh-3.5rem))] overflow-y-auto safe-bottom">
+            {links.map((l, i) => (
+              <div key={i} className="py-2.5 border-b border-white/5 last:border-0">
+                <NavLink l={l} onClick={() => setOpen(false)} />
+              </div>
+            ))}
+            {waVisible && (
+              <a
+                href={waHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 normal-case tracking-normal text-[#25D366] py-3"
+                onClick={() => setOpen(false)}
+              >
+                <i className="fa-brands fa-whatsapp text-xl" aria-hidden />
+                <span className="text-zinc-300 text-sm font-medium truncate">
+                  {waDisplay || 'WhatsApp'}
+                </span>
+              </a>
+            )}
+          </nav>
+        </>
       )}
     </header>
   );

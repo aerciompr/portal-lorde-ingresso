@@ -236,16 +236,16 @@ function CheckinInner() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
-      <div className="bg-zinc-900 border-b border-white/10 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className="min-h-[100dvh] bg-zinc-950 text-white flex flex-col max-w-[100vw] overflow-x-clip">
+      <div className="checkin-chrome checkin-sticky bg-zinc-900 border-b border-white/10 px-3 sm:px-4 py-2.5 flex items-center justify-between sticky top-0 z-20 gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center text-sm font-bold shrink-0">
             LN
           </div>
           <div className="min-w-0">
-            <div className="font-semibold">Check-in</div>
+            <div className="font-semibold text-sm sm:text-base">Check-in</div>
             <div className="text-[10px] text-emerald-400 -mt-0.5 truncate">
-              Staff · Lorde Nelson
+              Staff
               {adminUser ? ` · ${adminUser}` : ''}
             </div>
           </div>
@@ -256,14 +256,14 @@ function CheckinInner() {
             await fetch('/api/admin/logout', { method: 'POST' });
             window.location.href = '/admin/login?redirect=/checkin';
           }}
-          className="px-3 py-1 rounded bg-zinc-800 hover:bg-red-900/40 text-red-400 text-xs"
+          className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-red-900/40 text-red-400 text-xs shrink-0"
         >
           Sair
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-white/10 bg-zinc-950 sticky top-[57px] z-10">
+      <div className="flex border-b border-white/10 bg-zinc-950 sticky top-[52px] z-10">
         {(
           [
             { id: 'eventos' as Tab, label: 'Eventos' },
@@ -274,7 +274,7 @@ function CheckinInner() {
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`flex-1 py-3 text-sm font-medium transition ${
+            className={`flex-1 py-3 text-sm font-medium transition min-w-0 ${
               tab === t.id
                 ? 'text-emerald-400 border-b-2 border-emerald-500'
                 : 'text-zinc-500 hover:text-zinc-300'
@@ -285,7 +285,7 @@ function CheckinInner() {
         ))}
       </div>
 
-      <div className="flex-1 p-4 max-w-lg mx-auto w-full pb-10">
+      <div className="flex-1 p-3 sm:p-4 max-w-lg mx-auto w-full min-w-0 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
         {tab === 'eventos' && (
           <>
             {loadingEvents ? (

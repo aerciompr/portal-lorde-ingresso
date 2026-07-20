@@ -28,7 +28,7 @@ export default function SiteChrome({
   return (
     <>
       {header}
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 min-w-0 max-w-[100vw] overflow-x-clip">{children}</main>
       {footer}
     </>
   );

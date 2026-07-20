@@ -330,7 +330,7 @@ export default function AdminDashboard() {
           <h1 className="text-3xl font-semibold tracking-tighter">Portal Admin</h1>
           <p className="text-zinc-500 text-sm">Lorde Nelson Pub • Maceió</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="btn-row-mobile w-full sm:w-auto">
           <a href="/admin/eventos" className="btn text-sm">
             Eventos
           </a>
@@ -392,30 +392,32 @@ export default function AdminDashboard() {
       </div>
 
       {/* KPIs no topo (números do dia/período) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="card p-6">
-          <div className="text-xs text-zinc-500">Bruto (pagos)</div>
-          <div className="text-4xl font-semibold tracking-tighter mt-1">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6">
+        <div className="card p-3 sm:p-6 min-w-0">
+          <div className="text-[10px] sm:text-xs text-zinc-500">Bruto (pagos)</div>
+          <div className="text-xl sm:text-4xl font-semibold tracking-tighter mt-1 tabular-nums break-all">
             {formatPrice(dash.totalBruto)}
           </div>
           <div className="text-[10px] text-zinc-600 mt-1">{dash.paidCount} pedido(s)</div>
         </div>
-        <div className="card p-6">
-          <div className="text-xs text-zinc-500">Líquido (pagos)</div>
-          <div className="text-4xl font-semibold tracking-tighter mt-1 text-emerald-400">
+        <div className="card p-3 sm:p-6 min-w-0">
+          <div className="text-[10px] sm:text-xs text-zinc-500">Líquido (pagos)</div>
+          <div className="text-xl sm:text-4xl font-semibold tracking-tighter mt-1 text-emerald-400 tabular-nums break-all">
             {formatPrice(dash.totalLiquido)}
           </div>
         </div>
-        <div className="card p-6">
-          <div className="text-xs text-zinc-500">Estornos (à parte)</div>
-          <div className="text-4xl font-semibold tracking-tighter mt-1 text-red-400">
+        <div className="card p-3 sm:p-6 min-w-0">
+          <div className="text-[10px] sm:text-xs text-zinc-500">Estornos</div>
+          <div className="text-xl sm:text-4xl font-semibold tracking-tighter mt-1 text-red-400 tabular-nums break-all">
             {formatPrice(dash.totalEstornos)}
           </div>
-          <div className="text-[10px] text-zinc-600 mt-1">Não somam no bruto</div>
+          <div className="text-[10px] text-zinc-600 mt-1 hidden sm:block">Não somam no bruto</div>
         </div>
-        <div className="card p-6">
-          <div className="text-xs text-zinc-500">Ingressos pagos</div>
-          <div className="text-4xl font-semibold tracking-tighter mt-1">{dash.paidTickets}</div>
+        <div className="card p-3 sm:p-6 min-w-0">
+          <div className="text-[10px] sm:text-xs text-zinc-500">Ingressos pagos</div>
+          <div className="text-xl sm:text-4xl font-semibold tracking-tighter mt-1 tabular-nums">
+            {dash.paidTickets}
+          </div>
         </div>
       </div>
 
