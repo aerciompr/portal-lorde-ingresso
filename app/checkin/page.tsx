@@ -69,6 +69,7 @@ function CheckinInner() {
   const [past, setPast] = useState<EventRow[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [lockEventTitle, setLockEventTitle] = useState('');
+  const [showPast, setShowPast] = useState(false);
   const qrRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
@@ -196,7 +197,9 @@ function CheckinInner() {
     if (items.length === 0) return null;
     return (
       <section className="mb-6">
-        <h2 className="text-xs uppercase tracking-widest text-zinc-500 mb-2 px-0.5">{title}</h2>
+        {title ? (
+          <h2 className="text-xs uppercase tracking-widest text-zinc-500 mb-2 px-0.5">{title}</h2>
+        ) : null}
         <div className="space-y-2">
           {items.map((ev) => (
             <Link
@@ -290,12 +293,39 @@ function CheckinInner() {
             ) : (
               <>
                 <EventList title="Hoje" items={today} />
-                <EventList title="Próximos (todos)" items={upcoming} />
-                <EventList title="Anteriores" items={past} />
+                <EventList title="Próximos" items={upcoming} />
+
+                {/* Anteriores: recolhido — não polui a lista na porta */}
+                {past.length > 0 && (
+                  <div className="mt-2 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowPast((v) => !v)}
+                      className="w-full flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-zinc-900/50 px-3 py-2.5 text-left text-xs text-zinc-400 hover:bg-white/5 hover:text-zinc-200 transition"
+                    >
+                      <span>
+                        Anteriores
+                        <span className="ml-1.5 tabular-nums text-zinc-600">({past.length})</span>
+                      </span>
+                      <span className="text-zinc-500 shrink-0">{showPast ? '▲' : '▼'}</span>
+                    </button>
+                    {showPast && (
+                      <div className="mt-3">
+                        <EventList title="" items={past} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {today.length === 0 && upcoming.length === 0 && past.length === 0 && (
                   <div className="text-center text-zinc-500 text-sm py-16">
                     Nenhum evento cadastrado.
                   </div>
+                )}
+                {today.length === 0 && upcoming.length === 0 && past.length > 0 && !showPast && (
+                  <p className="text-center text-[11px] text-zinc-600 mb-3">
+                    Só há eventos passados — toque em Anteriores se precisar.
+                  </p>
                 )}
                 <button
                   type="button"
