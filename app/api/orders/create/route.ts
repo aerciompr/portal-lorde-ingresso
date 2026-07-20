@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateUniqueCode } from '@/lib/utils';
+import { withDbRetry } from '@/lib/db-retry';
 
 export async function POST(req: NextRequest) {
   let reservedPromoId: string | null = null;
@@ -25,20 +26,11 @@ export async function POST(req: NextRequest) {
     const unitPricesCents: number[] = [];
 
     const currentPrice = event.activeLote?.precoCents;
-    const loteAvail = event.activeLote
-      ? Math.max(0, event.activeLote.totalQty - event.activeLote.sold)
+    const hasActiveLote = Boolean(event.activeLote?.id && event.activeLote.ativo);
+    // Com lote ativo: estoque do LOTE manda (não sync de TicketType no hot path — evita 1205)
+    const loteAvail = hasActiveLote
+      ? Math.max(0, event.activeLote!.totalQty - event.activeLote!.sold)
       : null;
-    // Com lote ativo: estoque do LOTE manda; alinha TicketType se ficou para trás na virada
-    if (loteAvail != null && event.activeLote?.id) {
-      try {
-        const { syncTicketTypeCapacityForEvent } = await import('@/lib/lote-ticket-sync');
-        await syncTicketTypeCapacityForEvent(eventId);
-        const refreshed = await prisma.ticketType.findMany({ where: { eventId } });
-        event.ticketTypes = refreshed as typeof event.ticketTypes;
-      } catch (e) {
-        console.error('[CREATE ORDER] sync ticket type', e);
-      }
-    }
 
     let qtyTotal = 0;
     for (const item of items) {
@@ -62,16 +54,17 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Self-heal: totalQty do tipo precisa aceitar o sold++ desta compra
-      if (tt.sold + item.quantity > tt.totalQty) {
-        const newTotal =
-          tt.sold +
-          item.quantity +
-          Math.max(0, (loteAvail != null ? loteAvail - qtyTotal : 0) - item.quantity);
-        await prisma.ticketType.update({
-          where: { id: tt.id },
-          data: { totalQty: newTotal },
-        });
+      // Self-heal totalQty só SEM lote (com lote o sold++ do tipo não bloqueia venda)
+      if (!hasActiveLote && tt.sold + item.quantity > tt.totalQty) {
+        const newTotal = tt.sold + item.quantity;
+        await withDbRetry(
+          () =>
+            prisma.ticketType.update({
+              where: { id: tt.id },
+              data: { totalQty: newTotal },
+            }),
+          { label: 'ticketType.totalQty self-heal' }
+        );
         tt.totalQty = newTotal;
       }
 
@@ -186,47 +179,48 @@ export async function POST(req: NextRequest) {
     }
     reservedPromoId = null; // amarrado ao order
 
-    for (const item of orderItems) {
-      await prisma.ticketType.update({
-        where: { id: item.ticketTypeId },
-        data: { sold: { increment: item.quantity } },
-      });
-    }
+    const qtyReserved = orderItems.reduce((s, i) => s + i.quantity, 0);
 
+    // Estoque: lote primeiro (fonte da verdade); TicketType com retry (pode contender)
     if (activeLoteId) {
-      await prisma.lote.update({
-        where: { id: activeLoteId },
-        data: {
-          sold: {
-            increment: items.reduce(
-              (s: number, i: { quantity: number }) => s + i.quantity,
-              0
-            ),
-          },
-        },
-      });
-      // Alerta e-mail se restam ≤2 no lote
-      try {
-        const { checkLoteLowStockAlert } = await import('@/lib/lote-stock-alerts');
-        await checkLoteLowStockAlert(activeLoteId);
-      } catch (e) {
-        console.error('[CREATE ORDER] lote low-stock alert falhou', e);
-      }
+      await withDbRetry(
+        () =>
+          prisma.lote.update({
+            where: { id: activeLoteId },
+            data: { sold: { increment: qtyReserved } },
+          }),
+        { label: 'lote.sold++' }
+      );
     }
 
-    try {
-      const { performAutomaticVirada } = await import('@/lib/lote-virada');
-      await performAutomaticVirada(eventId);
-    } catch (e) {
-      console.error('[CREATE ORDER] virada automática falhou', e);
+    for (const item of orderItems) {
+      await withDbRetry(
+        () =>
+          prisma.ticketType.update({
+            where: { id: item.ticketTypeId },
+            data: { sold: { increment: item.quantity } },
+          }),
+        { label: `ticketType.sold++ ${item.ticketTypeId}` }
+      );
     }
+
+    // Low-stock e virada: fora do caminho crítico (pay + cron já viram; e-mail não segura lock)
+    if (activeLoteId) {
+      const loteIdForAlert = activeLoteId;
+      setImmediate(() => {
+        void import('@/lib/lote-stock-alerts')
+          .then(({ checkLoteLowStockAlert }) => checkLoteLowStockAlert(loteIdForAlert))
+          .catch((e) => console.error('[CREATE ORDER] lote low-stock (async)', e));
+      });
+    }
+    // Virada automática: finalize-paid + cron — não no create (evita cascade de UPDATE)
 
     const { logOrderEvent } = await import('@/lib/order-log');
     await logOrderEvent(
       order.id,
       'created',
       'Checkout iniciado',
-      `${orderItems.reduce((s, i) => s + i.quantity, 0)} ingresso(s) · ${totalCents} centavos · evento ${event.title}`,
+      `${qtyReserved} ingresso(s) · ${totalCents} centavos · evento ${event.title}`,
       {
         eventId,
         loteId: activeLoteId,

@@ -5,7 +5,15 @@ import { matchTicketTypeToLote } from '@/lib/lote-match';
  * Com lotes, o estoque de venda é o LOTE. O TicketType ainda guarda sold
  * (para tickets/PDF). Após virada ou edição de qtd, o totalQty do tipo
  * precisa cobrir: já vendido no tipo + restante do lote ativo.
- * Sem isso o site mostra "esgotado" mesmo com vaga no lote.
+ *
+ * Chamar APENAS em:
+ * - virada de lote (activateNewLote)
+ * - admin edita lote / capacidade
+ *
+ * NÃO chamar em:
+ * - GET página pública do evento
+ * - POST /api/orders/create
+ * (gera Lock wait timeout 1205 sob concorrência)
  */
 export async function syncTicketTypeCapacityForEvent(eventId: string): Promise<{
   ok: boolean;

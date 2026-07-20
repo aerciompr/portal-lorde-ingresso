@@ -111,17 +111,9 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
 
   if (!event) notFound();
 
-  // Self-heal: após virada o TicketType pode ficar esgotado enquanto o lote tem vaga
-  if (event.activeLote?.ativo) {
-    try {
-      const { syncTicketTypeCapacityForEvent } = await import('@/lib/lote-ticket-sync');
-      await syncTicketTypeCapacityForEvent(event.id);
-      const types = await prisma.ticketType.findMany({ where: { eventId: event.id } });
-      (event as { ticketTypes: typeof types }).ticketTypes = types;
-    } catch {
-      /* ignore */
-    }
-  }
+  // NÃO chamar syncTicketTypeCapacityForEvent aqui (pageview):
+  // disputa o mesmo row lock de TicketType com o checkout → MySQL 1205.
+  // Com lote ativo a UI usa o LOTE como fonte da verdade (TicketSelector).
 
   // Esgotado: prioriza LOTE ATIVO (não o 1º ticketType — isso bloqueava Lote 1 após migração)
   const loteAtivo = event.activeLote;
