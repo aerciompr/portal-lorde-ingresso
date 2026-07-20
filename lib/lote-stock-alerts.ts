@@ -86,7 +86,8 @@ export async function listLowStockLotes(
   return out;
 }
 
-async function getAlertEmail(): Promise<string> {
+/** E-mail de alerta de lotes (virada / estoque) — publicável para reutilizar. */
+export async function getAlertEmailForLote(): Promise<string> {
   try {
     const rows = await prisma.setting.findMany({
       where: {
@@ -106,6 +107,10 @@ async function getAlertEmail(): Promise<string> {
   } catch {
     return '';
   }
+}
+
+async function getAlertEmail(): Promise<string> {
+  return getAlertEmailForLote();
 }
 
 /**

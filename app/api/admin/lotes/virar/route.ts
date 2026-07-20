@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
       precoCents: preco,
       totalQty: Math.floor(qty),
       viradaAutomatica: true,
+      source: 'manual',
     });
 
     return NextResponse.json({

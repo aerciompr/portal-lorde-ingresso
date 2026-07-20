@@ -1,14 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { formatPrice, formatDate, paymentMethodLabel } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   BarChart3,
   Calendar,
   Download,
+  FileText,
   LayoutDashboard,
   Loader2,
+  Play,
   RefreshCw,
   Ticket,
   TrendingUp,
@@ -47,11 +50,14 @@ type EventReport = Bucket & {
 
 type ReportsPayload = {
   generatedAt: string;
+  period?: { from: string | null; to: string | null; eventId?: string | null };
   general: Bucket & {
     byMethod: (Bucket & { method: string })[];
   };
   byEvent: EventReport[];
 };
+
+type EventOption = { id: string; title: string; date: string };
 
 type TabId = 'geral' | 'eventos';
 
@@ -103,10 +109,15 @@ function EmptyState({ text }: { text: string }) {
 }
 
 export default function ReportsPage() {
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<TabId>('geral');
   const [data, setData] = useState<ReportsPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [hasGenerated, setHasGenerated] = useState(false);
+  const [filtersDirty, setFiltersDirty] = useState(false);
   const [eventId, setEventId] = useState<string>('');
+  const [filterEventId, setFilterEventId] = useState<string>('');
+  const [eventOptions, setEventOptions] = useState<EventOption[]>([]);
   const [Recharts, setRecharts] = useState<RechartsModule | null>(null);
   const [period, setPeriod] = useState<PeriodId>('30d');
   const [customFrom, setCustomFrom] = useState('');
@@ -116,6 +127,33 @@ export default function ReportsPage() {
     import('recharts').then(setRecharts).catch(() => undefined);
   }, []);
 
+  // Deep-link: /admin/reports?eventId=...
+  useEffect(() => {
+    const q = searchParams.get('eventId') || '';
+    if (q) {
+      setFilterEventId(q);
+      setEventId(q);
+      setTab('eventos');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    fetch('/api/admin/events')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: EventOption[]) => {
+        if (Array.isArray(list)) {
+          setEventOptions(
+            list.map((e: { id: string; title: string; date: string }) => ({
+              id: e.id,
+              title: e.title,
+              date: e.date,
+            }))
+          );
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -123,30 +161,47 @@ export default function ReportsPage() {
       const qs = new URLSearchParams();
       if (range.from) qs.set('from', range.from);
       if (range.to) qs.set('to', range.to);
+      if (filterEventId) qs.set('eventId', filterEventId);
       const res = await fetch(`/api/admin/reports?${qs}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Falha ao carregar');
       setData(json as ReportsPayload);
+      setHasGenerated(true);
+      setFiltersDirty(false);
       setEventId((prev) => {
-        if (prev && (json as ReportsPayload).byEvent?.some((e) => e.eventId === prev)) return prev;
-        const firstWithSales = (json as ReportsPayload).byEvent?.find((e) => e.paidOrders > 0);
-        return firstWithSales?.eventId || (json as ReportsPayload).byEvent?.[0]?.eventId || '';
+        const payload = json as ReportsPayload;
+        if (filterEventId && payload.byEvent?.some((e) => e.eventId === filterEventId)) {
+          return filterEventId;
+        }
+        if (prev && payload.byEvent?.some((e) => e.eventId === prev)) return prev;
+        const firstWithSales = payload.byEvent?.find((e) => e.paidOrders > 0);
+        return firstWithSales?.eventId || payload.byEvent?.[0]?.eventId || '';
       });
+      if (filterEventId) setTab('eventos');
+      toast.success('Relatório gerado');
     } catch (e) {
       toast.error((e as Error).message || 'Erro nos relatórios');
     } finally {
       setLoading(false);
     }
-  }, [period, customFrom, customTo]);
+  }, [period, customFrom, customTo, filterEventId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const markDirty = useCallback(() => {
+    if (hasGenerated) setFiltersDirty(true);
+  }, [hasGenerated]);
 
   const selected = useMemo(
     () => data?.byEvent.find((e) => e.eventId === eventId) || null,
     [data, eventId]
   );
+
+  function exportPdf() {
+    if (!data) {
+      toast.error('Gere o relatório antes de exportar');
+      return;
+    }
+    window.print();
+  }
 
   const chartByEvent = useMemo(() => {
     if (!data) return [];
@@ -174,7 +229,10 @@ export default function ReportsPage() {
   }, [selected]);
 
   function exportCsv() {
-    if (!data) return;
+    if (!data) {
+      toast.error('Gere o relatório antes de exportar');
+      return;
+    }
     const rows: string[][] = [
       ['Visão', 'Evento', 'Data', 'Pedidos pagos', 'Ingressos pagos', 'Bruto (R$)', 'Taxas (R$)', 'Líquido (R$)', 'Estornos (R$)', 'Pedidos estornados', 'Pendentes'],
     ];
@@ -192,10 +250,25 @@ export default function ReportsPage() {
         String(e.refundedOrders),
         String(e.pendingOrders),
       ]);
+      for (const l of e.byLote || []) {
+        rows.push([
+          'Lote',
+          `${e.title} · ${l.name}`,
+          '',
+          String(l.paidOrders),
+          String(l.paidTickets),
+          (l.grossCents / 100).toFixed(2),
+          (l.feeCents / 100).toFixed(2),
+          (l.netCents / 100).toFixed(2),
+          (l.refundCents / 100).toFixed(2),
+          String(l.refundedOrders),
+          String(l.pendingOrders),
+        ]);
+      }
     }
     rows.push([
       'GERAL',
-      'Todos os eventos',
+      filterEventId ? 'Evento filtrado' : 'Todos os eventos',
       '',
       String(data.general.paidOrders),
       String(data.general.paidTickets),
@@ -222,77 +295,134 @@ export default function ReportsPage() {
     { id: 'eventos', label: 'Por evento', icon: Calendar },
   ];
 
-  if (loading && !data) {
-    return (
-      <div className="flex items-center justify-center py-24 text-zinc-400 gap-2">
-        <Loader2 className="animate-spin" size={18} /> Carregando relatórios…
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="max-w-lg mx-auto text-center py-16">
-        <p className="text-zinc-400">Não foi possível carregar os relatórios.</p>
-        <button type="button" onClick={load} className="btn btn-primary mt-4">
-          Tentar de novo
-        </button>
-      </div>
-    );
-  }
-
-  const g = data.general;
+  const g = data?.general;
 
   return (
-    <div className="max-w-6xl mx-auto pb-10">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+    <div className="max-w-6xl mx-auto pb-10 reports-print-root">
+      {/* Header — some controls hide on print */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 print:mb-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Relatórios</h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Visão geral e por evento · bruto/líquido só de pedidos <strong className="text-zinc-300">pagos</strong>
+          <p className="text-sm text-zinc-400 mt-1 print:text-zinc-600">
+            Escolha filtros e gere · bruto/líquido só de pedidos{' '}
+            <strong className="text-zinc-300">pagos</strong>
           </p>
-          {data.generatedAt && (
+          {data?.generatedAt && (
             <p className="text-[11px] text-zinc-600 mt-1">
-              Atualizado{' '}
+              Gerado em{' '}
               {new Date(data.generatedAt).toLocaleString('pt-BR', {
                 timeZone: 'America/Maceio',
               })}
+              {filtersDirty && (
+                <span className="text-amber-400 ml-2 print:hidden">· filtros alterados — gere de novo</span>
+              )}
             </p>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 print:hidden">
           <button
             type="button"
-            onClick={load}
+            onClick={() => void load()}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
+            {loading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Play size={14} />
+            )}
+            Gerar relatório
           </button>
-          <button
-            type="button"
-            onClick={exportCsv}
-            className="inline-flex items-center gap-2 rounded-xl bg-white text-black px-3 py-2 text-sm font-medium hover:bg-zinc-100"
-          >
-            <Download size={14} /> Exportar CSV
-          </button>
+          {hasGenerated && (
+            <>
+              <button
+                type="button"
+                onClick={() => void load()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
+              </button>
+              <button
+                type="button"
+                onClick={exportCsv}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5"
+              >
+                <Download size={14} /> CSV
+              </button>
+              <button
+                type="button"
+                onClick={exportPdf}
+                className="inline-flex items-center gap-2 rounded-xl bg-white text-black px-3 py-2 text-sm font-medium hover:bg-zinc-100"
+              >
+                <FileText size={14} /> Exportar PDF
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="mb-6">
+      {/* Filtros — sempre visíveis */}
+      <div className="mb-6 rounded-2xl border border-white/10 bg-zinc-900/80 p-4 sm:p-5 space-y-4 print:border-0 print:p-0 print:bg-transparent">
         <PeriodFilter
           period={period}
-          onPeriodChange={setPeriod}
+          onPeriodChange={(p) => {
+            setPeriod(p);
+            markDirty();
+          }}
           customFrom={customFrom}
           customTo={customTo}
-          onCustomFromChange={setCustomFrom}
-          onCustomToChange={setCustomTo}
+          onCustomFromChange={(v) => {
+            setCustomFrom(v);
+            markDirty();
+          }}
+          onCustomToChange={(v) => {
+            setCustomTo(v);
+            markDirty();
+          }}
         />
+        <div className="print:hidden">
+          <label className="block text-[11px] uppercase tracking-wide text-zinc-500 mb-2">
+            Evento (opcional)
+          </label>
+          <select
+            className="input w-full max-w-xl text-sm"
+            value={filterEventId}
+            onChange={(e) => {
+              setFilterEventId(e.target.value);
+              markDirty();
+            }}
+          >
+            <option value="">Todos os eventos</option>
+            {eventOptions.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!hasGenerated && (
+          <p className="text-xs text-zinc-500 print:hidden">
+            Defina o período e clique em <strong className="text-zinc-300">Gerar relatório</strong> para
+            ver KPIs, gráficos e tabelas.
+          </p>
+        )}
       </div>
 
+      {!hasGenerated && !loading && (
+        <EmptyState text="Nenhum relatório gerado ainda. Escolha o período (e opcionalmente um evento) e clique em Gerar relatório." />
+      )}
+
+      {loading && !data && (
+        <div className="flex items-center justify-center py-16 text-zinc-400 gap-2">
+          <Loader2 className="animate-spin" size={18} /> Gerando relatório…
+        </div>
+      )}
+
+      {data && g && (
+        <>
       {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-white/10 w-full sm:w-auto mb-6 max-w-md">
+      <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-white/10 w-full sm:w-auto mb-6 max-w-md print:hidden">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -314,7 +444,7 @@ export default function ReportsPage() {
 
       {/* ─── GERAL ─── */}
       {tab === 'geral' && (
-        <div className="space-y-6">
+        <div className="space-y-6 reports-print-section">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <KpiCard
               label="Bruto (pagos)"
@@ -695,6 +825,8 @@ export default function ReportsPage() {
             </>
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   );

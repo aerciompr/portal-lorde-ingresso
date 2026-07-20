@@ -65,6 +65,72 @@ html.admin-locked body {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
 
+/* Relatórios: Exportar PDF = print do browser */
+@media print {
+  html.admin-locked,
+  html.admin-locked body {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .admin-shell {
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .admin-shell > aside,
+  .admin-shell > .fixed,
+  .admin-shell header,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .admin-main {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .reports-print-root {
+    max-width: 100% !important;
+    color: #111 !important;
+  }
+
+  .reports-print-root .rounded-2xl,
+  .reports-print-root .card {
+    border-color: #ddd !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  .reports-print-root h1,
+  .reports-print-root h2,
+  .reports-print-root h3,
+  .reports-print-root .font-semibold,
+  .reports-print-root .text-white {
+    color: #111 !important;
+  }
+
+  .reports-print-root .text-emerald-400 {
+    color: #047857 !important;
+  }
+
+  .reports-print-root .text-red-400,
+  .reports-print-root .text-red-400\/90 {
+    color: #b91c1c !important;
+  }
+}
+
 /* No mobile, cards com tabela: padding interno zero na borda para scroll full-bleed */
 @media (max-width: 640px) {
   .admin-main .card {

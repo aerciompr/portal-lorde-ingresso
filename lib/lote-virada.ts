@@ -17,6 +17,55 @@ export async function markLoteEsgotado(loteId: string) {
   });
 }
 
+async function logViradaAndNotify(params: {
+  eventId: string;
+  eventTitle: string;
+  eventSlug: string;
+  eventDate: Date;
+  fromLoteId: string | null;
+  fromLoteNome: string | null;
+  toLoteId: string;
+  toLoteNome: string;
+  precoCents: number;
+  source: 'auto' | 'manual';
+}) {
+  try {
+    await prisma.loteViradaLog.create({
+      data: {
+        eventId: params.eventId,
+        fromLoteId: params.fromLoteId,
+        fromLoteNome: params.fromLoteNome,
+        toLoteId: params.toLoteId,
+        toLoteNome: params.toLoteNome,
+        precoCents: params.precoCents,
+        source: params.source,
+      },
+    });
+  } catch (e) {
+    console.error('[VIRADA] falha ao gravar LoteViradaLog (rode sql-lote-virada-log.sql?):', e);
+  }
+
+  try {
+    const { getAlertEmailForLote } = await import('@/lib/lote-stock-alerts');
+    const { sendLoteViradaAlert } = await import('@/lib/email');
+    const to = await getAlertEmailForLote();
+    if (to) {
+      await sendLoteViradaAlert({
+        to,
+        eventTitle: params.eventTitle,
+        eventSlug: params.eventSlug,
+        eventDate: params.eventDate,
+        fromLoteNome: params.fromLoteNome,
+        toLoteNome: params.toLoteNome,
+        precoCents: params.precoCents,
+        source: params.source,
+      });
+    }
+  } catch (e) {
+    console.error('[VIRADA] falha ao enviar e-mail de virada:', e);
+  }
+}
+
 /**
  * Cria o próximo lote e torna-o ativo.
  * O lote ativo anterior fica esgotado + inativo.
@@ -27,6 +76,7 @@ export async function activateNewLote(options: {
   precoCents: number;
   totalQty: number;
   viradaAutomatica?: boolean;
+  source?: 'auto' | 'manual';
 }) {
   const event = await prisma.event.findUnique({
     where: { id: options.eventId },
@@ -35,9 +85,15 @@ export async function activateNewLote(options: {
   if (!event) throw new Error('Evento não encontrado');
 
   const maxOrdem = event.lotes[0]?.ordem || 0;
+  const fromLoteId = event.activeLoteId || null;
+  const fromLote = fromLoteId
+    ? event.lotes.find((l) => l.id === fromLoteId) ||
+      (await prisma.lote.findUnique({ where: { id: fromLoteId } }))
+    : null;
+  const fromLoteNome = fromLote?.nome || null;
 
-  if (event.activeLoteId) {
-    await markLoteEsgotado(event.activeLoteId);
+  if (fromLoteId) {
+    await markLoteEsgotado(fromLoteId);
   }
 
   // Qualquer outro lote ainda marcado ativo (inconsistência)
@@ -71,6 +127,20 @@ export async function activateNewLote(options: {
   } catch (e) {
     console.error('[VIRADA] sync ticket type falhou', e);
   }
+
+  const source = options.source || 'manual';
+  await logViradaAndNotify({
+    eventId: options.eventId,
+    eventTitle: event.title,
+    eventSlug: event.slug,
+    eventDate: event.date,
+    fromLoteId,
+    fromLoteNome,
+    toLoteId: newLote.id,
+    toLoteNome: newLote.nome,
+    precoCents: newLote.precoCents,
+    source,
+  });
 
   return newLote;
 }
@@ -113,6 +183,7 @@ export async function performAutomaticVirada(eventId: string): Promise<{
     precoCents: nextPreco,
     totalQty: nextQty,
     viradaAutomatica: true,
+    source: 'auto',
   });
 
   console.log(

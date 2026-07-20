@@ -43,6 +43,7 @@ model Event {
   ticketTypes TicketType[]
   orders      Order[]
   promoCodes  PromoCode[]
+  loteViradas LoteViradaLog[]
 }
 
 model TicketType {
@@ -204,6 +205,23 @@ model Lote {
   activeForEvent Event?  @relation("EventToActiveLote")
 
   @@index([eventId])
+}
+
+/** Histórico de viradas de lote (auto ou manual) — feed admin + e-mail */
+model LoteViradaLog {
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  fromLoteId   String?  @db.VarChar(191)
+  fromLoteNome String?  @db.VarChar(255)
+  toLoteId     String   @db.VarChar(191)
+  toLoteNome   String   @db.VarChar(255)
+  precoCents   Int
+  source       String   @db.VarChar(16) // auto | manual
+  createdAt    DateTime @default(now())
+
+  @@index([eventId])
+  @@index([createdAt])
 }
 
 /**

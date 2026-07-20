@@ -69,6 +69,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const fromStr = url.searchParams.get('from'); // YYYY-MM-DD
     const toStr = url.searchParams.get('to');
+    const eventIdFilter = (url.searchParams.get('eventId') || '').trim() || null;
 
     let fromDate: Date | null = null;
     let toDate: Date | null = null;
@@ -83,6 +84,7 @@ export async function GET(req: Request) {
 
     const [events, ordersRaw] = await Promise.all([
       prisma.event.findMany({
+        where: eventIdFilter ? { id: eventIdFilter } : undefined,
         select: {
           id: true,
           title: true,
@@ -97,6 +99,7 @@ export async function GET(req: Request) {
       prisma.order.findMany({
         where: {
           status: { in: ['paid', 'refunded', 'pending', 'cancelled', 'canceled'] },
+          ...(eventIdFilter ? { eventId: eventIdFilter } : {}),
         },
         select: {
           id: true,
@@ -252,6 +255,7 @@ export async function GET(req: Request) {
       period: {
         from: fromStr || null,
         to: toStr || null,
+        eventId: eventIdFilter,
       },
       general: {
         ...general,

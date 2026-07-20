@@ -78,6 +78,19 @@ export default function AdminDashboard() {
     alertEmail: string | null;
     counts: { total: number; critical: number; low: number };
   } | null>(null);
+  const [viradas, setViradas] = useState<{
+    items: Array<{
+      id: string;
+      eventId: string;
+      eventTitle: string;
+      fromLoteNome: string | null;
+      toLoteNome: string;
+      precoCents: number;
+      source: string;
+      createdAt: string;
+    }>;
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     import('recharts').then(setRecharts).catch(() => undefined);
@@ -106,11 +119,21 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const loadViradas = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/lotes/viradas?limit=8', { credentials: 'include' });
+      if (res.ok) setViradas(await res.json());
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     load();
     loadCron();
     loadLowStock();
-  }, [load, loadCron, loadLowStock]);
+    loadViradas();
+  }, [load, loadCron, loadLowStock, loadViradas]);
 
   const periodRange = useMemo(() => {
     const r = periodToRange(period, customFrom, customTo);
@@ -289,6 +312,7 @@ export default function AdminDashboard() {
       load();
       loadCron();
       loadLowStock();
+      loadViradas();
     } catch (e) {
       const msg = (e as Error).message;
       setCronLastResult({ ok: false, message: msg, details: [] });
@@ -318,8 +342,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Desktop: 3 colunas · Mobile: empilhado */}
-      <div className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4 lg:items-stretch">
+      {/* Desktop: 2×2 · Mobile: empilhado */}
+      <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 lg:items-stretch">
         {/* Check-in */}
         <div className="p-4 border border-emerald-900/50 bg-emerald-950/30 rounded-2xl text-sm flex flex-col min-h-0">
           <div className="flex items-center gap-2 mb-1">
@@ -336,6 +360,70 @@ export default function AdminDashboard() {
           <div className="text-[10px] mt-1 text-zinc-500 flex-1">
             Login de staff. Eventos, pedidos e configs no menu lateral.
           </div>
+        </div>
+
+        {/* Últimas viradas de lote */}
+        <div className="p-4 border border-sky-500/25 bg-sky-950/20 rounded-2xl text-sm flex flex-col min-h-0">
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+            <div className="min-w-0">
+              <div className="font-medium text-sky-200 flex items-center gap-2 text-sm">
+                <span>🔄</span> Últimas viradas de lote
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-0.5 leading-snug">
+                Auto e manual · e-mail no mesmo destino do alerta de estoque
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadViradas()}
+              className="text-[10px] px-2 py-0.5 rounded-lg border border-white/10 text-zinc-400 hover:bg-white/5 shrink-0"
+            >
+              Atualizar
+            </button>
+          </div>
+          {!viradas ? (
+            <p className="text-xs text-zinc-500">Carregando…</p>
+          ) : viradas.error ? (
+            <p className="text-xs text-amber-400/90">{viradas.error}</p>
+          ) : viradas.items.length === 0 ? (
+            <p className="text-xs text-zinc-500">Nenhuma virada registrada ainda.</p>
+          ) : (
+            <div className="space-y-1.5 overflow-y-auto max-h-48 lg:max-h-56">
+              {viradas.items.map((v) => (
+                <a
+                  key={v.id}
+                  href={`/admin/eventos`}
+                  className="block rounded-xl border border-sky-500/20 bg-sky-950/30 p-2.5 hover:brightness-110 transition"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-zinc-100 truncate">
+                        {v.eventTitle}
+                      </div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
+                        {v.fromLoteNome || '—'} →{' '}
+                        <span className="text-emerald-400">{v.toLoteNome}</span>
+                        {' · '}
+                        {formatPrice(v.precoCents)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-zinc-400">
+                      {v.source === 'auto' ? 'auto' : 'manual'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-zinc-600 mt-1 tabular-nums">
+                    {new Date(v.createdAt).toLocaleString('pt-BR', {
+                      timeZone: 'America/Maceio',
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Lotes perto de acabar */}
