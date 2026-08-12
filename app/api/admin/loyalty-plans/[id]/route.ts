@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
 import { requireAdminMutation } from '@/lib/request-security';
+import { validateLoyaltyPlanPrices, syncLoyaltyPlanPrices } from '@/lib/loyalty-plan-prices';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     const row = await prisma.loyaltyPlan.findUnique({
       where: { id },
       include: {
+        prices: { orderBy: { createdAt: 'asc' } },
         memberships: {
           orderBy: { createdAt: 'desc' },
           take: 30,
@@ -74,19 +76,6 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       data.description = body.description ? String(body.description) : null;
     }
     if (body.active !== undefined) data.active = Boolean(body.active);
-    if (body.stripePriceId !== undefined) {
-      data.stripePriceId = body.stripePriceId
-        ? String(body.stripePriceId).trim().slice(0, 191)
-        : null;
-    }
-
-    const priceCents = parseOptionalInt(body.priceCents);
-    if (priceCents !== undefined) {
-      if (priceCents === null || priceCents < 0) {
-        return NextResponse.json({ error: 'Mensalidade inválida' }, { status: 400 });
-      }
-      data.priceCents = priceCents;
-    }
 
     const freeEntriesPerCycle = parseOptionalInt(body.freeEntriesPerCycle);
     if (freeEntriesPerCycle !== undefined) {
@@ -101,8 +90,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
     const checkinsPerEntry = parseOptionalInt(body.checkinsPerEntry);
     if (checkinsPerEntry !== undefined) {
-      if (checkinsPerEntry !== 1 && checkinsPerEntry !== 2) {
-        return NextResponse.json({ error: 'Check-ins por entrada deve ser 1 ou 2' }, { status: 400 });
+      if (checkinsPerEntry === null || checkinsPerEntry < 1) {
+        return NextResponse.json({ error: 'Check-ins por entrada deve ser 1 ou mais' }, { status: 400 });
       }
       data.checkinsPerEntry = checkinsPerEntry;
     }
@@ -118,7 +107,19 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       data.overageDiscountPercent = overageDiscountPercent;
     }
 
-    const updated = await prisma.loyaltyPlan.update({ where: { id }, data });
+    if (body.prices !== undefined) {
+      const pricesResult = validateLoyaltyPlanPrices(body.prices);
+      if ('error' in pricesResult) {
+        return NextResponse.json({ error: pricesResult.error }, { status: 400 });
+      }
+      await syncLoyaltyPlanPrices(id, pricesResult.items);
+    }
+
+    await prisma.loyaltyPlan.update({ where: { id }, data });
+    const updated = await prisma.loyaltyPlan.findUnique({
+      where: { id },
+      include: { prices: { orderBy: { createdAt: 'asc' } } },
+    });
     return NextResponse.json({ plan: updated });
   } catch (e) {
     console.error('[admin/loyalty-plans PATCH]', e);

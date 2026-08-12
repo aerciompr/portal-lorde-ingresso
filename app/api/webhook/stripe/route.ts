@@ -47,6 +47,13 @@ async function markPaidFromIntent(paymentIntent: Stripe.PaymentIntent) {
   console.log('[STRIPE] reconcile by PI', paymentIntent.id, r);
 }
 
+/** +1 mês (naive — pequeno desvio em finais de mês é aceitável pra cadência de goteira). */
+function addOneMonth(d: Date): Date {
+  const copy = new Date(d);
+  copy.setMonth(copy.getMonth() + 1);
+  return copy;
+}
+
 /** Mapeia status de assinatura Stripe -> enum interno de LoyaltyMembership. */
 function mapSubscriptionStatus(s: Stripe.Subscription.Status): string {
   if (s === 'active' || s === 'trialing') return 'active';
@@ -100,17 +107,21 @@ async function handleLoyaltyInvoicePaid(invoice: Stripe.Invoice, stripe: Stripe)
     (firstItem?.current_period_end ?? nowSec + 30 * 86400) * 1000
   );
 
+  // Cota de entradas grátis reseta todo mês via cron (nextMonthlyResetAt), não aqui —
+  // desacoplada do ciclo de cobrança da Stripe, que pode ser trimestral/semestral/anual.
+  const isFirstPayment = !membership.cardEmailSentAt;
+
   await prisma.loyaltyMembership.update({
     where: { id: membership.id },
     data: {
       status: 'active',
       currentPeriodStart,
       currentPeriodEnd,
-      entriesUsedInPeriod: 0,
+      ...(isFirstPayment ? { nextMonthlyResetAt: addOneMonth(new Date()) } : {}),
     },
   });
 
-  if (!membership.cardEmailSentAt) {
+  if (isFirstPayment) {
     try {
       const { generateLoyaltyCardPDF } = await import('@/lib/generate-loyalty-card');
       const { signCode } = await import('@/lib/validate-ticket');

@@ -6,22 +6,27 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/loyalty/plans
- * Público — lista pacotes ativos do clube de fidelidade para a página de assinatura.
- * Nunca expõe stripePriceId nem qualquer dado interno (mesma filosofia de lib/settings-public.ts).
+ * Público — lista pacotes ativos do clube de fidelidade, com as periodicidades ativas
+ * de cada um, para a página de assinatura. Nunca expõe stripePriceId nem qualquer
+ * dado interno (mesma filosofia de lib/settings-public.ts).
  */
 export async function GET() {
   try {
     const plans = await prisma.loyaltyPlan.findMany({
-      where: { active: true },
-      orderBy: { priceCents: 'asc' },
+      where: { active: true, prices: { some: { active: true } } },
+      orderBy: { createdAt: 'asc' },
       select: {
         id: true,
         name: true,
         description: true,
-        priceCents: true,
         freeEntriesPerCycle: true,
         checkinsPerEntry: true,
         overageDiscountPercent: true,
+        prices: {
+          where: { active: true },
+          orderBy: { priceCents: 'asc' },
+          select: { id: true, interval: true, priceCents: true },
+        },
       },
     });
     return NextResponse.json({ plans });

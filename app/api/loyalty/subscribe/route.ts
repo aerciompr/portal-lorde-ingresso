@@ -13,20 +13,26 @@ export const dynamic = 'force-dynamic';
  * e devolve a URL do checkout hospedado da Stripe.
  */
 export async function POST(req: NextRequest) {
-  let body: { planId?: string; name?: string; email?: string; cpf?: string; phone?: string };
+  let body: {
+    planPriceId?: string;
+    name?: string;
+    email?: string;
+    cpf?: string;
+    phone?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
   }
 
-  const planId = String(body.planId || '').trim();
+  const planPriceId = String(body.planPriceId || '').trim();
   const name = String(body.name || '').trim();
   const email = String(body.email || '').trim().toLowerCase();
   const cpf = body.cpf ? cleanCpf(String(body.cpf)) : '';
   const phone = body.phone ? cleanPhone(String(body.phone)) : '';
 
-  if (!planId) return NextResponse.json({ error: 'planId obrigatório' }, { status: 400 });
+  if (!planPriceId) return NextResponse.json({ error: 'planPriceId obrigatório' }, { status: 400 });
   if (!name) return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: 'E-mail inválido' }, { status: 400 });
@@ -38,16 +44,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Telefone inválido' }, { status: 400 });
   }
 
-  const plan = await prisma.loyaltyPlan.findUnique({ where: { id: planId } });
-  if (!plan || !plan.active) {
-    return NextResponse.json({ error: 'Pacote não encontrado ou inativo' }, { status: 404 });
+  const planPrice = await prisma.loyaltyPlanPrice.findUnique({
+    where: { id: planPriceId },
+    include: { plan: true },
+  });
+  if (!planPrice || !planPrice.active || !planPrice.plan.active) {
+    return NextResponse.json({ error: 'Periodicidade não encontrada ou inativa' }, { status: 404 });
   }
-  if (!plan.stripePriceId) {
+  if (!planPrice.stripePriceId) {
     return NextResponse.json(
-      { error: 'Pacote ainda não está configurado para cobrança (falta Stripe Price ID no admin)' },
+      { error: 'Periodicidade ainda não está configurada para cobrança (falta Stripe Price ID no admin)' },
       { status: 400 }
     );
   }
+  const plan = planPrice.plan;
 
   const { stripe, useConnect, stripeAccountId, appUrl } = await getStripeForLoyalty();
   if (!stripe) {
@@ -70,6 +80,7 @@ export async function POST(req: NextRequest) {
   const membership = await prisma.loyaltyMembership.create({
     data: {
       planId: plan.id,
+      planPriceId: planPrice.id,
       cardCode,
       buyerName: name,
       buyerEmail: email,
@@ -83,7 +94,7 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create(
       {
         mode: 'subscription',
-        line_items: [{ price: plan.stripePriceId, quantity: 1 }],
+        line_items: [{ price: planPrice.stripePriceId, quantity: 1 }],
         customer_email: email,
         metadata: { membershipId: membership.id },
         subscription_data: { metadata: { membershipId: membership.id } },

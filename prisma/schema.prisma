@@ -301,38 +301,60 @@ model StaffUser {
 }
 
 /**
- * Clube de fidelidade — pacote configurável (admin) de assinatura mensal.
- * checkinsPerEntry: 1 = só titular, 2 = titular + acompanhante por entrada resgatada.
+ * Clube de fidelidade — pacote configurável (admin) de assinatura recorrente.
+ * checkinsPerEntry: quantos check-ins uma entrada resgatada libera (1 = só titular, N = titular + N-1 acompanhantes).
  * overageDiscountPercent: desconto aplicado quando a cota de entradas grátis do ciclo já foi usada.
- * stripePriceId: Price recorrente criado manualmente no Dashboard Stripe (não gerado pelo backend).
+ * O preço em si fica em LoyaltyPlanPrice — um plano pode ter mais de uma periodicidade (mensal/trimestral/semestral/anual).
  */
 model LoyaltyPlan {
   id                     String   @id @default(cuid())
   name                   String   @db.VarChar(255)
   description            String?  @db.Text
-  priceCents             Int
   freeEntriesPerCycle    Int      @default(1)
   checkinsPerEntry       Int      @default(1)
   overageDiscountPercent Int      @default(0)
-  stripePriceId          String?  @db.VarChar(191)
   active                 Boolean  @default(true)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
+  prices      LoyaltyPlanPrice[]
   memberships LoyaltyMembership[]
 
   @@index([active])
 }
 
 /**
+ * Uma opção de cobrança (periodicidade) dentro de um LoyaltyPlan.
+ * interval: monthly | quarterly | semiannual | annual
+ * stripePriceId: Price recorrente criado manualmente no Dashboard Stripe, com o MESMO intervalo (não gerado pelo backend).
+ */
+model LoyaltyPlanPrice {
+  id            String   @id @default(cuid())
+  planId        String
+  plan          LoyaltyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  interval      String   @db.VarChar(16)
+  priceCents    Int
+  stripePriceId String?  @db.VarChar(191)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  memberships LoyaltyMembership[]
+
+  @@unique([planId, interval])
+}
+
+/**
  * Assinatura de um cliente a um LoyaltyPlan (cartão de fidelidade).
  * status: pending | active | past_due | canceled | expired
- * entriesUsedInPeriod zera a cada renovação (currentPeriodStart avança).
+ * entriesUsedInPeriod zera todo mês via cron (nextMonthlyResetAt) — independente do ciclo de
+ * cobrança da Stripe (currentPeriodStart/End), que pode ser trimestral/semestral/anual.
  */
 model LoyaltyMembership {
   id                   String    @id @default(cuid())
   planId               String
   plan                 LoyaltyPlan @relation(fields: [planId], references: [id])
+  planPriceId          String?
+  planPrice            LoyaltyPlanPrice? @relation(fields: [planPriceId], references: [id])
   cardCode             String    @unique @db.VarChar(32)
   buyerName            String    @db.VarChar(255)
   buyerEmail           String    @db.VarChar(255)
@@ -344,6 +366,8 @@ model LoyaltyMembership {
   currentPeriodStart   DateTime?
   currentPeriodEnd     DateTime?
   entriesUsedInPeriod  Int       @default(0)
+  /** Próximo reset da cota de entradas grátis — mensal sempre, independente da fatura Stripe */
+  nextMonthlyResetAt   DateTime?
   cardEmailSentAt      DateTime?
   createdAt            DateTime  @default(now())
   canceledAt           DateTime?
@@ -353,6 +377,7 @@ model LoyaltyMembership {
   @@index([buyerEmail])
   @@index([status])
   @@index([planId])
+  @@index([planPriceId])
 }
 
 /** Um resgate (entrada grátis ou com desconto de excedente) usando o cartão fidelidade num evento. */

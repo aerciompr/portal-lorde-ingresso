@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
 import { requireAdminMutation } from '@/lib/request-security';
+import { validateLoyaltyPlanPrices, syncLoyaltyPlanPrices } from '@/lib/loyalty-plan-prices';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,8 +17,8 @@ function parseOptionalInt(v: unknown): number | null {
 function validatePlanFields(body: Record<string, unknown>): { error: string } | null {
   if (body.checkinsPerEntry !== undefined) {
     const c = parseOptionalInt(body.checkinsPerEntry);
-    if (c !== 1 && c !== 2) {
-      return { error: 'Check-ins por entrada deve ser 1 ou 2' };
+    if (c === null || c < 1) {
+      return { error: 'Check-ins por entrada deve ser 1 ou mais' };
     }
   }
   if (body.overageDiscountPercent !== undefined) {
@@ -32,18 +33,12 @@ function validatePlanFields(body: Record<string, unknown>): { error: string } | 
       return { error: 'Entradas grátis por ciclo não pode ser negativo' };
     }
   }
-  if (body.priceCents !== undefined) {
-    const p = parseOptionalInt(body.priceCents);
-    if (p === null || p < 0) {
-      return { error: 'Mensalidade inválida' };
-    }
-  }
   return null;
 }
 
 /**
  * GET /api/admin/loyalty-plans
- * Lista pacotes do clube de fidelidade (Fase 1 do plano: sem cobrança ainda).
+ * Lista pacotes do clube de fidelidade, com as periodicidades de cada um.
  */
 export async function GET(req: NextRequest) {
   if (!(await isAdmin())) {
@@ -60,8 +55,9 @@ export async function GET(req: NextRequest) {
 
     const list = await prisma.loyaltyPlan.findMany({
       where,
-      orderBy: [{ active: 'desc' }, { priceCents: 'asc' }],
+      orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
       include: {
+        prices: { orderBy: { createdAt: 'asc' } },
         _count: { select: { memberships: true } },
       },
     });
@@ -100,7 +96,11 @@ export async function POST(req: NextRequest) {
     const invalid = validatePlanFields(body);
     if (invalid) return NextResponse.json(invalid, { status: 400 });
 
-    const priceCents = parseOptionalInt(body.priceCents) ?? 0;
+    const pricesResult = validateLoyaltyPlanPrices(body.prices);
+    if ('error' in pricesResult) {
+      return NextResponse.json({ error: pricesResult.error }, { status: 400 });
+    }
+
     const checkinsPerEntry = parseOptionalInt(body.checkinsPerEntry) ?? 1;
     const overageDiscountPercent = parseOptionalInt(body.overageDiscountPercent) ?? 0;
     const freeEntriesPerCycle = parseOptionalInt(body.freeEntriesPerCycle) ?? 1;
@@ -109,16 +109,21 @@ export async function POST(req: NextRequest) {
       data: {
         name: name.slice(0, 255),
         description: body.description ? String(body.description) : null,
-        priceCents,
         freeEntriesPerCycle,
         checkinsPerEntry,
         overageDiscountPercent,
-        stripePriceId: body.stripePriceId ? String(body.stripePriceId).trim().slice(0, 191) : null,
         active: body.active !== false && body.active !== '0',
       },
     });
 
-    return NextResponse.json({ plan: created }, { status: 201 });
+    await syncLoyaltyPlanPrices(created.id, pricesResult.items);
+
+    const withPrices = await prisma.loyaltyPlan.findUnique({
+      where: { id: created.id },
+      include: { prices: { orderBy: { createdAt: 'asc' } } },
+    });
+
+    return NextResponse.json({ plan: withPrices }, { status: 201 });
   } catch (e) {
     console.error('[admin/loyalty-plans POST]', e);
     const err = e as { message?: string };

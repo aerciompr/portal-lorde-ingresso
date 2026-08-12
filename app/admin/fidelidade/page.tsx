@@ -2,44 +2,81 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Award, Plus, Pencil, Power, Users } from 'lucide-react';
+import { Award, Plus, Pencil, Power, Users, Trash2 } from 'lucide-react';
 import { formatPrice, centsToInput, parseBRLToCents } from '@/lib/utils';
+
+const INTERVALS = ['monthly', 'quarterly', 'semiannual', 'annual'] as const;
+type Interval = (typeof INTERVALS)[number];
+const INTERVAL_LABELS: Record<Interval, string> = {
+  monthly: 'Mensal',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual',
+};
+
+type LoyaltyPlanPrice = {
+  id: string;
+  interval: string;
+  priceCents: number;
+  stripePriceId: string | null;
+  active: boolean;
+};
 
 type LoyaltyPlan = {
   id: string;
   name: string;
   description: string | null;
-  priceCents: number;
   freeEntriesPerCycle: number;
   checkinsPerEntry: number;
   overageDiscountPercent: number;
-  stripePriceId: string | null;
   active: boolean;
   createdAt: string;
+  prices: LoyaltyPlanPrice[];
   _count?: { memberships: number };
+};
+
+type PriceRow = {
+  id?: string;
+  interval: Interval;
+  priceInput: string;
+  stripePriceId: string;
+  active: boolean;
 };
 
 type FormState = {
   name: string;
   description: string;
-  priceInput: string;
   freeEntriesPerCycle: string;
-  checkinsPerEntry: 1 | 2;
+  checkinsPerEntry: string;
   overageDiscountPercent: string;
-  stripePriceId: string;
   active: boolean;
+  prices: PriceRow[];
 };
+
+const emptyPriceRow = (interval: Interval = 'monthly'): PriceRow => ({
+  interval,
+  priceInput: centsToInput(3990),
+  stripePriceId: '',
+  active: true,
+});
 
 const emptyForm = (): FormState => ({
   name: '',
   description: '',
-  priceInput: centsToInput(3990),
   freeEntriesPerCycle: '1',
-  checkinsPerEntry: 1,
+  checkinsPerEntry: '1',
   overageDiscountPercent: '10',
-  stripePriceId: '',
   active: true,
+  prices: [emptyPriceRow()],
 });
+
+function priceSummary(prices: LoyaltyPlanPrice[]): string {
+  const active = prices.filter((p) => p.active);
+  if (!active.length) return '—';
+  return active
+    .map((p) => `${INTERVAL_LABELS[p.interval as Interval] || p.interval} ${formatPrice(p.priceCents)}`)
+    .join(' · ');
+}
 
 export default function AdminFidelidadePage() {
   const [list, setList] = useState<LoyaltyPlan[]>([]);
@@ -86,35 +123,76 @@ export default function AdminFidelidadePage() {
 
   function startEdit(p: LoyaltyPlan) {
     setEditingId(p.id);
+    const activePrices = p.prices.filter((pp) => pp.active);
     setForm({
       name: p.name,
       description: p.description || '',
-      priceInput: centsToInput(p.priceCents),
       freeEntriesPerCycle: String(p.freeEntriesPerCycle),
-      checkinsPerEntry: p.checkinsPerEntry === 2 ? 2 : 1,
+      checkinsPerEntry: String(p.checkinsPerEntry),
       overageDiscountPercent: String(p.overageDiscountPercent),
-      stripePriceId: p.stripePriceId || '',
       active: p.active,
+      prices: activePrices.length
+        ? activePrices.map((pp) => ({
+            id: pp.id,
+            interval: (INTERVALS as readonly string[]).includes(pp.interval)
+              ? (pp.interval as Interval)
+              : 'monthly',
+            priceInput: centsToInput(pp.priceCents),
+            stripePriceId: pp.stripePriceId || '',
+            active: true,
+          }))
+        : [emptyPriceRow()],
     });
     setShowForm(true);
+  }
+
+  function addPriceRow() {
+    const used = new Set(form.prices.map((p) => p.interval));
+    const next = INTERVALS.find((i) => !used.has(i)) || 'monthly';
+    setForm({ ...form, prices: [...form.prices, emptyPriceRow(next)] });
+  }
+
+  function removePriceRow(index: number) {
+    if (form.prices.length <= 1) {
+      toast.error('O pacote precisa de ao menos uma periodicidade');
+      return;
+    }
+    setForm({ ...form, prices: form.prices.filter((_, i) => i !== index) });
+  }
+
+  function updatePriceRow(index: number, patch: Partial<PriceRow>) {
+    setForm({
+      ...form,
+      prices: form.prices.map((p, i) => (i === index ? { ...p, ...patch } : p)),
+    });
   }
 
   function buildPayload() {
     return {
       name: form.name.trim(),
       description: form.description.trim() || null,
-      priceCents: parseBRLToCents(form.priceInput),
       freeEntriesPerCycle: parseInt(form.freeEntriesPerCycle, 10) || 0,
-      checkinsPerEntry: form.checkinsPerEntry,
+      checkinsPerEntry: parseInt(form.checkinsPerEntry, 10) || 1,
       overageDiscountPercent: parseInt(form.overageDiscountPercent, 10) || 0,
-      stripePriceId: form.stripePriceId.trim() || null,
       active: form.active,
+      prices: form.prices.map((p) => ({
+        id: p.id,
+        interval: p.interval,
+        priceCents: parseBRLToCents(p.priceInput),
+        stripePriceId: p.stripePriceId.trim() || null,
+        active: p.active,
+      })),
     };
   }
 
   async function save() {
     if (!form.name.trim()) {
       toast.error('Informe o nome do pacote');
+      return;
+    }
+    const intervals = form.prices.map((p) => p.interval);
+    if (new Set(intervals).size !== intervals.length) {
+      toast.error('Não repita a mesma periodicidade em duas linhas');
       return;
     }
     setSaving(true);
@@ -165,9 +243,10 @@ export default function AdminFidelidadePage() {
             Clube de fidelidade
           </h1>
           <p className="text-sm text-zinc-400 mt-1">
-            Pacotes de assinatura mensal: entradas grátis por ciclo (1 ou 2 check-ins por
-            entrada) + desconto para quem passar da cota. Cobrança recorrente ainda não está
-            ligada — esta tela só gerencia os pacotes.
+            Pacotes de assinatura recorrente (mensal, trimestral, semestral ou anual — a cota
+            de entradas grátis sempre reseta todo mês, mesmo em planos mais longos): entradas
+            grátis por mês, quantos check-ins cada entrada libera (titular + acompanhantes) e
+            desconto para quem passar da cota.
           </p>
         </div>
         <button type="button" className="btn btn-primary gap-2" onClick={startCreate}>
@@ -211,25 +290,14 @@ export default function AdminFidelidadePage() {
               />
             </div>
             <div>
-              <label className="text-[11px] text-zinc-500 block mb-1">Mensalidade (R$) *</label>
+              <label className="text-[11px] text-zinc-500 block mb-1">Descrição (opcional)</label>
               <input
                 className="input text-sm"
-                inputMode="decimal"
-                value={form.priceInput}
-                onChange={(e) => setForm({ ...form, priceInput: e.target.value })}
-                placeholder="69,90"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="Mostrado pro cliente na página do clube"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="text-[11px] text-zinc-500 block mb-1">Descrição (opcional)</label>
-            <input
-              className="input text-sm"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Mostrado pro cliente na página do clube"
-            />
           </div>
 
           <div className="grid sm:grid-cols-3 gap-3">
@@ -249,16 +317,17 @@ export default function AdminFidelidadePage() {
               <label className="text-[11px] text-zinc-500 block mb-1">
                 Check-ins por entrada *
               </label>
-              <select
+              <input
                 className="input text-sm"
+                type="number"
+                min={1}
                 value={form.checkinsPerEntry}
-                onChange={(e) =>
-                  setForm({ ...form, checkinsPerEntry: (Number(e.target.value) === 2 ? 2 : 1) })
-                }
-              >
-                <option value={1}>1 — só titular</option>
-                <option value={2}>2 — titular + acompanhante</option>
-              </select>
+                onChange={(e) => setForm({ ...form, checkinsPerEntry: e.target.value })}
+                placeholder="1 = só titular, 2+ = titular + acompanhantes"
+              />
+              <p className="text-[10px] text-zinc-600 mt-1">
+                1 = só titular · 2 = titular + 1 acompanhante · etc.
+              </p>
             </div>
             <div>
               <label className="text-[11px] text-zinc-500 block mb-1">
@@ -275,16 +344,57 @@ export default function AdminFidelidadePage() {
             </div>
           </div>
 
-          <div>
-            <label className="text-[11px] text-zinc-500 block mb-1">
-              Stripe Price ID (assinatura recorrente)
-            </label>
-            <input
-              className="input text-sm font-mono"
-              value={form.stripePriceId}
-              onChange={(e) => setForm({ ...form, stripePriceId: e.target.value })}
-              placeholder="price_... (criar no Dashboard Stripe — cobrança ainda não está ligada)"
-            />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] text-zinc-500">Periodicidades de cobrança *</label>
+              <button
+                type="button"
+                className="text-xs text-emerald-400 hover:underline inline-flex items-center gap-1"
+                onClick={addPriceRow}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Adicionar periodicidade
+              </button>
+            </div>
+            {form.prices.map((row, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-1 sm:grid-cols-[8rem_6rem_1fr_auto] gap-2 items-center rounded-lg border border-white/10 bg-zinc-950/50 p-2"
+              >
+                <select
+                  className="input py-1.5 text-sm"
+                  value={row.interval}
+                  onChange={(e) => updatePriceRow(i, { interval: e.target.value as Interval })}
+                >
+                  {INTERVALS.map((iv) => (
+                    <option key={iv} value={iv}>
+                      {INTERVAL_LABELS[iv]}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="input py-1.5 text-sm"
+                  inputMode="decimal"
+                  value={row.priceInput}
+                  onChange={(e) => updatePriceRow(i, { priceInput: e.target.value })}
+                  placeholder="69,90"
+                />
+                <input
+                  className="input py-1.5 text-sm font-mono"
+                  value={row.stripePriceId}
+                  onChange={(e) => updatePriceRow(i, { stripePriceId: e.target.value })}
+                  placeholder="price_... (Dashboard Stripe, mesmo intervalo)"
+                />
+                <button
+                  type="button"
+                  className="p-1.5 rounded hover:bg-white/10 text-zinc-500 hover:text-red-400 justify-self-end"
+                  title="Remover periodicidade"
+                  onClick={() => removePriceRow(i)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
           </div>
 
           <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -324,7 +434,7 @@ export default function AdminFidelidadePage() {
             <thead className="bg-zinc-900/80 text-zinc-400 text-left text-xs uppercase tracking-wider">
               <tr>
                 <th className="px-3 py-2.5">Pacote</th>
-                <th className="px-3 py-2.5 text-right">Mensalidade</th>
+                <th className="px-3 py-2.5">Periodicidades</th>
                 <th className="px-3 py-2.5 text-right">Entradas/mês</th>
                 <th className="px-3 py-2.5 text-right">Check-ins</th>
                 <th className="px-3 py-2.5 text-right">Desc. excedente</th>
@@ -344,8 +454,8 @@ export default function AdminFidelidadePage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {formatPrice(p.priceCents)}
+                  <td className="px-3 py-3 text-xs text-zinc-300 max-w-[14rem]">
+                    {priceSummary(p.prices)}
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums">{p.freeEntriesPerCycle}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{p.checkinsPerEntry}</td>

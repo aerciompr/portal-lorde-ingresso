@@ -91,10 +91,11 @@ export async function generateLoyaltyCardPDF(params: LoyaltyCardPDFParams) {
 
   page.drawText('BENEFÍCIO MENSAL', { x: pad, y, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
   y -= 15;
-  const benefit =
-    params.checkinsPerEntry === 2
-      ? `${params.freeEntriesPerCycle} entrada(s) grátis/mês · titular + acompanhante`
-      : `${params.freeEntriesPerCycle} entrada(s) grátis/mês · só titular`;
+  const companion =
+    params.checkinsPerEntry > 1
+      ? `titular + até ${params.checkinsPerEntry - 1} acomp.`
+      : 'só titular';
+  const benefit = `${params.freeEntriesPerCycle} entrada(s) grátis/mês · ${companion}`;
   page.drawText(truncate(benefit, 46), {
     x: pad,
     y,

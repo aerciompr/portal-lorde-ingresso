@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { formatPrice } from '@/lib/utils';
@@ -18,22 +18,50 @@ import {
   Users,
 } from 'lucide-react';
 
+type PlanPrice = { id: string; interval: string; priceCents: number };
+
 type Plan = {
   id: string;
   name: string;
   description: string | null;
-  priceCents: number;
   freeEntriesPerCycle: number;
   checkinsPerEntry: number;
   overageDiscountPercent: number;
+  prices: PlanPrice[];
 };
 
 const TIER_ICONS = [Star, Award, Crown];
 
+const INTERVAL_ORDER = ['monthly', 'quarterly', 'semiannual', 'annual'];
+const INTERVAL_LABELS: Record<string, string> = {
+  monthly: 'Mensal',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  annual: 'Anual',
+};
+const INTERVAL_SUFFIX: Record<string, string> = {
+  monthly: '/mês',
+  quarterly: '/trimestre',
+  semiannual: '/semestre',
+  annual: '/ano',
+};
+
+function companionLabel(checkinsPerEntry: number): string {
+  if (checkinsPerEntry <= 1) return 'Vale só para o titular';
+  const extra = checkinsPerEntry - 1;
+  return `Titular + até ${extra} acompanhante${extra === 1 ? '' : 's'}`;
+}
+
+/** Preço do plano na periodicidade escolhida; cai pro primeiro preço disponível se não tiver essa. */
+function priceForInterval(plan: Plan, interval: string): PlanPrice | null {
+  return plan.prices.find((p) => p.interval === interval) || plan.prices[0] || null;
+}
+
 export default function FidelidadePage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Plan | null>(null);
+  const [interval, setIntervalSel] = useState<string>('monthly');
+  const [selected, setSelected] = useState<{ plan: Plan; price: PlanPrice } | null>(null);
   const [form, setForm] = useState({ name: '', email: '', cpf: '', phone: '' });
   const [submitting, setSubmitting] = useState(false);
 
@@ -45,8 +73,23 @@ export default function FidelidadePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const availableIntervals = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of plans) for (const pp of p.prices) set.add(pp.interval);
+    return INTERVAL_ORDER.filter((i) => set.has(i));
+  }, [plans]);
+
+  // Se a periodicidade selecionada não existe em nenhum plano, cai pra primeira disponível
+  useEffect(() => {
+    if (availableIntervals.length && !availableIntervals.includes(interval)) {
+      setIntervalSel(availableIntervals[0]);
+    }
+  }, [availableIntervals, interval]);
+
   function openSubscribe(plan: Plan) {
-    setSelected(plan);
+    const price = priceForInterval(plan, interval);
+    if (!price) return;
+    setSelected({ plan, price });
     setForm({ name: '', email: '', cpf: '', phone: '' });
   }
 
@@ -80,7 +123,7 @@ export default function FidelidadePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          planId: selected.id,
+          planPriceId: selected.price.id,
           name,
           email,
           cpf: cpfDigits || undefined,
@@ -116,8 +159,8 @@ export default function FidelidadePage() {
             Vire sócio, entre de graça
           </h1>
           <p className="text-base sm:text-lg text-zinc-300 max-w-lg mx-auto leading-relaxed">
-            Assine um pacote mensal e ganhe entradas grátis todo mês — é só mostrar o
-            cartão na porta. Depois da cota, ainda garante desconto nas próximas compras.
+            Assine um pacote e ganhe entradas grátis todo mês — é só mostrar o cartão na
+            porta. Depois da cota, ainda garante desconto nas próximas compras.
           </p>
         </div>
       </div>
@@ -144,6 +187,27 @@ export default function FidelidadePage() {
 
       {/* Pacotes */}
       <div className="max-w-5xl mx-auto px-6 py-12 sm:py-16">
+        {!loading && availableIntervals.length > 1 && (
+          <div className="flex justify-center mb-8">
+            <div className="inline-flex rounded-full border border-white/10 bg-zinc-900/80 p-1 gap-1">
+              {availableIntervals.map((i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setIntervalSel(i)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
+                    interval === i
+                      ? 'bg-amber-400 text-zinc-950'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {INTERVAL_LABELS[i] || i}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {[0, 1, 2].map((i) => (
@@ -169,6 +233,9 @@ export default function FidelidadePage() {
             {plans.map((p, i) => {
               const Icon = TIER_ICONS[Math.min(i, TIER_ICONS.length - 1)];
               const featured = i === featuredIndex;
+              const price = priceForInterval(p, interval);
+              if (!price) return null;
+              const fallback = price.interval !== interval;
               return (
                 <div
                   key={p.id}
@@ -203,10 +270,17 @@ export default function FidelidadePage() {
                     <span
                       className={`text-3xl font-bold ${featured ? 'text-amber-400' : 'text-emerald-400'}`}
                     >
-                      {formatPrice(p.priceCents)}
+                      {formatPrice(price.priceCents)}
                     </span>
-                    <span className="text-zinc-500 text-sm">/mês</span>
+                    <span className="text-zinc-500 text-sm">
+                      {INTERVAL_SUFFIX[price.interval] || ''}
+                    </span>
                   </div>
+                  {fallback && (
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      Disponível só no plano {INTERVAL_LABELS[price.interval] || price.interval}
+                    </p>
+                  )}
 
                   <ul className="mt-5 space-y-2.5 text-sm text-zinc-300 flex-1">
                     <li className="flex items-start gap-2">
@@ -218,11 +292,7 @@ export default function FidelidadePage() {
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <span>
-                        {p.checkinsPerEntry === 2
-                          ? 'Vale para você + 1 acompanhante'
-                          : 'Vale só para o titular'}
-                      </span>
+                      <span>{companionLabel(p.checkinsPerEntry)}</span>
                     </li>
                     {p.overageDiscountPercent > 0 ? (
                       <li className="flex items-start gap-2">
@@ -268,7 +338,7 @@ export default function FidelidadePage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 rounded-2xl w-full max-w-sm p-6 border border-white/10">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold text-lg">Assinar {selected.name}</h3>
+              <h3 className="font-semibold text-lg">Assinar {selected.plan.name}</h3>
               <button
                 type="button"
                 className="text-zinc-500 hover:text-white"
@@ -279,7 +349,10 @@ export default function FidelidadePage() {
               </button>
             </div>
             <p className="text-xs text-zinc-500 mb-4">
-              {formatPrice(selected.priceCents)}/mês · cancele quando quiser
+              {formatPrice(selected.price.priceCents)}
+              {INTERVAL_SUFFIX[selected.price.interval] || ''} ·{' '}
+              {INTERVAL_LABELS[selected.price.interval] || selected.price.interval} · cancele
+              quando quiser
             </p>
             <div className="space-y-3">
               <div>

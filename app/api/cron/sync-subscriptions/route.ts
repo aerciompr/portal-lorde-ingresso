@@ -27,6 +27,12 @@ function mapSubscriptionStatus(s: Stripe.Subscription.Status): string {
   return 'pending';
 }
 
+function addOneMonth(d: Date): Date {
+  const copy = new Date(d);
+  copy.setMonth(copy.getMonth() + 1);
+  return copy;
+}
+
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json(
@@ -77,8 +83,6 @@ export async function GET(req: NextRequest) {
               currentPeriodEnd,
               canceledAt:
                 newStatus === 'canceled' && !m.canceledAt ? new Date() : m.canceledAt,
-              // Novo ciclo detectado pelo cron (webhook falhou) — zera cota também aqui.
-              entriesUsedInPeriod: periodChanged ? 0 : m.entriesUsedInPeriod,
             },
           });
           updated++;
@@ -86,6 +90,30 @@ export async function GET(req: NextRequest) {
       } catch (e: unknown) {
         errors.push(`${m.id}: ${e instanceof Error ? e.message : 'erro'}`);
       }
+    }
+  }
+
+  // Goteira mensal da cota de entradas grátis — independente do ciclo de cobrança
+  // (que pode ser trimestral/semestral/anual). Só assinaturas ativas resetam;
+  // parar de resetar quando cancela/atrasa acontece sozinho pelo filtro de status.
+  let resetCount = 0;
+  const dueForReset = await prisma.loyaltyMembership.findMany({
+    where: { status: 'active', nextMonthlyResetAt: { lte: new Date() } },
+    take: 500,
+  });
+  for (const m of dueForReset) {
+    let next = m.nextMonthlyResetAt as Date;
+    while (next.getTime() <= Date.now()) {
+      next = addOneMonth(next);
+    }
+    try {
+      await prisma.loyaltyMembership.update({
+        where: { id: m.id },
+        data: { entriesUsedInPeriod: 0, nextMonthlyResetAt: next },
+      });
+      resetCount++;
+    } catch (e: unknown) {
+      errors.push(`reset ${m.id}: ${e instanceof Error ? e.message : 'erro'}`);
     }
   }
 
@@ -100,12 +128,15 @@ export async function GET(req: NextRequest) {
     /* ignore */
   }
 
-  console.log(`[CRON sync-subscriptions] checked=${checked} updated=${updated}`);
+  console.log(
+    `[CRON sync-subscriptions] checked=${checked} updated=${updated} monthlyReset=${resetCount}`
+  );
 
   return NextResponse.json({
     success: true,
     checked,
     updated,
+    monthlyReset: resetCount,
     errors: errors.slice(0, 10),
     ranAt,
   });
