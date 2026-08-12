@@ -360,6 +360,15 @@ model LoyaltyMembership {
   buyerEmail           String    @db.VarChar(255)
   buyerCpf             String?   @db.VarChar(32)
   buyerPhone           String?   @db.VarChar(32)
+  buyerBirthDate       DateTime?
+  /** Endereço (mesmos campos/tamanhos de Order, pra consistência) */
+  buyerZip             String?   @db.VarChar(16)
+  buyerStreet          String?   @db.VarChar(255)
+  buyerNumber          String?   @db.VarChar(32)
+  buyerComplement      String?   @db.VarChar(128)
+  buyerNeighborhood    String?   @db.VarChar(128)
+  buyerCity            String?   @db.VarChar(128)
+  buyerState           String?   @db.VarChar(8)
   status               String    @default("pending") @db.VarChar(32)
   stripeCustomerId     String?   @db.VarChar(191)
   stripeSubscriptionId String?   @unique @db.VarChar(191)
@@ -368,16 +377,38 @@ model LoyaltyMembership {
   entriesUsedInPeriod  Int       @default(0)
   /** Próximo reset da cota de entradas grátis — mensal sempre, independente da fatura Stripe */
   nextMonthlyResetAt   DateTime?
+  /** Valor da última fatura paga (invoice.amount_paid) — usado no estorno proporcional; o preço do plano pode mudar depois. */
+  lastInvoiceAmountCents Int?
+  /** payment_intent da última fatura paga — usado pra estornar via Stripe */
+  lastInvoicePaymentIntentId String? @db.VarChar(191)
   cardEmailSentAt      DateTime?
   createdAt            DateTime  @default(now())
   canceledAt           DateTime?
 
   redemptions LoyaltyRedemption[]
+  cancellationRequests LoyaltyCancellationRequest[]
 
   @@index([buyerEmail])
   @@index([status])
   @@index([planId])
   @@index([planPriceId])
+}
+
+/** Solicitação de cancelamento do clube — mesma filosofia do CancellationRequest de ingresso. */
+model LoyaltyCancellationRequest {
+  id           String    @id @default(cuid())
+  membershipId String
+  membership   LoyaltyMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  reason       String    @db.Text
+  /** pending | approved | rejected */
+  status       String    @default("pending") @db.VarChar(32)
+  refundCents  Int?
+  adminNotes   String?   @db.Text
+  requestedAt  DateTime  @default(now())
+  processedAt  DateTime?
+
+  @@index([membershipId])
+  @@index([status])
 }
 
 /** Um resgate (entrada grátis ou com desconto de excedente) usando o cartão fidelidade num evento. */

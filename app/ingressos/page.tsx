@@ -91,6 +91,7 @@ type LoyaltyMembershipInfo = {
   entriesUsedInPeriod: number;
   currentPeriodEnd: string | null;
   hasStripeCustomer: boolean;
+  cancellationStatus: string | null;
   plan: {
     name: string;
     freeEntriesPerCycle: number;
@@ -256,6 +257,44 @@ export default function MeusIngressos() {
     } catch (e) {
       toast.error((e as Error).message || 'Não foi possível abrir o portal de assinatura');
       setPortalLoading(false);
+    }
+  }
+
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+
+  async function submitCancelRequest() {
+    if (!membership) return;
+    if (cancelReason.trim().length < 3) {
+      toast.error('Conte rapidamente o motivo (mín. 3 caracteres)');
+      return;
+    }
+    setCancelSubmitting(true);
+    try {
+      const res = await fetch('/api/loyalty/cancellation-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          membershipId: membership.id,
+          code: membership.cardCode,
+          reason: cancelReason.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao solicitar cancelamento');
+      toast.success(
+        data.previewRefundCents > 0
+          ? `Solicitação enviada. Estorno estimado: ${formatPrice(data.previewRefundCents)}`
+          : 'Solicitação enviada. Nossa equipe vai analisar.'
+      );
+      setCancelModalOpen(false);
+      setCancelReason('');
+      setMembership({ ...membership, cancellationStatus: 'pending' });
+    } catch (e) {
+      toast.error((e as Error).message || 'Não foi possível enviar a solicitação');
+    } finally {
+      setCancelSubmitting(false);
     }
   }
 
@@ -1454,6 +1493,26 @@ export default function MeusIngressos() {
                     </button>
                   )}
                 </div>
+
+                {membership.status === 'active' && (
+                  <div className="pt-2 border-t border-white/10">
+                    {membership.cancellationStatus === 'pending' ? (
+                      <p className="text-xs text-amber-400">
+                        Cancelamento em análise — nossa equipe vai avaliar o estorno proporcional.
+                      </p>
+                    ) : membership.cancellationStatus === 'approved' ? (
+                      <p className="text-xs text-zinc-500">Cancelamento já aprovado.</p>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-xs text-zinc-500 hover:text-red-400 underline"
+                        onClick={() => setCancelModalOpen(true)}
+                      >
+                        Solicitar cancelamento
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1680,6 +1739,50 @@ export default function MeusIngressos() {
             >
               Fechar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Solicitar cancelamento do clube */}
+      {cancelModalOpen && membership && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4"
+          onClick={() => !cancelSubmitting && setCancelModalOpen(false)}
+        >
+          <div
+            className="bg-zinc-900 rounded-2xl w-full max-w-sm p-6 border border-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-lg mb-1">Cancelar assinatura do clube</h3>
+            <p className="text-xs text-zinc-500 mb-4">
+              Você recebe de volta um valor proporcional ao tempo restante do período já
+              pago. Um admin vai revisar antes de processar o estorno.
+            </p>
+            <label className="label">Motivo</label>
+            <textarea
+              className="input min-h-[90px] resize-y"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Conte rapidamente por que quer cancelar"
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                className="btn btn-secondary flex-1"
+                disabled={cancelSubmitting}
+                onClick={() => setCancelModalOpen(false)}
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary flex-1 disabled:opacity-60"
+                disabled={cancelSubmitting}
+                onClick={() => void submitCancelRequest()}
+              >
+                {cancelSubmitting ? 'Enviando…' : 'Enviar solicitação'}
+              </button>
+            </div>
           </div>
         </div>
       )}

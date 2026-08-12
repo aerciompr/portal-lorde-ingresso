@@ -4,7 +4,16 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { formatPrice } from '@/lib/utils';
-import { formatCpf, formatPhone, cleanDigits, isValidCpf, isValidPhone } from '@/lib/masks';
+import {
+  formatCpf,
+  formatPhone,
+  formatCep,
+  cleanDigits,
+  cleanCep,
+  isValidCpf,
+  isValidPhone,
+  isValidCep,
+} from '@/lib/masks';
 import {
   Crown,
   Star,
@@ -62,8 +71,65 @@ export default function FidelidadePage() {
   const [loading, setLoading] = useState(true);
   const [interval, setIntervalSel] = useState<string>('monthly');
   const [selected, setSelected] = useState<{ plan: Plan; price: PlanPrice } | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', cpf: '', phone: '' });
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    cpf: '',
+    phone: '',
+    birthDate: '',
+    zip: '',
+    street: '',
+    number: '',
+    complement: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+  });
   const [submitting, setSubmitting] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepStatus, setCepStatus] = useState<'idle' | 'ok' | 'manual' | 'error'>('idle');
+
+  async function lookupCep(raw?: string) {
+    const cep = cleanCep(raw ?? form.zip);
+    if (cep.length !== 8) {
+      setCepStatus('idle');
+      return;
+    }
+    setCepLoading(true);
+    setCepStatus('idle');
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      if (!res.ok) throw new Error('ViaCEP indisponível');
+      const data = (await res.json()) as {
+        erro?: boolean;
+        logradouro?: string;
+        bairro?: string;
+        localidade?: string;
+        uf?: string;
+        complemento?: string;
+      };
+      if (data.erro) {
+        setCepStatus('manual');
+        toast.message('CEP não encontrado — preencha o endereço manualmente');
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        zip: formatCep(cep),
+        street: data.logradouro?.trim() || f.street,
+        neighborhood: data.bairro?.trim() || f.neighborhood,
+        city: data.localidade?.trim() || f.city,
+        state: (data.uf || f.state).toUpperCase().slice(0, 2),
+        complement: f.complement || data.complemento?.trim() || '',
+      }));
+      setCepStatus('ok');
+    } catch {
+      setCepStatus('error');
+      toast.message('Não foi possível consultar o CEP — digite o endereço manualmente');
+    } finally {
+      setCepLoading(false);
+    }
+  }
 
   useEffect(() => {
     fetch('/api/loyalty/plans')
@@ -90,7 +156,21 @@ export default function FidelidadePage() {
     const price = priceForInterval(plan, interval);
     if (!price) return;
     setSelected({ plan, price });
-    setForm({ name: '', email: '', cpf: '', phone: '' });
+    setForm({
+      name: '',
+      email: '',
+      cpf: '',
+      phone: '',
+      birthDate: '',
+      zip: '',
+      street: '',
+      number: '',
+      complement: '',
+      neighborhood: '',
+      city: '',
+      state: '',
+    });
+    setCepStatus('idle');
   }
 
   async function submit() {
@@ -116,6 +196,11 @@ export default function FidelidadePage() {
       toast.error('Telefone inválido');
       return;
     }
+    const zipDigits = cleanCep(form.zip);
+    if (zipDigits && !isValidCep(zipDigits)) {
+      toast.error('CEP inválido');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -128,6 +213,14 @@ export default function FidelidadePage() {
           email,
           cpf: cpfDigits || undefined,
           phone: phoneDigits || undefined,
+          birthDate: form.birthDate || undefined,
+          zip: zipDigits || undefined,
+          street: form.street.trim() || undefined,
+          number: form.number.trim() || undefined,
+          complement: form.complement.trim() || undefined,
+          neighborhood: form.neighborhood.trim() || undefined,
+          city: form.city.trim() || undefined,
+          state: form.state.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -336,7 +429,7 @@ export default function FidelidadePage() {
 
       {selected && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
-          <div className="bg-zinc-900 rounded-2xl w-full max-w-sm p-6 border border-white/10">
+          <div className="bg-zinc-900 rounded-2xl w-full max-w-sm p-6 border border-white/10 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-semibold text-lg">Assinar {selected.plan.name}</h3>
               <button
@@ -391,6 +484,96 @@ export default function FidelidadePage() {
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   placeholder="(82) 99999-9999"
                 />
+              </div>
+              <div>
+                <label className="label">Data de nascimento (opcional)</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={form.birthDate}
+                  onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
+                />
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <div className="label mb-1">Endereço (opcional)</div>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    className="input flex-1"
+                    placeholder="CEP"
+                    inputMode="numeric"
+                    value={form.zip}
+                    onChange={(e) => {
+                      const next = formatCep(e.target.value);
+                      setForm({ ...form, zip: next });
+                      setCepStatus('idle');
+                      if (cleanCep(next).length === 8) void lookupCep(next);
+                    }}
+                    onBlur={() => {
+                      if (cleanCep(form.zip).length === 8) void lookupCep();
+                    }}
+                    maxLength={9}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-sm px-3 disabled:opacity-50"
+                    disabled={cepLoading || cleanCep(form.zip).length !== 8}
+                    onClick={() => void lookupCep()}
+                  >
+                    {cepLoading ? '…' : 'Buscar'}
+                  </button>
+                </div>
+                {cepStatus === 'manual' && (
+                  <p className="text-[10px] text-amber-400 mb-2">
+                    CEP não encontrado — preencha manualmente.
+                  </p>
+                )}
+                {cepStatus === 'error' && (
+                  <p className="text-[10px] text-amber-400 mb-2">
+                    Consulta indisponível — preencha manualmente.
+                  </p>
+                )}
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  <input
+                    className="input col-span-2"
+                    placeholder="Rua"
+                    value={form.street}
+                    onChange={(e) => setForm({ ...form, street: e.target.value })}
+                  />
+                  <input
+                    className="input"
+                    placeholder="Número"
+                    value={form.number}
+                    onChange={(e) => setForm({ ...form, number: e.target.value })}
+                  />
+                </div>
+                <input
+                  className="input mb-2"
+                  placeholder="Complemento (opcional)"
+                  value={form.complement}
+                  onChange={(e) => setForm({ ...form, complement: e.target.value })}
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    className="input col-span-1"
+                    placeholder="Bairro"
+                    value={form.neighborhood}
+                    onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}
+                  />
+                  <input
+                    className="input"
+                    placeholder="Cidade"
+                    value={form.city}
+                    onChange={(e) => setForm({ ...form, city: e.target.value })}
+                  />
+                  <input
+                    className="input"
+                    placeholder="UF"
+                    maxLength={2}
+                    value={form.state}
+                    onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })}
+                  />
+                </div>
               </div>
             </div>
             <button

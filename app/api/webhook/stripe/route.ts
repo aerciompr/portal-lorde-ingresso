@@ -111,12 +111,29 @@ async function handleLoyaltyInvoicePaid(invoice: Stripe.Invoice, stripe: Stripe)
   // desacoplada do ciclo de cobrança da Stripe, que pode ser trimestral/semestral/anual.
   const isFirstPayment = !membership.cardEmailSentAt;
 
+  // payment_intent da fatura paga — usado depois pro estorno proporcional no cancelamento.
+  // Nessa versão da API, invoice.payment_intent não existe mais direto; vem em
+  // invoice.payments (ApiList<InvoicePayment>), precisa expandir buscando de novo.
+  let paymentIntentId: string | null = null;
+  try {
+    const invoiceWithPayments = await stripe.invoices.retrieve(invoice.id!, {
+      expand: ['payments.data.payment.payment_intent'],
+    });
+    const firstPayment = invoiceWithPayments.payments?.data?.[0]?.payment;
+    const pi = firstPayment?.payment_intent;
+    paymentIntentId = typeof pi === 'string' ? pi : pi?.id || null;
+  } catch (e) {
+    console.error('[STRIPE WEBHOOK] falha ao resolver payment_intent da fatura', e);
+  }
+
   await prisma.loyaltyMembership.update({
     where: { id: membership.id },
     data: {
       status: 'active',
       currentPeriodStart,
       currentPeriodEnd,
+      lastInvoiceAmountCents: invoice.amount_paid,
+      ...(paymentIntentId ? { lastInvoicePaymentIntentId: paymentIntentId } : {}),
       ...(isFirstPayment ? { nextMonthlyResetAt: addOneMonth(new Date()) } : {}),
     },
   });

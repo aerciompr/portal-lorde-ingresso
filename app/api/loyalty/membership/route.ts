@@ -55,12 +55,21 @@ export async function POST(req: NextRequest) {
   const membership = await prisma.loyaltyMembership.findFirst({
     where: { buyerEmail: email },
     orderBy: { createdAt: 'desc' },
-    include: { plan: true },
+    include: {
+      plan: true,
+      cancellationRequests: {
+        where: { status: { in: ['pending', 'approved'] } },
+        orderBy: { requestedAt: 'desc' },
+        take: 1,
+      },
+    },
   });
 
   if (!membership) {
     return NextResponse.json({ membership: null });
   }
+
+  const cancellation = membership.cancellationRequests[0] || null;
 
   return NextResponse.json({
     membership: {
@@ -71,6 +80,7 @@ export async function POST(req: NextRequest) {
       entriesUsedInPeriod: membership.entriesUsedInPeriod,
       currentPeriodEnd: membership.currentPeriodEnd,
       hasStripeCustomer: Boolean(membership.stripeCustomerId),
+      cancellationStatus: cancellation?.status || null,
       plan: {
         name: membership.plan.name,
         freeEntriesPerCycle: membership.plan.freeEntriesPerCycle,

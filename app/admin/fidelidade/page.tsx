@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
-import { Award, Plus, Pencil, Power, Users, Trash2 } from 'lucide-react';
+import { Award, Plus, Pencil, Power, Users, Trash2, Undo2 } from 'lucide-react';
 import { formatPrice, centsToInput, parseBRLToCents } from '@/lib/utils';
 
 const INTERVALS = ['monthly', 'quarterly', 'semiannual', 'annual'] as const;
@@ -249,10 +250,16 @@ export default function AdminFidelidadePage() {
             desconto para quem passar da cota.
           </p>
         </div>
-        <button type="button" className="btn btn-primary gap-2" onClick={startCreate}>
-          <Plus className="w-4 h-4" />
-          Novo pacote
-        </button>
+        <div className="flex gap-2">
+          <Link href="/admin/fidelidade/cancelamentos" className="btn btn-secondary gap-2">
+            <Undo2 className="w-4 h-4" />
+            Cancelamentos
+          </Link>
+          <button type="button" className="btn btn-primary gap-2" onClick={startCreate}>
+            <Plus className="w-4 h-4" />
+            Novo pacote
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">

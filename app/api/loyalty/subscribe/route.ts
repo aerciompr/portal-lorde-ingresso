@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getStripeForLoyalty } from '@/lib/loyalty-stripe';
-import { isValidCpf, isValidPhone, cleanCpf, cleanPhone } from '@/lib/masks';
+import { isValidCpf, isValidPhone, isValidCep, cleanCpf, cleanPhone, cleanCep } from '@/lib/masks';
 import { generateUniqueCode } from '@/lib/utils';
 
 export const runtime = 'nodejs';
@@ -19,6 +19,14 @@ export async function POST(req: NextRequest) {
     email?: string;
     cpf?: string;
     phone?: string;
+    birthDate?: string;
+    zip?: string;
+    street?: string;
+    number?: string;
+    complement?: string;
+    neighborhood?: string;
+    city?: string;
+    state?: string;
   };
   try {
     body = await req.json();
@@ -31,6 +39,22 @@ export async function POST(req: NextRequest) {
   const email = String(body.email || '').trim().toLowerCase();
   const cpf = body.cpf ? cleanCpf(String(body.cpf)) : '';
   const phone = body.phone ? cleanPhone(String(body.phone)) : '';
+  const zip = body.zip ? cleanCep(String(body.zip)) : '';
+  const street = String(body.street || '').trim();
+  const number = String(body.number || '').trim();
+  const complement = String(body.complement || '').trim();
+  const neighborhood = String(body.neighborhood || '').trim();
+  const city = String(body.city || '').trim();
+  const state = String(body.state || '').trim().toUpperCase();
+
+  let birthDate: Date | null = null;
+  if (body.birthDate) {
+    const d = new Date(body.birthDate);
+    if (Number.isNaN(d.getTime())) {
+      return NextResponse.json({ error: 'Data de nascimento inválida' }, { status: 400 });
+    }
+    birthDate = d;
+  }
 
   if (!planPriceId) return NextResponse.json({ error: 'planPriceId obrigatório' }, { status: 400 });
   if (!name) return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 });
@@ -42,6 +66,9 @@ export async function POST(req: NextRequest) {
   }
   if (phone && !isValidPhone(phone)) {
     return NextResponse.json({ error: 'Telefone inválido' }, { status: 400 });
+  }
+  if (zip && !isValidCep(zip)) {
+    return NextResponse.json({ error: 'CEP inválido' }, { status: 400 });
   }
 
   const planPrice = await prisma.loyaltyPlanPrice.findUnique({
@@ -86,6 +113,14 @@ export async function POST(req: NextRequest) {
       buyerEmail: email,
       buyerCpf: cpf || null,
       buyerPhone: phone || null,
+      buyerBirthDate: birthDate,
+      buyerZip: zip || null,
+      buyerStreet: street || null,
+      buyerNumber: number || null,
+      buyerComplement: complement || null,
+      buyerNeighborhood: neighborhood || null,
+      buyerCity: city || null,
+      buyerState: state || null,
       status: 'pending',
     },
   });

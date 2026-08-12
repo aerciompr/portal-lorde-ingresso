@@ -631,3 +631,55 @@ export async function sendLoyaltyCardEmail(params: {
   }
   return { ok: true, id: result.data?.id };
 }
+
+/** Cancelamento do clube aprovado — estorno proporcional já processado no Stripe. */
+export async function sendLoyaltyCancellationApproved(params: {
+  to: string;
+  buyerName: string;
+  planName: string;
+  refundCents: number;
+}) {
+  const apiKey = getResendKey();
+  if (!apiKey) {
+    console.log('[EMAIL] Skipped loyalty cancellation email (no key)');
+    return { ok: false, skipped: true };
+  }
+
+  const resend = new Resend(apiKey);
+  const from = getFromEmail();
+  const amount = formatPrice(params.refundCents);
+
+  const html = `
+    <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #111; color: #eee;">
+      <h1>Lorde Nelson Rest Pub</h1>
+      <h2>Cancelamento do Clube aprovado</h2>
+
+      <p>Olá ${params.buyerName},</p>
+
+      <p>Sua assinatura do <strong>Clube ${params.planName}</strong> foi cancelada com sucesso.</p>
+
+      <p>${
+        params.refundCents > 0
+          ? `O estorno proporcional de <strong>${amount}</strong> (referente ao tempo restante do período já pago) será processado em até 5-10 dias úteis no cartão usado na assinatura.`
+          : 'Não há valor a estornar, pois o período pago já foi integralmente utilizado.'
+      }</p>
+
+      <p>Seu cartão de fidelidade não vale mais para novas entradas grátis. Se quiser voltar ao clube, é só assinar de novo quando quiser.</p>
+
+      <p style="margin-top:40px; font-size:12px; color:#555;">Lorde Nelson • Maceió/AL</p>
+    </div>
+  `;
+
+  const result = await resend.emails.send({
+    from: from.includes('<') ? from : `Lorde Nelson <${from}>`,
+    to: params.to,
+    subject: `Cancelamento do Clube ${params.planName} aprovado — Lorde Nelson`,
+    html,
+  });
+
+  if (result.error) {
+    console.error('[EMAIL] loyalty cancellation Resend error', result.error);
+    return { ok: false, error: result.error.message };
+  }
+  return { ok: true };
+}
