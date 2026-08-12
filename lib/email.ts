@@ -567,3 +567,67 @@ export async function sendCancellationApproved(
   }
   return { ok: true };
 }
+
+/** Cartão de fidelidade em PDF, enviado na 1ª cobrança confirmada da assinatura. */
+export async function sendLoyaltyCardEmail(params: {
+  to: string;
+  buyerName: string;
+  planName: string;
+  cardCode: string;
+  pdfBytes: Buffer;
+}) {
+  const apiKey = getResendKey();
+  if (!apiKey) {
+    console.log('[EMAIL] RESEND_API_KEY ausente — cartão fidelidade não enviado:', params.cardCode);
+    return { ok: false, skipped: true, error: 'RESEND_API_KEY não configurada' };
+  }
+  if (!params.to?.includes('@')) {
+    return { ok: false, error: 'E-mail inválido' };
+  }
+
+  const resend = new Resend(apiKey);
+  const APP_URL = await getAppUrl();
+  const from = getFromEmail();
+
+  const html = `
+    <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #111; color: #eee;">
+      <h1 style="color: #fff;">Lorde Nelson Rest Pub</h1>
+      <h2>Bem-vindo(a) ao Clube ${params.planName}!</h2>
+
+      <p>Olá ${params.buyerName || 'Sócio'},</p>
+
+      <p>Sua assinatura foi confirmada. Seu cartão de fidelidade está em anexo neste e-mail — mostre o QR na entrada dos eventos para usar suas entradas grátis do mês.</p>
+
+      <p><strong>Código do cartão:</strong> <code style="font-size:18px;background:#222;padding:4px 8px;border-radius:6px;">${params.cardCode}</code></p>
+
+      <p style="margin-top:16px;padding:12px;background:#1a2e1a;border-radius:8px;border:1px solid #22c55e44;">
+        📎 <strong>O PDF do cartão está em anexo</strong> neste e-mail.
+      </p>
+
+      <p style="margin-top: 24px;">
+        Acompanhe seu ciclo (entradas usadas, renovação) em <a href="${APP_URL}/ingressos" style="color:#22c55e;">Meus Ingressos → Clube</a>.
+      </p>
+
+      <p style="margin-top:40px; font-size:12px; color:#555;">Lorde Nelson • Maceió/AL</p>
+    </div>
+  `;
+
+  const result = await resend.emails.send({
+    from: from.includes('<') ? from : `Lorde Nelson <${from}>`,
+    to: params.to,
+    subject: `Seu cartão do Clube ${params.planName} — Lorde Nelson`,
+    html,
+    attachments: [
+      {
+        filename: `cartao-fidelidade-${params.cardCode}.pdf`,
+        content: params.pdfBytes,
+      },
+    ],
+  });
+
+  if (result.error) {
+    console.error('[EMAIL] loyalty card Resend error', result.error);
+    return { ok: false, error: result.error.message };
+  }
+  return { ok: true, id: result.data?.id };
+}

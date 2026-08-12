@@ -40,10 +40,11 @@ model Event {
   loteAcrescimoCents Int     @default(500)
   loteDefaultQty     Int     @default(50)
 
-  ticketTypes TicketType[]
-  orders      Order[]
-  promoCodes  PromoCode[]
-  loteViradas LoteViradaLog[]
+  ticketTypes       TicketType[]
+  orders            Order[]
+  promoCodes        PromoCode[]
+  loteViradas       LoteViradaLog[]
+  loyaltyRedemptions LoyaltyRedemption[]
 }
 
 model TicketType {
@@ -117,6 +118,7 @@ model Order {
   cancellationRequests CancellationRequest[]
   logs                 OrderLog[]
   promoRedemption      PromoRedemption?
+  loyaltyRedemption    LoyaltyRedemption?
 
   @@index([eventId])
   @@index([buyerEmail])
@@ -296,4 +298,77 @@ model StaffUser {
 
   @@index([role])
   @@index([active])
+}
+
+/**
+ * Clube de fidelidade — pacote configurável (admin) de assinatura mensal.
+ * checkinsPerEntry: 1 = só titular, 2 = titular + acompanhante por entrada resgatada.
+ * overageDiscountPercent: desconto aplicado quando a cota de entradas grátis do ciclo já foi usada.
+ * stripePriceId: Price recorrente criado manualmente no Dashboard Stripe (não gerado pelo backend).
+ */
+model LoyaltyPlan {
+  id                     String   @id @default(cuid())
+  name                   String   @db.VarChar(255)
+  description            String?  @db.Text
+  priceCents             Int
+  freeEntriesPerCycle    Int      @default(1)
+  checkinsPerEntry       Int      @default(1)
+  overageDiscountPercent Int      @default(0)
+  stripePriceId          String?  @db.VarChar(191)
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  memberships LoyaltyMembership[]
+
+  @@index([active])
+}
+
+/**
+ * Assinatura de um cliente a um LoyaltyPlan (cartão de fidelidade).
+ * status: pending | active | past_due | canceled | expired
+ * entriesUsedInPeriod zera a cada renovação (currentPeriodStart avança).
+ */
+model LoyaltyMembership {
+  id                   String    @id @default(cuid())
+  planId               String
+  plan                 LoyaltyPlan @relation(fields: [planId], references: [id])
+  cardCode             String    @unique @db.VarChar(32)
+  buyerName            String    @db.VarChar(255)
+  buyerEmail           String    @db.VarChar(255)
+  buyerCpf             String?   @db.VarChar(32)
+  buyerPhone           String?   @db.VarChar(32)
+  status               String    @default("pending") @db.VarChar(32)
+  stripeCustomerId     String?   @db.VarChar(191)
+  stripeSubscriptionId String?   @unique @db.VarChar(191)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  entriesUsedInPeriod  Int       @default(0)
+  cardEmailSentAt      DateTime?
+  createdAt            DateTime  @default(now())
+  canceledAt           DateTime?
+
+  redemptions LoyaltyRedemption[]
+
+  @@index([buyerEmail])
+  @@index([status])
+  @@index([planId])
+}
+
+/** Um resgate (entrada grátis ou com desconto de excedente) usando o cartão fidelidade num evento. */
+model LoyaltyRedemption {
+  id                   String            @id @default(cuid())
+  membershipId         String
+  membership           LoyaltyMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  eventId              String
+  event                Event             @relation(fields: [eventId], references: [id])
+  orderId              String            @unique
+  order                Order             @relation(fields: [orderId], references: [id])
+  withinFreeQuota      Boolean
+  ticketsGranted       Int
+  discountCentsApplied Int               @default(0)
+  createdAt            DateTime          @default(now())
+
+  @@index([membershipId])
+  @@index([eventId])
 }

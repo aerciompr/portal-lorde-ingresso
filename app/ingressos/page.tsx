@@ -35,6 +35,7 @@ import {
   Check,
   DoorOpen,
   ExternalLink,
+  Award,
 } from 'lucide-react';
 import PurchaseSuccessModal from '@/components/PurchaseSuccessModal';
 import {
@@ -80,7 +81,23 @@ interface Order {
 }
 
 type LoginTab = 'codigo' | 'senha';
-type NavId = 'proximos' | 'passados' | 'estornos' | 'conta';
+type NavId = 'proximos' | 'passados' | 'estornos' | 'fidelidade' | 'conta';
+
+type LoyaltyMembershipInfo = {
+  id: string;
+  cardCode: string;
+  status: string;
+  buyerName: string;
+  entriesUsedInPeriod: number;
+  currentPeriodEnd: string | null;
+  hasStripeCustomer: boolean;
+  plan: {
+    name: string;
+    freeEntriesPerCycle: number;
+    checkinsPerEntry: number;
+    overageDiscountPercent: number;
+  };
+};
 
 function statusBadge(status: string) {
   const text = orderStatusLabel(status);
@@ -195,6 +212,52 @@ export default function MeusIngressos() {
   });
 
   const loggedIn = orders.length > 0;
+
+  const [membership, setMembership] = useState<LoyaltyMembershipInfo | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  // Cartão fidelidade — só dá pra buscar se a conta tem senha definida
+  // (mesma identidade de Meus Ingressos; login só por código LN não tem senha pra validar aqui).
+  useEffect(() => {
+    if (!loggedIn || !email || !password) {
+      setMembership(null);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/loyalty/membership', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+      .then((r) => (r.ok ? r.json() : { membership: null }))
+      .then((data) => {
+        if (!cancelled) setMembership(data.membership || null);
+      })
+      .catch(() => {
+        if (!cancelled) setMembership(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedIn, email, password]);
+
+  async function openBillingPortal() {
+    if (!membership) return;
+    setPortalLoading(true);
+    try {
+      const res = await fetch('/api/loyalty/billing-portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ membershipId: membership.id, code: membership.cardCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao abrir portal');
+      window.location.href = data.url;
+    } catch (e) {
+      toast.error((e as Error).message || 'Não foi possível abrir o portal de assinatura');
+      setPortalLoading(false);
+    }
+  }
 
   // WhatsApp de ajuda: Admin → Contato (sem número fixo no código)
   useEffect(() => {
@@ -557,6 +620,9 @@ export default function MeusIngressos() {
           },
         ]
       : []),
+    ...(membership
+      ? [{ id: 'fidelidade' as const, label: 'Clube', icon: Award }]
+      : []),
     { id: 'conta', label: 'Conta', icon: User },
   ];
 
@@ -577,18 +643,22 @@ export default function MeusIngressos() {
         ? 'Eventos passados'
         : nav === 'estornos'
           ? 'Estornos'
-          : 'Conta';
+          : nav === 'fidelidade'
+            ? 'Clube fidelidade'
+            : 'Conta';
 
   const pageSubtitle =
     nav === 'conta'
       ? 'Sessão e opções opcionais'
-      : visibleOrders.length === 0
-        ? 'Nada por aqui'
-        : nav === 'estornos'
-          ? `${counts.ticketsEstornos} estorno(s) · não valem na entrada`
-          : nav === 'proximos'
-            ? `${counts.ticketsProximos} ingresso(s) válido(s) para usar`
-            : `${counts.ticketsPassados} ingresso(s) de eventos passados`;
+      : nav === 'fidelidade'
+        ? membership?.plan.name || 'Seu cartão'
+        : visibleOrders.length === 0
+          ? 'Nada por aqui'
+          : nav === 'estornos'
+            ? `${counts.ticketsEstornos} estorno(s) · não valem na entrada`
+            : nav === 'proximos'
+              ? `${counts.ticketsProximos} ingresso(s) válido(s) para usar`
+              : `${counts.ticketsPassados} ingresso(s) de eventos passados`;
 
   // ─── LOGIN ─────────────────────────────────────────────
   if (!loggedIn) {
@@ -1306,6 +1376,84 @@ export default function MeusIngressos() {
                 >
                   <LogOut size={16} className="mr-2" /> Sair desta sessão
                 </button>
+              </div>
+            </div>
+          ) : nav === 'fidelidade' && membership ? (
+            <div className="max-w-xl space-y-4">
+              <div className="hidden lg:block mb-1">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 mb-1">Clube</p>
+                <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+                  {pageTitle}
+                </h1>
+              </div>
+              <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/40 to-zinc-900/80 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-zinc-500">Plano</div>
+                    <div className="font-semibold text-white text-lg">{membership.plan.name}</div>
+                  </div>
+                  <span
+                    className={`text-[11px] px-2.5 py-1 rounded-full ${
+                      membership.status === 'active'
+                        ? 'bg-emerald-500/15 text-emerald-400'
+                        : membership.status === 'past_due'
+                          ? 'bg-amber-500/15 text-amber-400'
+                          : 'bg-zinc-700/50 text-zinc-400'
+                    }`}
+                  >
+                    {membership.status === 'active'
+                      ? 'Ativo'
+                      : membership.status === 'past_due'
+                        ? 'Pagamento pendente'
+                        : membership.status === 'pending'
+                          ? 'Aguardando 1ª cobrança'
+                          : 'Cancelado'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-zinc-400">Entradas grátis usadas neste ciclo</span>
+                  <span className="font-medium text-white tabular-nums">
+                    {membership.entriesUsedInPeriod} / {membership.plan.freeEntriesPerCycle}
+                  </span>
+                </div>
+
+                {membership.currentPeriodEnd && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-400">Renova em</span>
+                    <span className="font-medium text-white">
+                      {new Date(membership.currentPeriodEnd).toLocaleDateString('pt-BR', {
+                        timeZone: 'America/Maceio',
+                      })}
+                    </span>
+                  </div>
+                )}
+
+                <div className="text-xs text-zinc-500 pt-1 border-t border-white/10">
+                  Código do cartão: <span className="font-mono text-zinc-300">{membership.cardCode}</span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <a
+                    href={`/api/loyalty/${membership.id}/pdf?code=${membership.cardCode}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-primary flex-1 text-center"
+                  >
+                    <Download size={16} className="mr-2 inline" />
+                    Baixar cartão (PDF)
+                  </a>
+                  {membership.hasStripeCustomer && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary flex-1 disabled:opacity-60"
+                      disabled={portalLoading}
+                      onClick={() => void openBillingPortal()}
+                    >
+                      {portalLoading ? 'Abrindo…' : 'Gerenciar assinatura'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ) : (

@@ -47,14 +47,140 @@ async function markPaidFromIntent(paymentIntent: Stripe.PaymentIntent) {
   console.log('[STRIPE] reconcile by PI', paymentIntent.id, r);
 }
 
+/** Mapeia status de assinatura Stripe -> enum interno de LoyaltyMembership. */
+function mapSubscriptionStatus(s: Stripe.Subscription.Status): string {
+  if (s === 'active' || s === 'trialing') return 'active';
+  if (s === 'past_due' || s === 'unpaid') return 'past_due';
+  if (s === 'canceled' || s === 'incomplete_expired') return 'canceled';
+  return 'pending';
+}
+
+async function handleLoyaltyCheckoutCompleted(session: Stripe.Checkout.Session) {
+  if (session.mode !== 'subscription') return;
+  const membershipId = String(session.metadata?.membershipId || '').trim();
+  if (!membershipId) return;
+
+  const customerId =
+    typeof session.customer === 'string' ? session.customer : session.customer?.id;
+  const subscriptionId =
+    typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
+
+  await prisma.loyaltyMembership.update({
+    where: { id: membershipId },
+    data: {
+      stripeCustomerId: customerId || undefined,
+      stripeSubscriptionId: subscriptionId || undefined,
+    },
+  }).catch((e) => console.error('[STRIPE WEBHOOK] loyalty checkout.session.completed', e));
+}
+
+async function handleLoyaltyInvoicePaid(invoice: Stripe.Invoice, stripe: Stripe) {
+  // API Stripe atual: subscription não fica mais direto em invoice.subscription
+  // (deprecado), e sim em invoice.parent.subscription_details.subscription.
+  const subDetails = invoice.parent?.subscription_details;
+  const subscriptionId =
+    typeof subDetails?.subscription === 'string'
+      ? subDetails.subscription
+      : subDetails?.subscription?.id;
+  if (!subscriptionId) return;
+
+  const membership = await prisma.loyaltyMembership.findUnique({
+    where: { stripeSubscriptionId: subscriptionId },
+    include: { plan: true },
+  });
+  if (!membership) return;
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  // current_period_start/end saíram do nível da subscription e foram para o item
+  // (billing periods flexíveis) — usa o primeiro item, que é o Price do plano.
+  const firstItem = subscription.items.data[0];
+  const nowSec = Math.floor(Date.now() / 1000);
+  const currentPeriodStart = new Date((firstItem?.current_period_start ?? nowSec) * 1000);
+  const currentPeriodEnd = new Date(
+    (firstItem?.current_period_end ?? nowSec + 30 * 86400) * 1000
+  );
+
+  await prisma.loyaltyMembership.update({
+    where: { id: membership.id },
+    data: {
+      status: 'active',
+      currentPeriodStart,
+      currentPeriodEnd,
+      entriesUsedInPeriod: 0,
+    },
+  });
+
+  if (!membership.cardEmailSentAt) {
+    try {
+      const { generateLoyaltyCardPDF } = await import('@/lib/generate-loyalty-card');
+      const { signCode } = await import('@/lib/validate-ticket');
+      const { formatDateInAppTz } = await import('@/lib/timezone');
+      const { sendLoyaltyCardEmail } = await import('@/lib/email');
+
+      const pdfBytes = await generateLoyaltyCardPDF({
+        buyerName: membership.buyerName,
+        planName: membership.plan.name,
+        cardCode: membership.cardCode,
+        qrPayload: signCode(membership.cardCode),
+        freeEntriesPerCycle: membership.plan.freeEntriesPerCycle,
+        checkinsPerEntry: membership.plan.checkinsPerEntry,
+        renewsOnLabel: `Renova em ${formatDateInAppTz(currentPeriodEnd, { day: '2-digit', month: '2-digit', year: 'numeric' })}`,
+      });
+
+      const mail = await sendLoyaltyCardEmail({
+        to: membership.buyerEmail,
+        buyerName: membership.buyerName,
+        planName: membership.plan.name,
+        cardCode: membership.cardCode,
+        pdfBytes: Buffer.from(pdfBytes),
+      });
+
+      if (mail.ok) {
+        await prisma.loyaltyMembership.update({
+          where: { id: membership.id },
+          data: { cardEmailSentAt: new Date() },
+        });
+      } else {
+        console.warn('[STRIPE WEBHOOK] falha ao enviar cartão fidelidade', mail.error);
+      }
+    } catch (e) {
+      console.error('[STRIPE WEBHOOK] geração/envio do cartão fidelidade falhou', e);
+    }
+  }
+}
+
+async function handleLoyaltySubscriptionUpdated(subscription: Stripe.Subscription) {
+  const membership = await prisma.loyaltyMembership.findUnique({
+    where: { stripeSubscriptionId: subscription.id },
+  });
+  if (!membership) return;
+  await prisma.loyaltyMembership.update({
+    where: { id: membership.id },
+    data: { status: mapSubscriptionStatus(subscription.status) },
+  });
+}
+
+async function handleLoyaltySubscriptionDeleted(subscription: Stripe.Subscription) {
+  const membership = await prisma.loyaltyMembership.findUnique({
+    where: { stripeSubscriptionId: subscription.id },
+  });
+  if (!membership) return;
+  await prisma.loyaltyMembership.update({
+    where: { id: membership.id },
+    data: { status: 'canceled', canceledAt: new Date() },
+  });
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature') || '';
 
   let event: Stripe.Event;
+  let stripeClient: Stripe | null = null;
 
   try {
     const { stripe, endpointSecret } = await getStripeAndSecret();
+    stripeClient = stripe;
     if (!stripe) {
       console.warn('[STRIPE WEBHOOK] No stripe key configured');
       return NextResponse.json({ received: true });
@@ -87,6 +213,23 @@ export async function POST(req: NextRequest) {
       ) {
         await markPaidFromIntent(paymentIntent);
       }
+    }
+
+    // ── Clube de fidelidade — assinatura recorrente ──
+    if (event.type === 'checkout.session.completed') {
+      await handleLoyaltyCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+    }
+
+    if (event.type === 'invoice.paid' && stripeClient) {
+      await handleLoyaltyInvoicePaid(event.data.object as Stripe.Invoice, stripeClient);
+    }
+
+    if (event.type === 'customer.subscription.updated') {
+      await handleLoyaltySubscriptionUpdated(event.data.object as Stripe.Subscription);
+    }
+
+    if (event.type === 'customer.subscription.deleted') {
+      await handleLoyaltySubscriptionDeleted(event.data.object as Stripe.Subscription);
     }
 
     // Alguns fluxos disparam charge.succeeded com payment_intent

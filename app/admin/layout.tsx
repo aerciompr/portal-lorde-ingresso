@@ -72,6 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/cupons', label: 'Cupons', icon: '🏷️' },
     { href: '/admin/pedidos', label: 'Pedidos', icon: '📋' },
     { href: '/admin/clientes', label: 'Clientes', icon: '👥' },
+    { href: '/admin/fidelidade', label: 'Clube fidelidade', icon: '🏆' },
     { href: '/admin/cancelamentos', label: 'Cancelamentos', icon: '↩️' },
     { href: '/admin/importacao', label: 'Importação CSV', icon: '📥' },
     { href: '/admin/email-migracao', label: 'E-mail migração', icon: '✉️' },
@@ -198,11 +199,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     ? 'Relatórios'
                     : pathname?.startsWith('/admin/clientes')
                       ? 'Clientes'
-                      : pathname?.startsWith('/admin/configuracoes')
-                        ? 'Config'
-                        : pathname?.startsWith('/admin/cupons')
-                          ? 'Cupons'
-                          : 'Admin'}
+                      : pathname?.startsWith('/admin/fidelidade')
+                        ? 'Fidelidade'
+                        : pathname?.startsWith('/admin/configuracoes')
+                          ? 'Config'
+                          : pathname?.startsWith('/admin/cupons')
+                            ? 'Cupons'
+                            : 'Admin'}
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3 text-sm shrink-0 ml-auto">
             <AppClock className="text-[10px] tracking-wide text-zinc-500 tabular-nums select-none hidden min-[400px]:inline max-w-[9.5rem] sm:max-w-none truncate" />
