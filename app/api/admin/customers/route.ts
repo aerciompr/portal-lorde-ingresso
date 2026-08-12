@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
+import { requireAdminMutation } from '@/lib/request-security';
+import { cleanDigits, isValidPhone } from '@/lib/masks';
 import type { Prisma } from '@prisma/client';
 
 type Agg = {
@@ -268,5 +270,111 @@ export async function GET(req: NextRequest) {
             'Lista limitada aos 50 mil pedidos mais recentes com cliente. Volume alto — se ficar lento no futuro, dá para extrair tabela Customer.',
         }
       : {}),
+  });
+}
+
+const MAX_MATCH_ORDERS = 50_000;
+
+/**
+ * PATCH /api/admin/customers
+ * Edita nome/e-mail/telefone do cliente, propagando para TODOS os pedidos
+ * agregados sob a mesma key (email ou CPF) — mantém Clientes e Pedidos
+ * consistentes, já que não existe tabela Customer separada (ver GET acima).
+ * Body: { key: 'email:foo@bar.com' | 'cpf:12345678900', name?, email?, phone? }
+ */
+export async function PATCH(req: NextRequest) {
+  const gate = await requireAdminMutation(req);
+  if (gate !== true) return gate;
+
+  let body: { key?: string; name?: string; email?: string; phone?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
+  }
+
+  const key = (body.key || '').trim();
+  const sep = key.indexOf(':');
+  if (sep <= 0) {
+    return NextResponse.json({ error: 'key inválida' }, { status: 400 });
+  }
+  const keyType = key.slice(0, sep);
+  const keyValue = key.slice(sep + 1);
+  if (!keyValue || (keyType !== 'email' && keyType !== 'cpf')) {
+    return NextResponse.json({ error: 'key inválida' }, { status: 400 });
+  }
+
+  const name = body.name !== undefined ? body.name.trim() : undefined;
+  const email = body.email !== undefined ? body.email.trim().toLowerCase() : undefined;
+  const phone = body.phone !== undefined ? cleanDigits(body.phone) : undefined;
+
+  if (name !== undefined && !name) {
+    return NextResponse.json({ error: 'Nome não pode ficar vazio' }, { status: 400 });
+  }
+  if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ error: 'E-mail inválido' }, { status: 400 });
+  }
+  if (phone !== undefined && phone && !isValidPhone(phone)) {
+    return NextResponse.json({ error: 'Telefone inválido' }, { status: 400 });
+  }
+  if (name === undefined && email === undefined && phone === undefined) {
+    return NextResponse.json({ error: 'Nada para atualizar' }, { status: 400 });
+  }
+
+  // Localiza todos os pedidos do cliente pela key (mesma lógica de agregação do GET)
+  let matchIds: string[];
+  if (keyType === 'email') {
+    const rows = await prisma.order.findMany({
+      where: { buyerEmail: { contains: '@' } },
+      select: { id: true, buyerEmail: true },
+      take: MAX_MATCH_ORDERS,
+    });
+    matchIds = rows
+      .filter((o) => (o.buyerEmail || '').trim().toLowerCase() === keyValue)
+      .map((o) => o.id);
+  } else {
+    const rows = await prisma.order.findMany({
+      where: { buyerCpf: { not: null } },
+      select: { id: true, buyerCpf: true },
+      take: MAX_MATCH_ORDERS,
+    });
+    matchIds = rows
+      .filter((o) => cleanDigits(o.buyerCpf || '') === keyValue)
+      .map((o) => o.id);
+  }
+
+  if (!matchIds.length) {
+    return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 });
+  }
+
+  const data: Prisma.OrderUpdateManyMutationInput = {};
+  const changes: string[] = [];
+  if (name !== undefined) {
+    data.buyerName = name;
+    changes.push(`nome → ${name}`);
+  }
+  if (email !== undefined) {
+    data.buyerEmail = email;
+    changes.push(`e-mail → ${email}`);
+  }
+  if (phone !== undefined) {
+    data.buyerPhone = phone || null;
+    changes.push(`telefone → ${phone || '—'}`);
+  }
+
+  await prisma.order.updateMany({ where: { id: { in: matchIds } }, data });
+  await prisma.orderLog.createMany({
+    data: matchIds.map((orderId) => ({
+      orderId,
+      kind: 'note',
+      title: 'Dados do cliente atualizados (admin)',
+      detail: changes.join('; '),
+    })),
+  });
+
+  return NextResponse.json({
+    ok: true,
+    updatedOrders: matchIds.length,
+    newKey: email !== undefined ? `email:${email}` : key,
   });
 }

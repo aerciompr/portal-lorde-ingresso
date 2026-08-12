@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
 import StatusBadge from '@/components/StatusBadge';
-import { formatCpf, formatPhone, formatCep } from '@/lib/masks';
-import { ChevronDown, ChevronRight, Copy, Mail, Phone, Search, Users } from 'lucide-react';
+import { formatCpf, formatPhone, formatCep, cleanDigits, isValidPhone } from '@/lib/masks';
+import { ChevronDown, ChevronRight, Copy, Mail, Pencil, Phone, Search, Users, X } from 'lucide-react';
 
 interface RecentOrder {
   id: string;
@@ -93,6 +93,9 @@ export default function AdminClientesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Customer | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '' });
+  const [saving, setSaving] = useState(false);
   const limit = 50;
 
   useEffect(() => {
@@ -143,6 +146,51 @@ export default function AdminClientesPage() {
       toast.success(`${label} copiado`);
     } catch {
       toast.message(value);
+    }
+  }
+
+  function openEdit(c: Customer) {
+    setEditing(c);
+    setEditForm({ name: c.name === '—' ? '' : c.name, email: c.email, phone: c.phone || '' });
+  }
+
+  async function submitEdit() {
+    if (!editing) return;
+    const name = editForm.name.trim();
+    const email = editForm.email.trim().toLowerCase();
+    const phoneDigits = cleanDigits(editForm.phone);
+
+    if (!name) {
+      toast.error('Nome não pode ficar vazio');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('E-mail inválido');
+      return;
+    }
+    if (phoneDigits && !isValidPhone(phoneDigits)) {
+      toast.error('Telefone inválido');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/customers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: editing.key, name, email, phone: phoneDigits }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao salvar');
+      }
+      toast.success(`Cliente atualizado — ${data.updatedOrders} pedido(s)`);
+      setEditing(null);
+      load();
+    } catch (e) {
+      toast.error((e as Error).message || 'Erro ao salvar');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -297,8 +345,18 @@ export default function AdminClientesPage() {
                     <div className="px-4 pb-4 pl-11 space-y-3">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                         <div className="rounded-xl border border-white/10 bg-zinc-950/50 p-3 space-y-1.5">
-                          <div className="text-[11px] uppercase tracking-wide text-zinc-500 mb-2">
-                            Contato
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-[11px] uppercase tracking-wide text-zinc-500">
+                              Contato
+                            </div>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300"
+                              onClick={() => openEdit(c)}
+                            >
+                              <Pencil className="w-3 h-3" />
+                              Editar
+                            </button>
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-zinc-300 break-all">{c.email || '—'}</span>
@@ -409,6 +467,75 @@ export default function AdminClientesPage() {
           </div>
         )}
       </div>
+
+      {editing && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
+          <div className="bg-zinc-900 rounded-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Editar cliente</h3>
+              <button
+                type="button"
+                className="text-zinc-500 hover:text-white"
+                onClick={() => setEditing(null)}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-zinc-500 mb-4">
+              Atualiza nome, e-mail e telefone em todos os {editing.ordersCount} pedido(s) deste
+              cliente.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Nome</label>
+                <input
+                  className="input"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="Nome completo"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">E-mail</label>
+                <input
+                  className="input"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  placeholder="cliente@email.com"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Telefone</label>
+                <input
+                  className="input"
+                  value={formatPhone(editForm.phone)}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  placeholder="(82) 99999-9999"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button
+                type="button"
+                className="btn btn-secondary flex-1"
+                onClick={() => setEditing(null)}
+                disabled={saving}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary flex-1 disabled:opacity-50"
+                onClick={submitEdit}
+                disabled={saving}
+              >
+                {saving ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

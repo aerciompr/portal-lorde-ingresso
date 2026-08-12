@@ -56,7 +56,7 @@ export default function EditEventPage() {
     allowCancel: true,
     cancelHoursBefore: 24,
     cancelFeePercent: 10,
-    loteAcrescimoCents: 500,
+    loteAcrescimoInput: centsToInput(500),
     loteDefaultQty: 50,
   });
 
@@ -99,7 +99,7 @@ export default function EditEventPage() {
           allowCancel: found.allowCancel ?? true,
           cancelHoursBefore: found.cancelHoursBefore ?? 24,
           cancelFeePercent: found.cancelFeePercent ?? 10,
-          loteAcrescimoCents: found.loteAcrescimoCents ?? 500,
+          loteAcrescimoInput: centsToInput(found.loteAcrescimoCents ?? 500),
           loteDefaultQty: found.loteDefaultQty ?? 50,
         });
       } catch (e) {
@@ -231,7 +231,7 @@ export default function EditEventPage() {
         allowCancel: form.allowCancel,
         cancelHoursBefore: form.cancelHoursBefore,
         cancelFeePercent: form.cancelFeePercent,
-        loteAcrescimoCents: form.loteAcrescimoCents,
+        loteAcrescimoCents: parseBRLToCents(form.loteAcrescimoInput),
         loteDefaultQty: form.loteDefaultQty,
       };
       const res = await fetch('/api/admin/events', {
@@ -346,7 +346,7 @@ export default function EditEventPage() {
                 href={`/admin/eventos/${event.id}/ingresso/novo?tipo=lote`}
                 className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-emerald-500/60 text-emerald-400 hover:bg-emerald-500/10"
               >
-                <Plus size={14} /> Virar Lote (+{formatPrice(form.loteAcrescimoCents)})
+                <Plus size={14} /> Virar Lote (+{formatPrice(parseBRLToCents(form.loteAcrescimoInput))})
               </Link>
             </div>
           </div>
@@ -528,6 +528,38 @@ export default function EditEventPage() {
             <div className="flex-1">
               <div className="text-xs text-zinc-500 mb-1">Endereço</div>
               <input className="input text-sm" value={form.address} onChange={e => updateForm('address', e.target.value)} />
+            </div>
+          </div>
+
+          {/* Virada automática de lotes — presets deste evento (usados por auto virada e pelo botão "Virar Lote") */}
+          <div className="mt-6 pt-5 border-t border-white/10">
+            <div className="label mb-1">Virada automática de lotes (deste evento)</div>
+            <div className="text-[11px] text-zinc-500 mb-3">
+              Quando um lote esgota (e está com &quot;virada automática&quot; ligada), o próximo lote é
+              criado sozinho com este acréscimo de preço e esta quantidade padrão.
+            </div>
+            <div className="flex gap-4 max-w-md">
+              <div className="flex-1">
+                <div className="text-xs text-zinc-500 mb-1">Acréscimo por lote (R$)</div>
+                <input
+                  className="input text-sm"
+                  inputMode="decimal"
+                  value={form.loteAcrescimoInput}
+                  onChange={e => updateForm('loteAcrescimoInput', e.target.value)}
+                  placeholder="5,00"
+                />
+              </div>
+              <div className="flex-1">
+                <div className="text-xs text-zinc-500 mb-1">Qtd. padrão do próximo lote</div>
+                <input
+                  type="number"
+                  min={1}
+                  className="input text-sm"
+                  value={form.loteDefaultQty}
+                  onChange={e => updateForm('loteDefaultQty', parseInt(e.target.value, 10) || 1)}
+                  placeholder="50"
+                />
+              </div>
             </div>
           </div>
 
