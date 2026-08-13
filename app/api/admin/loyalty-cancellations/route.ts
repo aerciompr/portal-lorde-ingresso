@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, getAdminUser } from '@/lib/auth';
 import { requireAdminMutation } from '@/lib/request-security';
 import { getStripeForLoyalty } from '@/lib/loyalty-stripe';
 import { calcLoyaltyRefundCents } from '@/lib/loyalty-refund';
 import { sendLoyaltyCancellationApproved } from '@/lib/email';
+import { logLoyaltyAudit } from '@/lib/loyalty-audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,6 +74,13 @@ export async function POST(req: NextRequest) {
         processedAt: new Date(),
         adminNotes: adminNotes || 'Solicitação recusada pelo admin',
       },
+    });
+    void logLoyaltyAudit({
+      action: 'cancellation_rejected',
+      actor: (await getAdminUser()) || 'admin',
+      entityType: 'LoyaltyCancellationRequest',
+      entityId: id,
+      detail: `Cancelamento de ${cr.membership.buyerName} recusado`,
     });
     return NextResponse.json({ ok: true, status: 'rejected' });
   }
@@ -157,6 +165,15 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error('[loyalty-cancellations] e-mail falhou', e);
   }
+
+  void logLoyaltyAudit({
+    action: 'cancellation_approved',
+    actor: (await getAdminUser()) || 'admin',
+    entityType: 'LoyaltyCancellationRequest',
+    entityId: id,
+    detail: `Cancelamento de ${membership.buyerName} aprovado, estorno de ${(refundCents / 100).toFixed(2)}`,
+    meta: { refundCents, membershipId: membership.id },
+  });
 
   return NextResponse.json({ ok: true, status: 'approved', refundCents });
 }

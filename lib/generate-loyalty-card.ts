@@ -9,7 +9,11 @@ export type LoyaltyCardPDFParams = {
   freeEntriesPerCycle: number;
   checkinsPerEntry: number;
   renewsOnLabel: string;
+  /** Posição de cadastro entre todos os sócios (1 = primeiro) — exibido como "Sócio Nº 001". */
+  memberNumber?: number;
 };
+
+const GOLD = rgb(0.831, 0.686, 0.216); // #d4af37 — mesmo dourado da página /fidelidade
 
 function truncate(text: string, max: number) {
   const t = (text || '').trim();
@@ -20,6 +24,7 @@ function truncate(text: string, max: number) {
 /**
  * Cartão de fidelidade digital — mesmo formato retrato do ingresso
  * (lib/generate-ticket.ts), sem imagem de evento, com QR do cardCode.
+ * Identidade visual dourada (não verde), pra se diferenciar do ingresso comum.
  */
 export async function generateLoyaltyCardPDF(params: LoyaltyCardPDFParams) {
   const pdfDoc = await PDFDocument.create();
@@ -32,6 +37,18 @@ export async function generateLoyaltyCardPDF(params: LoyaltyCardPDFParams) {
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   page.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.06, 0.06, 0.07) });
+
+  // Moldura dourada fina
+  page.drawRectangle({
+    x: 6,
+    y: 6,
+    width: width - 12,
+    height: height - 12,
+    borderColor: GOLD,
+    borderWidth: 1,
+    borderOpacity: 0.35,
+    color: undefined,
+  });
 
   const headerH = 52;
   page.drawRectangle({
@@ -72,10 +89,23 @@ export async function generateLoyaltyCardPDF(params: LoyaltyCardPDFParams) {
     y,
     size: 13,
     font: fontBold,
-    color: rgb(0.4, 0.9, 0.6),
+    color: GOLD,
     maxWidth: contentW,
   });
-  y -= 30;
+  y -= 26;
+
+  if (params.memberNumber) {
+    const memberLabel = `SÓCIO Nº ${String(params.memberNumber).padStart(3, '0')}`;
+    page.drawText(memberLabel, {
+      x: pad,
+      y,
+      size: 9,
+      font: fontBold,
+      color: GOLD,
+      maxWidth: contentW,
+    });
+    y -= 18;
+  }
 
   page.drawText('SÓCIO', { x: pad, y, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
   y -= 16;
@@ -158,7 +188,7 @@ export async function generateLoyaltyCardPDF(params: LoyaltyCardPDFParams) {
     color: rgb(0.45, 0.45, 0.45),
   });
 
-  page.drawRectangle({ x: 0, y: 0, width: 5, height, color: rgb(0.2, 0.75, 0.45) });
+  page.drawRectangle({ x: 0, y: 0, width: 5, height, color: GOLD });
 
   return pdfDoc.save();
 }

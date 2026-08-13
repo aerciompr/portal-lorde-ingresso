@@ -25,6 +25,8 @@ import {
   QrCode,
   DoorOpen,
   Users,
+  ChevronDown,
+  Gift,
 } from 'lucide-react';
 
 type PlanPrice = { id: string; interval: string; priceCents: number };
@@ -61,6 +63,25 @@ function companionLabel(checkinsPerEntry: number): string {
   return `Titular + até ${extra} acompanhante${extra === 1 ? '' : 's'}`;
 }
 
+const FAQ_ITEMS = [
+  {
+    q: 'Posso cancelar quando quiser?',
+    a: 'Sim. Você solicita o cancelamento em Meus Ingressos e recebe de volta um valor proporcional ao tempo restante do período que já pagou — sem multa.',
+  },
+  {
+    q: 'Como funciona depois que eu uso todas as entradas grátis do mês?',
+    a: 'O desconto do seu pacote já se aplica automaticamente nas próximas compras dentro do mesmo mês, sem precisar de cupom.',
+  },
+  {
+    q: 'Preciso levar o cartão impresso?',
+    a: 'Não. É um QR digital — mostre direto do celular na entrada do evento.',
+  },
+  {
+    q: 'Assinei mensal, mas posso trocar pra anual depois?',
+    a: 'Fale com a gente pelo WhatsApp/Contato — ajustamos sua assinatura manualmente por enquanto.',
+  },
+];
+
 /** Preço do plano na periodicidade escolhida; cai pro primeiro preço disponível se não tiver essa. */
 function priceForInterval(plan: Plan, interval: string): PlanPrice | null {
   return plan.prices.find((p) => p.interval === interval) || plan.prices[0] || null;
@@ -68,9 +89,12 @@ function priceForInterval(plan: Plan, interval: string): PlanPrice | null {
 
 export default function FidelidadePage() {
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [activeMembersCount, setActiveMembersCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [interval, setIntervalSel] = useState<string>('monthly');
   const [selected, setSelected] = useState<{ plan: Plan; price: PlanPrice } | null>(null);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [referralFromUrl, setReferralFromUrl] = useState('');
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -84,10 +108,16 @@ export default function FidelidadePage() {
     neighborhood: '',
     city: '',
     state: '',
+    referralCode: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [cepStatus, setCepStatus] = useState<'idle' | 'ok' | 'manual' | 'error'>('idle');
+
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref) setReferralFromUrl(ref.toUpperCase());
+  }, []);
 
   async function lookupCep(raw?: string) {
     const cep = cleanCep(raw ?? form.zip);
@@ -134,7 +164,10 @@ export default function FidelidadePage() {
   useEffect(() => {
     fetch('/api/loyalty/plans')
       .then((r) => r.json())
-      .then((data) => setPlans(data.plans || []))
+      .then((data) => {
+        setPlans(data.plans || []);
+        setActiveMembersCount(data.activeMembersCount || 0);
+      })
       .catch(() => setPlans([]))
       .finally(() => setLoading(false));
   }, []);
@@ -169,6 +202,7 @@ export default function FidelidadePage() {
       neighborhood: '',
       city: '',
       state: '',
+      referralCode: referralFromUrl,
     });
     setCepStatus('idle');
   }
@@ -221,6 +255,7 @@ export default function FidelidadePage() {
           neighborhood: form.neighborhood.trim() || undefined,
           city: form.city.trim() || undefined,
           state: form.state.trim() || undefined,
+          referralCode: form.referralCode.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -255,6 +290,12 @@ export default function FidelidadePage() {
             Assine um pacote e ganhe entradas grátis todo mês — é só mostrar o cartão na
             porta. Depois da cota, ainda garante desconto nas próximas compras.
           </p>
+          {activeMembersCount >= 5 && (
+            <div className="inline-flex items-center gap-1.5 mt-5 text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1.5">
+              <Users className="w-3.5 h-3.5" />
+              Já são {activeMembersCount} sócios ativos
+            </div>
+          )}
         </div>
       </div>
 
@@ -425,6 +466,44 @@ export default function FidelidadePage() {
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
           Pagamento recorrente processado com segurança pela Stripe. Cancele quando quiser.
         </p>
+
+        {/* FAQ */}
+        <div className="max-w-2xl mx-auto mt-14">
+          <h2 className="text-lg font-semibold text-white text-center mb-4">Perguntas frequentes</h2>
+          <div className="space-y-2">
+            {FAQ_ITEMS.map((item, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-white/10 bg-zinc-900/50 overflow-hidden"
+              >
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium text-white"
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                >
+                  {item.q}
+                  <ChevronDown
+                    className={`w-4 h-4 shrink-0 text-zinc-500 transition-transform ${
+                      openFaq === i ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                {openFaq === i && (
+                  <p className="px-4 pb-3 text-sm text-zinc-400 leading-relaxed">{item.a}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Indicação */}
+        <div className="max-w-2xl mx-auto mt-8 rounded-2xl border border-amber-500/20 bg-amber-950/10 p-5 text-center">
+          <Gift className="w-6 h-6 text-amber-400 mx-auto mb-2" />
+          <p className="text-sm text-zinc-300">
+            Já é sócio? Indique um amigo com o código do seu cartão e ganhe crédito na sua
+            próxima fatura quando ele assinar.
+          </p>
+        </div>
       </div>
 
       {selected && (
@@ -574,6 +653,22 @@ export default function FidelidadePage() {
                     onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="label">Código de indicação (opcional)</label>
+                <input
+                  className="input font-mono uppercase"
+                  value={form.referralCode}
+                  onChange={(e) =>
+                    setForm({ ...form, referralCode: e.target.value.toUpperCase() })
+                  }
+                  placeholder="FID-XXXXXXXX"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Ganhou um código de um sócio? Cole aqui — ele recebe um crédito quando sua
+                  assinatura for confirmada.
+                </p>
               </div>
             </div>
             <button

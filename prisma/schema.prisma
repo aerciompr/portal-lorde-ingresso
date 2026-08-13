@@ -385,6 +385,13 @@ model LoyaltyMembership {
   createdAt            DateTime  @default(now())
   canceledAt           DateTime?
 
+  /** Quem indicou este sócio (código do cartão informado no signup). */
+  referredById       String?
+  referredBy         LoyaltyMembership?  @relation("LoyaltyReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals          LoyaltyMembership[] @relation("LoyaltyReferrals")
+  /** Marca quando o indicador já recebeu o crédito — evita pagar 2x se o webhook repetir. */
+  referralRewardedAt DateTime?
+
   redemptions LoyaltyRedemption[]
   cancellationRequests LoyaltyCancellationRequest[]
 
@@ -392,6 +399,7 @@ model LoyaltyMembership {
   @@index([status])
   @@index([planId])
   @@index([planPriceId])
+  @@index([referredById])
 }
 
 /** Solicitação de cancelamento do clube — mesma filosofia do CancellationRequest de ingresso. */
@@ -409,6 +417,25 @@ model LoyaltyCancellationRequest {
 
   @@index([membershipId])
   @@index([status])
+}
+
+/** Trilha de auditoria de ações administrativas do clube (quem fez o quê, quando). */
+model LoyaltyAuditLog {
+  id         String   @id @default(cuid())
+  /** plan_created | plan_updated | plan_deactivated | cancellation_approved | cancellation_rejected | referral_bonus_updated | checkin_recognized | card_resent */
+  action     String   @db.VarChar(64)
+  /** e-mail do admin/staff, ou 'checkin-api'/'cron' quando não houver sessão humana */
+  actor      String   @db.VarChar(191)
+  /** LoyaltyPlan | LoyaltyMembership | LoyaltyCancellationRequest | Setting */
+  entityType String   @db.VarChar(32)
+  entityId   String?  @db.VarChar(191)
+  detail     String?  @db.Text
+  meta       String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 /** Um resgate (entrada grátis ou com desconto de excedente) usando o cartão fidelidade num evento. */

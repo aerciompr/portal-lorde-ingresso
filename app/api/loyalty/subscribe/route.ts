@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
     neighborhood?: string;
     city?: string;
     state?: string;
+    referralCode?: string;
   };
   try {
     body = await req.json();
@@ -104,6 +105,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Falha ao gerar cartão, tente novamente' }, { status: 500 });
   }
 
+  // Código de indicação (opcional) — quem indicou ganha crédito na próxima fatura
+  // quando ESTE sócio pagar a 1ª fatura (ver handleLoyaltyInvoicePaid no webhook).
+  let referredById: string | null = null;
+  const referralCode = String(body.referralCode || '').toUpperCase().trim();
+  if (referralCode) {
+    const referrer = await prisma.loyaltyMembership.findUnique({
+      where: { cardCode: referralCode },
+    });
+    if (referrer && referrer.buyerEmail.toLowerCase() !== email) {
+      referredById = referrer.id;
+    }
+  }
+
   const membership = await prisma.loyaltyMembership.create({
     data: {
       planId: plan.id,
@@ -121,6 +135,7 @@ export async function POST(req: NextRequest) {
       buyerNeighborhood: neighborhood || null,
       buyerCity: city || null,
       buyerState: state || null,
+      referredById,
       status: 'pending',
     },
   });

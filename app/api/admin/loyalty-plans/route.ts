@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, getAdminUser } from '@/lib/auth';
 import { requireAdminMutation } from '@/lib/request-security';
 import { validateLoyaltyPlanPrices, syncLoyaltyPlanPrices } from '@/lib/loyalty-plan-prices';
+import { logLoyaltyAudit } from '@/lib/loyalty-audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -121,6 +122,14 @@ export async function POST(req: NextRequest) {
     const withPrices = await prisma.loyaltyPlan.findUnique({
       where: { id: created.id },
       include: { prices: { orderBy: { createdAt: 'asc' } } },
+    });
+
+    void logLoyaltyAudit({
+      action: 'plan_created',
+      actor: (await getAdminUser()) || 'admin',
+      entityType: 'LoyaltyPlan',
+      entityId: created.id,
+      detail: `Pacote "${created.name}" criado`,
     });
 
     return NextResponse.json({ plan: withPrices }, { status: 201 });

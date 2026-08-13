@@ -36,6 +36,15 @@ type EventInfo = {
   imageUrl?: string | null;
 };
 
+type LoyaltyLookupResult = {
+  buyerName: string;
+  planName: string;
+  status: string;
+  entriesUsedInPeriod: number;
+  freeEntriesPerCycle: number;
+  memberNumber?: number;
+};
+
 function StatsBar({ stats, lastSold }: { stats: Stats; lastSold: LastSold | null }) {
   const whenHint = lastSold
     ? new Date(lastSold.paidAt).toLocaleString('pt-BR', {
@@ -119,6 +128,8 @@ export default function CheckinEventoPage() {
   const [scanning, setScanning] = useState(false);
   const [code, setCode] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [loyaltyResult, setLoyaltyResult] = useState<LoyaltyLookupResult | null>(null);
+  const [loyaltyError, setLoyaltyError] = useState<string | null>(null);
   const qrRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
@@ -212,7 +223,38 @@ export default function CheckinEventoPage() {
     }
   }
 
+  async function checkLoyaltyCard(qrOrCode: string) {
+    setLastResult(null);
+    try {
+      const res = await fetch('/api/checkin/loyalty-lookup', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: qrOrCode, eventId, eventTitle: event?.title || '' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Cartão não encontrado');
+      setLoyaltyResult(data as LoyaltyLookupResult);
+      setLoyaltyError(null);
+      if (data.status === 'active') {
+        toast.success(`Sócio reconhecido: ${data.buyerName}`);
+      } else {
+        toast.warning(`Sócio encontrado, mas assinatura ${data.status !== 'active' ? 'não está ativa' : ''}`);
+      }
+    } catch (e) {
+      setLoyaltyResult(null);
+      setLoyaltyError((e as Error).message || 'Cartão não encontrado');
+      toast.error((e as Error).message || 'Cartão não encontrado');
+    }
+  }
+
   async function validateCode(qrOrCode: string) {
+    if (qrOrCode.trim().toUpperCase().startsWith('FID-')) {
+      await checkLoyaltyCard(qrOrCode.trim());
+      return;
+    }
+    setLoyaltyResult(null);
+    setLoyaltyError(null);
     try {
       const res = await fetch('/api/checkin/validate', {
         method: 'POST',
@@ -372,8 +414,38 @@ export default function CheckinEventoPage() {
                 Último: {lastResult}
               </div>
             )}
+            {loyaltyResult && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-amber-300 uppercase tracking-wide">
+                    Sócio {loyaltyResult.status === 'active' ? '• Prioridade' : ''}
+                  </span>
+                  {loyaltyResult.memberNumber && (
+                    <span className="text-[10px] text-amber-400/80">
+                      Nº {String(loyaltyResult.memberNumber).padStart(3, '0')}
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm font-medium text-white">{loyaltyResult.buyerName}</div>
+                <div className="text-xs text-amber-200/80">{loyaltyResult.planName}</div>
+                {loyaltyResult.status !== 'active' ? (
+                  <div className="text-xs text-red-400 pt-1">
+                    Atenção: assinatura {loyaltyResult.status === 'past_due' ? 'com pagamento pendente' : loyaltyResult.status === 'canceled' ? 'cancelada' : 'não está ativa'} — confira antes de liberar prioridade.
+                  </div>
+                ) : (
+                  <div className="text-xs text-zinc-400 pt-1">
+                    Cota do mês: {loyaltyResult.entriesUsedInPeriod} / {loyaltyResult.freeEntriesPerCycle} usadas · apenas reconhecimento, não consome entrada
+                  </div>
+                )}
+              </div>
+            )}
+            {loyaltyError && (
+              <div className="text-xs text-red-400 bg-red-950/30 rounded-lg px-3 py-2">
+                {loyaltyError}
+              </div>
+            )}
             <p className="text-[10px] text-zinc-500">
-              Só aceita ingressos deste evento. Abaixo: busca e check-in manual na lista.
+              Só aceita ingressos deste evento. Cartões de sócio (FID-) mostram só reconhecimento de prioridade. Abaixo: busca e check-in manual na lista.
             </p>
           </div>
         )}

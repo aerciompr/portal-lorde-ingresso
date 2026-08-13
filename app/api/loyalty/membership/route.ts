@@ -62,6 +62,12 @@ export async function POST(req: NextRequest) {
         orderBy: { requestedAt: 'desc' },
         take: 1,
       },
+      redemptions: {
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: { event: { select: { title: true, date: true } } },
+      },
+      _count: { select: { referrals: true } },
     },
   });
 
@@ -81,12 +87,21 @@ export async function POST(req: NextRequest) {
       currentPeriodEnd: membership.currentPeriodEnd,
       hasStripeCustomer: Boolean(membership.stripeCustomerId),
       cancellationStatus: cancellation?.status || null,
+      referralsCount: membership._count.referrals,
       plan: {
         name: membership.plan.name,
         freeEntriesPerCycle: membership.plan.freeEntriesPerCycle,
         checkinsPerEntry: membership.plan.checkinsPerEntry,
         overageDiscountPercent: membership.plan.overageDiscountPercent,
       },
+      redemptions: membership.redemptions.map((r) => ({
+        id: r.id,
+        eventTitle: r.event?.title || '—',
+        eventDate: r.event?.date || null,
+        withinFreeQuota: r.withinFreeQuota,
+        ticketsGranted: r.ticketsGranted,
+        createdAt: r.createdAt,
+      })),
     },
   });
 }

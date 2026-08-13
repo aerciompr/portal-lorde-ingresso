@@ -12,26 +12,29 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET() {
   try {
-    const plans = await prisma.loyaltyPlan.findMany({
-      where: { active: true, prices: { some: { active: true } } },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        freeEntriesPerCycle: true,
-        checkinsPerEntry: true,
-        overageDiscountPercent: true,
-        prices: {
-          where: { active: true },
-          orderBy: { priceCents: 'asc' },
-          select: { id: true, interval: true, priceCents: true },
+    const [plans, activeMembersCount] = await Promise.all([
+      prisma.loyaltyPlan.findMany({
+        where: { active: true, prices: { some: { active: true } } },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          freeEntriesPerCycle: true,
+          checkinsPerEntry: true,
+          overageDiscountPercent: true,
+          prices: {
+            where: { active: true },
+            orderBy: { priceCents: 'asc' },
+            select: { id: true, interval: true, priceCents: true },
+          },
         },
-      },
-    });
-    return NextResponse.json({ plans });
+      }),
+      prisma.loyaltyMembership.count({ where: { status: 'active' } }),
+    ]);
+    return NextResponse.json({ plans, activeMembersCount });
   } catch (e) {
     console.error('[loyalty/plans GET]', e);
-    return NextResponse.json({ plans: [] });
+    return NextResponse.json({ plans: [], activeMembersCount: 0 });
   }
 }

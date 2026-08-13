@@ -145,6 +145,11 @@ async function handleLoyaltyInvoicePaid(invoice: Stripe.Invoice, stripe: Stripe)
       const { formatDateInAppTz } = await import('@/lib/timezone');
       const { sendLoyaltyCardEmail } = await import('@/lib/email');
 
+      const memberNumber =
+        (await prisma.loyaltyMembership.count({
+          where: { createdAt: { lte: membership.createdAt } },
+        })) || undefined;
+
       const pdfBytes = await generateLoyaltyCardPDF({
         buyerName: membership.buyerName,
         planName: membership.plan.name,
@@ -153,6 +158,7 @@ async function handleLoyaltyInvoicePaid(invoice: Stripe.Invoice, stripe: Stripe)
         freeEntriesPerCycle: membership.plan.freeEntriesPerCycle,
         checkinsPerEntry: membership.plan.checkinsPerEntry,
         renewsOnLabel: `Renova em ${formatDateInAppTz(currentPeriodEnd, { day: '2-digit', month: '2-digit', year: 'numeric' })}`,
+        memberNumber,
       });
 
       const mail = await sendLoyaltyCardEmail({
@@ -173,6 +179,33 @@ async function handleLoyaltyInvoicePaid(invoice: Stripe.Invoice, stripe: Stripe)
       }
     } catch (e) {
       console.error('[STRIPE WEBHOOK] geração/envio do cartão fidelidade falhou', e);
+    }
+
+    // Crédito de indicação — só na 1ª cobrança, só uma vez (referralRewardedAt evita
+    // pagar 2x se o webhook repetir a entrega).
+    if (membership.referredById && !membership.referralRewardedAt) {
+      try {
+        const referrer = await prisma.loyaltyMembership.findUnique({
+          where: { id: membership.referredById },
+        });
+        if (referrer?.stripeCustomerId) {
+          const { getLoyaltyReferralBonusCents } = await import('@/lib/loyalty-settings');
+          const bonusCents = await getLoyaltyReferralBonusCents();
+          if (bonusCents > 0) {
+            await stripe.customers.createBalanceTransaction(referrer.stripeCustomerId, {
+              amount: -bonusCents,
+              currency: 'brl',
+              description: `Bônus por indicar ${membership.buyerName} pro clube`,
+            });
+          }
+        }
+        await prisma.loyaltyMembership.update({
+          where: { id: membership.id },
+          data: { referralRewardedAt: new Date() },
+        });
+      } catch (e) {
+        console.error('[STRIPE WEBHOOK] crédito de indicação falhou', e);
+      }
     }
   }
 }

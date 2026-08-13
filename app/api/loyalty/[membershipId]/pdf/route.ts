@@ -42,6 +42,11 @@ export async function GET(
     ? `Renova em ${formatDateInAppTz(membership.currentPeriodEnd, { day: '2-digit', month: '2-digit', year: 'numeric' })}`
     : 'Renovação pendente da 1ª cobrança';
 
+  const memberNumber =
+    (await prisma.loyaltyMembership.count({
+      where: { createdAt: { lte: membership.createdAt } },
+    })) || undefined;
+
   const pdfBytes = await generateLoyaltyCardPDF({
     buyerName: membership.buyerName,
     planName: membership.plan.name,
@@ -50,6 +55,7 @@ export async function GET(
     freeEntriesPerCycle: membership.plan.freeEntriesPerCycle,
     checkinsPerEntry: membership.plan.checkinsPerEntry,
     renewsOnLabel,
+    memberNumber,
   });
 
   return new NextResponse(Buffer.from(pdfBytes), {

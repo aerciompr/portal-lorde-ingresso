@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, getAdminUser } from '@/lib/auth';
 import { requireAdminMutation } from '@/lib/request-security';
 import { validateLoyaltyPlanPrices, syncLoyaltyPlanPrices } from '@/lib/loyalty-plan-prices';
+import { logLoyaltyAudit } from '@/lib/loyalty-audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -120,6 +121,18 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       where: { id },
       include: { prices: { orderBy: { createdAt: 'asc' } } },
     });
+
+    const justDeactivated = data.active === false && existing.active !== false;
+    void logLoyaltyAudit({
+      action: justDeactivated ? 'plan_deactivated' : 'plan_updated',
+      actor: (await getAdminUser()) || 'admin',
+      entityType: 'LoyaltyPlan',
+      entityId: id,
+      detail: justDeactivated
+        ? `Pacote "${existing.name}" desativado`
+        : `Pacote "${existing.name}" atualizado`,
+    });
+
     return NextResponse.json({ plan: updated });
   } catch (e) {
     console.error('[admin/loyalty-plans PATCH]', e);
@@ -140,6 +153,13 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     const updated = await prisma.loyaltyPlan.update({
       where: { id },
       data: { active: false },
+    });
+    void logLoyaltyAudit({
+      action: 'plan_deactivated',
+      actor: (await getAdminUser()) || 'admin',
+      entityType: 'LoyaltyPlan',
+      entityId: id,
+      detail: `Pacote "${updated.name}" desativado`,
     });
     return NextResponse.json({ plan: updated, deactivated: true });
   } catch (e) {

@@ -83,6 +83,20 @@ interface Order {
 type LoginTab = 'codigo' | 'senha';
 type NavId = 'proximos' | 'passados' | 'estornos' | 'fidelidade' | 'conta';
 
+/** Aba "Clube" desligada por pedido do usuário (2026-08-12) — ainda não pronta pra
+ * expor ao cliente. Toda a lógica/fetch continua rodando por baixo; é só a aba que
+ * some do menu. Reativar: voltar pra `true`. */
+const LOYALTY_CLUB_TAB_ENABLED = false;
+
+type LoyaltyRedemptionInfo = {
+  id: string;
+  eventTitle: string;
+  eventDate: string | null;
+  withinFreeQuota: boolean;
+  ticketsGranted: number;
+  createdAt: string;
+};
+
 type LoyaltyMembershipInfo = {
   id: string;
   cardCode: string;
@@ -92,12 +106,14 @@ type LoyaltyMembershipInfo = {
   currentPeriodEnd: string | null;
   hasStripeCustomer: boolean;
   cancellationStatus: string | null;
+  referralsCount: number;
   plan: {
     name: string;
     freeEntriesPerCycle: number;
     checkinsPerEntry: number;
     overageDiscountPercent: number;
   };
+  redemptions: LoyaltyRedemptionInfo[];
 };
 
 function statusBadge(status: string) {
@@ -659,7 +675,7 @@ export default function MeusIngressos() {
           },
         ]
       : []),
-    ...(membership
+    ...(LOYALTY_CLUB_TAB_ENABLED && membership
       ? [{ id: 'fidelidade' as const, label: 'Clube', icon: Award }]
       : []),
     { id: 'conta', label: 'Conta', icon: User },
@@ -1450,11 +1466,32 @@ export default function MeusIngressos() {
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-400">Entradas grátis usadas neste ciclo</span>
-                  <span className="font-medium text-white tabular-nums">
-                    {membership.entriesUsedInPeriod} / {membership.plan.freeEntriesPerCycle}
-                  </span>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-400">Entradas grátis usadas neste ciclo</span>
+                    <span className="font-medium text-white tabular-nums">
+                      {membership.entriesUsedInPeriod} / {membership.plan.freeEntriesPerCycle}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-zinc-800/60 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        membership.entriesUsedInPeriod >= membership.plan.freeEntriesPerCycle
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                      }`}
+                      style={{
+                        width: `${
+                          membership.plan.freeEntriesPerCycle > 0
+                            ? Math.min(
+                                100,
+                                (membership.entriesUsedInPeriod / membership.plan.freeEntriesPerCycle) * 100
+                              )
+                            : 100
+                        }%`,
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {membership.currentPeriodEnd && (
@@ -1511,6 +1548,72 @@ export default function MeusIngressos() {
                         Solicitar cancelamento
                       </button>
                     )}
+                  </div>
+                )}
+              </div>
+
+              {/* Indicação */}
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-950/10 p-4 space-y-2">
+                <div className="text-sm font-medium text-white">Indique um amigo</div>
+                <p className="text-xs text-zinc-400">
+                  Compartilhe seu código — quando seu amigo assinar, você ganha crédito na
+                  próxima fatura.
+                  {membership.referralsCount > 0 &&
+                    ` Já indicou ${membership.referralsCount} pessoa(s).`}
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-sm font-mono text-amber-300 bg-zinc-950/60 border border-white/10 rounded-lg px-3 py-2 truncate">
+                    {`${typeof window !== 'undefined' ? window.location.origin : ''}/fidelidade?ref=${membership.cardCode}`}
+                  </code>
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs shrink-0"
+                    onClick={() =>
+                      handleCopy(
+                        'referral-link',
+                        `${window.location.origin}/fidelidade?ref=${membership.cardCode}`
+                      )
+                    }
+                  >
+                    {copiedKey === 'referral-link' ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Extrato de uso */}
+              <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+                <div className="text-sm font-medium text-white mb-3">Extrato de uso</div>
+                {membership.redemptions.length === 0 ? (
+                  <p className="text-xs text-zinc-500">
+                    Nenhum resgate ainda — use o cartão na entrada de um evento pra aparecer
+                    aqui.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {membership.redemptions.map((r) => (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between gap-2 text-xs border-b border-white/5 last:border-0 pb-2 last:pb-0"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-zinc-200 truncate">{r.eventTitle}</div>
+                          <div className="text-zinc-500">
+                            {new Date(r.createdAt).toLocaleDateString('pt-BR', {
+                              timeZone: 'America/Maceio',
+                            })}
+                          </div>
+                        </div>
+                        <span
+                          className={`shrink-0 px-2 py-0.5 rounded-full ${
+                            r.withinFreeQuota
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : 'bg-amber-500/15 text-amber-400'
+                          }`}
+                        >
+                          {r.withinFreeQuota ? 'Grátis' : 'Com desconto'}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

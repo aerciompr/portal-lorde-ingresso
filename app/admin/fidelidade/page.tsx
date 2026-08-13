@@ -3,8 +3,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Award, Plus, Pencil, Power, Users, Trash2, Undo2 } from 'lucide-react';
+import { Award, Plus, Pencil, Power, Users, Trash2, Undo2, TrendingUp, Gift, BarChart3 } from 'lucide-react';
 import { formatPrice, centsToInput, parseBRLToCents } from '@/lib/utils';
+
+type LoyaltyMetrics = {
+  activeCount: number;
+  pastDueCount: number;
+  pendingCount: number;
+  canceledLast30d: number;
+  newLast30d: number;
+  mrrCents: number;
+  churnPercent: number;
+};
 
 const INTERVALS = ['monthly', 'quarterly', 'semiannual', 'annual'] as const;
 type Interval = (typeof INTERVALS)[number];
@@ -87,6 +97,41 @@ export default function AdminFidelidadePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [metrics, setMetrics] = useState<LoyaltyMetrics | null>(null);
+  const [referralBonusInput, setReferralBonusInput] = useState('');
+  const [savingReferral, setSavingReferral] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/loyalty-metrics', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setMetrics(data))
+      .catch(() => setMetrics(null));
+    fetch('/api/admin/loyalty-settings', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setReferralBonusInput(centsToInput(data.referralBonusCents));
+      })
+      .catch(() => {});
+  }, []);
+
+  async function saveReferralBonus() {
+    setSavingReferral(true);
+    try {
+      const res = await fetch('/api/admin/loyalty-settings', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referralBonusCents: parseBRLToCents(referralBonusInput) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      toast.success('Bônus de indicação atualizado');
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingReferral(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -250,7 +295,15 @@ export default function AdminFidelidadePage() {
             desconto para quem passar da cota.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Link href="/admin/fidelidade/membros" className="btn btn-secondary gap-2">
+            <Users className="w-4 h-4" />
+            Sócios
+          </Link>
+          <Link href="/admin/fidelidade/relatorios" className="btn btn-secondary gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Relatórios
+          </Link>
           <Link href="/admin/fidelidade/cancelamentos" className="btn btn-secondary gap-2">
             <Undo2 className="w-4 h-4" />
             Cancelamentos
@@ -260,6 +313,66 @@ export default function AdminFidelidadePage() {
             Novo pacote
           </button>
         </div>
+      </div>
+
+      {metrics && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="card p-4">
+            <div className="text-[11px] text-zinc-500 uppercase tracking-wide flex items-center gap-1">
+              <Users className="w-3 h-3" /> Sócios ativos
+            </div>
+            <div className="text-2xl font-semibold mt-1 text-white">{metrics.activeCount}</div>
+            {metrics.pastDueCount > 0 && (
+              <div className="text-[11px] text-amber-400 mt-0.5">
+                {metrics.pastDueCount} com pagamento pendente
+              </div>
+            )}
+          </div>
+          <div className="card p-4">
+            <div className="text-[11px] text-zinc-500 uppercase tracking-wide flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" /> MRR
+            </div>
+            <div className="text-2xl font-semibold mt-1 text-emerald-400">
+              {formatPrice(metrics.mrrCents)}
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">normalizado por mês</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-[11px] text-zinc-500 uppercase tracking-wide">Churn (30d)</div>
+            <div className="text-2xl font-semibold mt-1 text-white">{metrics.churnPercent}%</div>
+            <div className="text-[11px] text-zinc-500 mt-0.5">
+              {metrics.canceledLast30d} cancelamento(s)
+            </div>
+          </div>
+          <div className="card p-4">
+            <div className="text-[11px] text-zinc-500 uppercase tracking-wide">Novos (30d)</div>
+            <div className="text-2xl font-semibold mt-1 text-white">{metrics.newLast30d}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="card p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="text-[11px] text-zinc-500 flex items-center gap-1 mb-1">
+            <Gift className="w-3.5 h-3.5" />
+            Bônus de indicação (R$) — crédito na próxima fatura de quem indicou
+          </label>
+          <input
+            className="input text-sm w-32"
+            inputMode="decimal"
+            value={referralBonusInput}
+            onChange={(e) => setReferralBonusInput(e.target.value)}
+            placeholder="20,00"
+          />
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary text-sm"
+          disabled={savingReferral}
+          onClick={() => void saveReferralBonus()}
+        >
+          {savingReferral ? 'Salvando…' : 'Salvar'}
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
