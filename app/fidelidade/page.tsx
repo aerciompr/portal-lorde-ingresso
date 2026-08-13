@@ -273,14 +273,14 @@ export default function FidelidadePage() {
     <div>
       {/* Hero */}
       <div className="relative overflow-hidden bg-zinc-950">
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-950/30 via-zinc-950 to-zinc-950" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/30 via-zinc-950 to-zinc-950" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-500/10 via-transparent to-transparent" />
         <div className="absolute inset-0 bg-[radial-gradient(#ffffff10_0.5px,transparent_1px)] bg-[length:4px_4px] opacity-40" />
         <div className="relative max-w-4xl mx-auto px-6 pt-14 pb-16 sm:pt-20 sm:pb-20 text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-500/15 ring-1 ring-amber-400/30 mb-5">
-            <Crown className="w-7 h-7 text-amber-400" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/15 ring-1 ring-emerald-400/30 mb-5">
+            <Crown className="w-7 h-7 text-emerald-400" />
           </div>
-          <div className="text-amber-400 text-sm tracking-[3px] mb-2 font-medium">
+          <div className="text-emerald-400 text-sm tracking-[3px] mb-2 font-medium">
             CLUBE LORDE NELSON
           </div>
           <h1 className="text-4xl sm:text-5xl font-semibold tracking-[-2px] leading-tight mb-4 text-white">
@@ -291,7 +291,7 @@ export default function FidelidadePage() {
             porta. Depois da cota, ainda garante desconto nas próximas compras.
           </p>
           {activeMembersCount >= 5 && (
-            <div className="inline-flex items-center gap-1.5 mt-5 text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1.5">
+            <div className="inline-flex items-center gap-1.5 mt-5 text-xs text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1.5">
               <Users className="w-3.5 h-3.5" />
               Já são {activeMembersCount} sócios ativos
             </div>
@@ -308,7 +308,7 @@ export default function FidelidadePage() {
             { icon: DoorOpen, label: 'Mostre na entrada' },
           ].map((step, i) => (
             <div key={i} className="flex flex-col items-center text-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-amber-500/10 text-amber-400">
+              <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-emerald-500/10 text-emerald-400">
                 <step.icon className="w-4 h-4" />
               </span>
               <span className="text-[11px] sm:text-xs text-zinc-400 leading-tight">
@@ -331,7 +331,7 @@ export default function FidelidadePage() {
                   onClick={() => setIntervalSel(i)}
                   className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
                     interval === i
-                      ? 'bg-amber-400 text-zinc-950'
+                      ? 'bg-emerald-400 text-zinc-950'
                       : 'text-zinc-400 hover:text-white'
                   }`}
                 >
@@ -375,12 +375,12 @@ export default function FidelidadePage() {
                   key={p.id}
                   className={`relative flex flex-col rounded-2xl p-6 transition-all ${
                     featured
-                      ? 'border-2 border-amber-400/50 bg-gradient-to-b from-amber-950/30 to-zinc-900 shadow-lg shadow-amber-950/30 sm:-translate-y-2'
-                      : 'border border-white/10 bg-zinc-900/50 hover:border-amber-400/30'
+                      ? 'border-2 border-emerald-400/50 bg-gradient-to-b from-emerald-950/30 to-zinc-900 shadow-lg shadow-emerald-950/30 sm:-translate-y-2'
+                      : 'border border-white/10 bg-zinc-900/50 hover:border-emerald-400/30'
                   }`}
                 >
                   {featured && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-amber-400 text-zinc-950">
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-emerald-400 text-zinc-950">
                       Mais popular
                     </span>
                   )}
@@ -388,7 +388,7 @@ export default function FidelidadePage() {
                   <span
                     className={`inline-flex items-center justify-center w-11 h-11 rounded-xl mb-4 ${
                       featured
-                        ? 'bg-amber-400/15 text-amber-400'
+                        ? 'bg-emerald-400/15 text-emerald-400'
                         : 'bg-emerald-500/10 text-emerald-400'
                     }`}
                   >
@@ -401,9 +401,7 @@ export default function FidelidadePage() {
                   )}
 
                   <div className="mt-4 flex items-baseline gap-1">
-                    <span
-                      className={`text-3xl font-bold ${featured ? 'text-amber-400' : 'text-emerald-400'}`}
-                    >
+                    <span className="text-3xl font-bold text-emerald-400">
                       {formatPrice(price.priceCents)}
                     </span>
                     <span className="text-zinc-500 text-sm">
@@ -449,7 +447,7 @@ export default function FidelidadePage() {
                     className={`w-full mt-6 ${featured ? 'btn' : 'btn btn-secondary'}`}
                     style={
                       featured
-                        ? { background: '#d4af37', color: '#18181b', borderColor: '#d4af37' }
+                        ? { background: '#10b981', color: '#18181b', borderColor: '#10b981' }
                         : undefined
                     }
                     onClick={() => openSubscribe(p)}
@@ -497,8 +495,8 @@ export default function FidelidadePage() {
         </div>
 
         {/* Indicação */}
-        <div className="max-w-2xl mx-auto mt-8 rounded-2xl border border-amber-500/20 bg-amber-950/10 p-5 text-center">
-          <Gift className="w-6 h-6 text-amber-400 mx-auto mb-2" />
+        <div className="max-w-2xl mx-auto mt-8 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 p-5 text-center">
+          <Gift className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
           <p className="text-sm text-zinc-300">
             Já é sócio? Indique um amigo com o código do seu cartão e ganhe crédito na sua
             próxima fatura quando ele assinar.
@@ -603,12 +601,12 @@ export default function FidelidadePage() {
                   </button>
                 </div>
                 {cepStatus === 'manual' && (
-                  <p className="text-[10px] text-amber-400 mb-2">
+                  <p className="text-[10px] text-emerald-400 mb-2">
                     CEP não encontrado — preencha manualmente.
                   </p>
                 )}
                 {cepStatus === 'error' && (
-                  <p className="text-[10px] text-amber-400 mb-2">
+                  <p className="text-[10px] text-emerald-400 mb-2">
                     Consulta indisponível — preencha manualmente.
                   </p>
                 )}
