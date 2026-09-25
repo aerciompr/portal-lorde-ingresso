@@ -6,7 +6,7 @@ Aplicação **Next.js 16** de venda de ingressos do Lorde Nelson Rest Pub (Macei
 |--|--|
 | **Produção** | https://portal.lordenelson.com.br |
 | **GitHub** | https://github.com/aerciompr/portal-lorde-ingresso |
-| **VPS / EasyPanel** | `151.243.33.241` |
+| **VPS / EasyPanel** | `X.X.X.X` |
 | **Path local** | `C:\Users\aerciompr\projects\lordenelson-ingressos` |
 
 ---
@@ -81,7 +81,7 @@ npx --yes tsx prisma/seed.ts
 
 ## Produção (EasyPanel)
 
-1. DNS: registro **A** `portal` → `151.243.33.241`  
+1. DNS: registro **A** `portal` → `X.X.X.X`  
 2. Serviço **MySQL** + serviço **App** (GitHub + **Builder = Dockerfile**)  
 3. Env sem aspas; `DATABASE_URL` com host = **nome do serviço MySQL** (não `localhost`)  
 4. Após deploy: no console do container  
