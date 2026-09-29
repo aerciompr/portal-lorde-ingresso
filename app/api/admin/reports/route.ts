@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAdmin } from '@/lib/auth';
+import { parseAppLocalDateTime } from '@/lib/timezone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,7 @@ type Bucket = {
   paidTickets: number;
   refundedOrders: number;
   pendingOrders: number;
+  cancelledOrders: number;
 };
 
 function emptyBucket(): Bucket {
@@ -26,6 +28,7 @@ function emptyBucket(): Bucket {
     paidTickets: 0,
     refundedOrders: 0,
     pendingOrders: 0,
+    cancelledOrders: 0,
   };
 }
 
@@ -57,6 +60,8 @@ function addOrder(
     b.refundedOrders += 1;
   } else if (status === 'pending') {
     b.pendingOrders += 1;
+  } else if (status === 'cancelled' || status === 'canceled') {
+    b.cancelledOrders += 1;
   }
 }
 
@@ -74,12 +79,11 @@ export async function GET(req: Request) {
     let fromDate: Date | null = null;
     let toDate: Date | null = null;
     if (fromStr) {
-      fromDate = new Date(fromStr + 'T00:00:00');
-      if (Number.isNaN(fromDate.getTime())) fromDate = null;
+      fromDate = parseAppLocalDateTime(`${fromStr}T00:00:00`);
     }
     if (toStr) {
-      toDate = new Date(toStr + 'T23:59:59.999');
-      if (Number.isNaN(toDate.getTime())) toDate = null;
+      toDate = parseAppLocalDateTime(`${toStr}T23:59:59`);
+      if (toDate) toDate.setUTCMilliseconds(999);
     }
 
     const [events, ordersRaw] = await Promise.all([
@@ -110,6 +114,8 @@ export async function GET(req: Request) {
           feeCents: true,
           paymentMethod: true,
           eventId: true,
+          buyerName: true,
+          buyerEmail: true,
           loteId: true,
           createdAt: true,
           paidAt: true,
@@ -249,6 +255,50 @@ export async function GET(req: Request) {
         if (b.paidOrders !== a.paidOrders) return b.paidOrders - a.paidOrders;
         return (b.date || '').localeCompare(a.date || '');
       });
+
+    const dashboard = url.searchParams.get('dashboard') === '1';
+    if (dashboard) {
+      const chartData = byEvent
+        .filter((e) => e.paidTickets > 0)
+        .slice(0, 8)
+        .map((e) => ({
+          name: e.title.length > 18 ? `${e.title.slice(0, 15)}…` : e.title,
+          fullName: e.title,
+          ingressos: e.paidTickets,
+        }));
+      const statusData = [
+        { name: 'Pagos', value: general.paidOrders, color: '#22c55e' },
+        { name: 'Estornados', value: general.refundedOrders, color: '#ef4444' },
+        { name: 'Pendentes', value: general.pendingOrders, color: '#eab308' },
+        { name: 'Cancelados', value: general.cancelledOrders, color: '#71717a' },
+      ].filter((d) => d.value > 0);
+      return NextResponse.json({
+        totalBruto: general.grossCents,
+        totalLiquido: general.netCents,
+        totalEstornos: general.refundCents,
+        paidCount: general.paidOrders,
+        paidTickets: general.paidTickets,
+        chartData,
+        statusData,
+        recent: [...orders]
+          .sort((a, b) => (b.paidAt || b.createdAt).getTime() - (a.paidAt || a.createdAt).getTime())
+          .slice(0, 10)
+          .map((o) => ({
+            id: o.id,
+            buyerName: o.buyerName,
+            buyerEmail: o.buyerEmail,
+            totalCents: o.totalCents,
+            grossCents: o.grossCents,
+            netCents: o.netCents,
+            status: o.status,
+            createdAt: o.createdAt.toISOString(),
+            paidAt: o.paidAt?.toISOString() || null,
+            event: { title: o.event?.title || 'Evento' },
+            lote: o.lote ? { nome: o.lote.nome } : null,
+            tickets: o.tickets.map((t) => ({ id: t.id })),
+          })),
+      });
+    }
 
     return NextResponse.json({
       generatedAt: new Date().toISOString(),

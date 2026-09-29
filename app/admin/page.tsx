@@ -1,17 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
 import PeriodFilter from '@/components/PeriodFilter';
 import StatusBadge from '@/components/StatusBadge';
-import {
-  endOfLocalDay,
-  periodToRange,
-  startOfLocalDay,
-  type PeriodId,
-} from '@/lib/period';
-import { summarizeOrders } from '@/lib/order-metrics';
+import { periodToRange, type PeriodId } from '@/lib/period';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,14 +26,24 @@ interface Order {
   tickets?: { id: string; status?: string }[];
 }
 
-function orderWhen(o: Order): Date {
-  if (o.paidAt) return new Date(o.paidAt);
-  if (o.createdAt) return new Date(o.createdAt);
-  return new Date(0);
-}
+type DashboardData = {
+  totalBruto: number;
+  totalLiquido: number;
+  totalEstornos: number;
+  paidCount: number;
+  paidTickets: number;
+  chartData: Array<{ name: string; fullName: string; ingressos: number }>;
+  statusData: Array<{ name: string; value: number; color: string }>;
+  recent: Order[];
+};
+
+const EMPTY_DASH: DashboardData = {
+  totalBruto: 0, totalLiquido: 0, totalEstornos: 0, paidCount: 0, paidTickets: 0,
+  chartData: [], statusData: [], recent: [],
+};
 
 export default function AdminDashboard() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [dash, setDash] = useState<DashboardData>(EMPTY_DASH);
   const [period, setPeriod] = useState<PeriodId>('30d');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -98,9 +102,19 @@ export default function AdminDashboard() {
   }, []);
 
   const load = useCallback(async () => {
-    const res = await fetch('/api/admin/orders?limit=500');
-    if (res.ok) setOrders(await res.json());
-  }, []);
+    const range = periodToRange(period, customFrom, customTo);
+    const qs = new URLSearchParams({ dashboard: '1' });
+    if (range.from) qs.set('from', range.from);
+    if (range.to) qs.set('to', range.to);
+    try {
+      const res = await fetch(`/api/admin/reports?${qs}`, { credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao carregar dashboard');
+      setDash(data as DashboardData);
+    } catch (e) {
+      toast.error((e as Error).message || 'Falha ao carregar dashboard');
+    }
+  }, [period, customFrom, customTo]);
 
   const loadCron = useCallback(async () => {
     try {
@@ -136,62 +150,6 @@ export default function AdminDashboard() {
     loadViradas();
   }, [load, loadCron, loadLowStock, loadViradas]);
 
-  const periodRange = useMemo(() => {
-    const r = periodToRange(period, customFrom, customTo);
-    return {
-      from: r.from ? startOfLocalDay(new Date(r.from + 'T12:00:00')) : null,
-      to: r.to ? endOfLocalDay(new Date(r.to + 'T12:00:00')) : null,
-    };
-  }, [period, customFrom, customTo]);
-
-  const dash = useMemo(() => {
-    const scoped = orders.filter((o) => {
-      if (!periodRange.from && !periodRange.to) return true;
-      const t = orderWhen(o).getTime();
-      if (periodRange.from && t < periodRange.from.getTime()) return false;
-      if (periodRange.to && t > periodRange.to.getTime()) return false;
-      return true;
-    });
-
-    const metrics = summarizeOrders(scoped);
-    const paid = scoped.filter((o) => (o.status || '').toLowerCase() === 'paid');
-    const refunded = scoped.filter((o) => (o.status || '').toLowerCase() === 'refunded');
-    const pending = scoped.filter((o) => (o.status || '').toLowerCase() === 'pending');
-    const cancelled = scoped.filter((o) => {
-      const s = (o.status || '').toLowerCase();
-      return s === 'cancelled' || s === 'canceled';
-    });
-
-    const byEventTitle: Record<string, number> = {};
-    for (const o of paid) {
-      const n = o.tickets?.filter((t) => t.status !== 'cancelled').length || 1;
-      byEventTitle[o.event.title] = (byEventTitle[o.event.title] || 0) + n;
-    }
-    const chartData = Object.entries(byEventTitle)
-      .map(([title, ingressos]) => ({
-        name: title.length > 18 ? title.slice(0, 15) + '…' : title,
-        fullName: title,
-        ingressos,
-      }))
-      .sort((a, b) => b.ingressos - a.ingressos)
-      .slice(0, 8);
-
-    const statusData = [
-      { name: 'Pagos', value: paid.length, color: '#22c55e' },
-      { name: 'Estornados', value: refunded.length, color: '#ef4444' },
-      { name: 'Pendentes', value: pending.length, color: '#eab308' },
-      { name: 'Cancelados', value: cancelled.length, color: '#71717a' },
-    ].filter((d) => d.value > 0);
-
-    return {
-      ...metrics,
-      chartData,
-      statusData,
-      recent: [...scoped]
-        .sort((a, b) => orderWhen(b).getTime() - orderWhen(a).getTime())
-        .slice(0, 10),
-    };
-  }, [orders, periodRange]);
 
   async function cleanupPendings() {
     const ttl = cronInfo?.pendingOrderTtlMinutes ?? 30;

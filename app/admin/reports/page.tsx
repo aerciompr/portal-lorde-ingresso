@@ -34,6 +34,7 @@ type Bucket = {
   paidTickets: number;
   refundedOrders: number;
   pendingOrders: number;
+  cancelledOrders: number;
 };
 
 type LoteRow = Bucket & { name: string };
