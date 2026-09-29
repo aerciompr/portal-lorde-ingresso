@@ -35,6 +35,13 @@ ENV NEXT_PUBLIC_APP_URL="https://portal.lordenelson.com.br"
 RUN npx prisma generate --schema=./prisma/schema.prisma \
  && npm run build
 
+# CLI de manutenção no container final (db push). Mantém só dependências de produção;
+# a imagem standalone por si só não inclui o binário prisma nem suas dependências.
+FROM base AS prisma-cli
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
 # ---- run (imagem enxuta) ----
 FROM base AS runner
 WORKDIR /app
@@ -57,6 +64,9 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+
+# Necessário para `scripts/db-push.sh` no terminal do EasyPanel.
+COPY --from=prisma-cli /app/node_modules ./node_modules
 
 # Prisma (client + engines + schema) — db push no shell do container
 COPY --from=builder /app/prisma ./prisma
