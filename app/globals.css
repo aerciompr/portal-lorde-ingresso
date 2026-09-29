@@ -6,6 +6,10 @@
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/solid.min.css");
 
 :root {
+  /* Fontes locais: o build Docker não depende da API Google Fonts. */
+  --font-geist-sans: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-geist-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-space-grotesk: "Arial Narrow", "Segoe UI", Arial, sans-serif;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
