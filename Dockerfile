@@ -78,7 +78,7 @@ COPY --from=builder /app/scripts ./scripts
 RUN mkdir -p /app/data/uploads /app/public/uploads /tmp/lordenelson-uploads \
   && chown -R nextjs:nodejs /app/data /app/public/uploads \
   && chmod -R 775 /app/data /app/public/uploads \
-  && chmod +x /app/scripts/docker-entrypoint.sh /app/scripts/db-push.sh \
+  && chmod +x /app/scripts/docker-entrypoint.sh /app/scripts/db-push.sh /app/scripts/apply-marketing-schema.sh \
   && ln -sf /app/node_modules/.bin/prisma /usr/local/bin/prisma 2>/dev/null || true
 
 # Fuso Maceió (UTC-3) — formatação de data no Node/logs
