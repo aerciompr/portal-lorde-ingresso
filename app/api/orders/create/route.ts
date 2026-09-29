@@ -6,7 +6,7 @@ import { withDbRetry } from '@/lib/db-retry';
 export async function POST(req: NextRequest) {
   let reservedPromoId: string | null = null;
   try {
-    const { eventId, items, promoCode } = await req.json(); // items: [{ticketTypeId, quantity}]
+    const { eventId, items, promoCode, attribution } = await req.json(); // items: [{ticketTypeId, quantity}]
 
     if (!eventId || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 });
@@ -94,6 +94,11 @@ export async function POST(req: NextRequest) {
     if (promo.promoCodeId) reservedPromoId = promo.promoCodeId;
     const totalCents = promo.totalCents;
 
+    const cleanAttribution = (key: string, max = 255) => {
+      if (!attribution || typeof attribution !== 'object') return undefined;
+      const value = (attribution as Record<string, unknown>)[key];
+      return typeof value === 'string' ? value.trim().slice(0, max) || undefined : undefined;
+    };
     const orderData: Record<string, unknown> = {
       eventId,
       buyerName: 'Checkout em andamento',
@@ -105,6 +110,15 @@ export async function POST(req: NextRequest) {
         : undefined,
       loteId: activeLoteId,
       discountCents: promo.discountCents || 0,
+      utmSource: cleanAttribution('utmSource'),
+      utmMedium: cleanAttribution('utmMedium'),
+      utmCampaign: cleanAttribution('utmCampaign'),
+      utmContent: cleanAttribution('utmContent'),
+      utmTerm: cleanAttribution('utmTerm'),
+      gclid: cleanAttribution('gclid'),
+      fbclid: cleanAttribution('fbclid'),
+      landingPage: cleanAttribution('landingPage', 500),
+      referrer: cleanAttribution('referrer', 500),
       tickets: {
         create: orderItems.flatMap((item) =>
           Array.from({ length: item.quantity }).map(() => ({

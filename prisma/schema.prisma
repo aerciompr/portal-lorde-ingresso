@@ -114,6 +114,17 @@ model Order {
   promoCodeLabel String?    @db.VarChar(64)
   discountCents  Int        @default(0)
 
+  /** Atribuição de marketing no momento em que o checkout foi iniciado. */
+  utmSource      String?    @db.VarChar(255)
+  utmMedium      String?    @db.VarChar(255)
+  utmCampaign    String?    @db.VarChar(255)
+  utmContent     String?    @db.VarChar(255)
+  utmTerm        String?    @db.VarChar(255)
+  gclid          String?    @db.VarChar(255)
+  fbclid         String?    @db.VarChar(255)
+  landingPage    String?    @db.VarChar(500)
+  referrer       String?    @db.VarChar(500)
+
   tickets              Ticket[]
   cancellationRequests CancellationRequest[]
   logs                 OrderLog[]
@@ -125,6 +136,8 @@ model Order {
   @@index([status])
   @@index([source, externalId])
   @@index([promoCodeId])
+  @@index([paidAt])
+  @@index([status, paidAt])
 }
 
 /**

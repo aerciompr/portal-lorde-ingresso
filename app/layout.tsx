@@ -10,6 +10,7 @@ import { absoluteMediaUrl, mimeFromUrl } from "@/lib/media-url";
 import { waHrefFromE164 } from "@/lib/contact";
 import { parseFooterLayout } from "@/lib/footer-layout";
 import SiteTracking from "@/components/SiteTracking";
+import TrackingPageViews from "@/components/TrackingPageViews";
 
 /** Branding (logo) vem do banco — não cachear layout vazio sem logo */
 export const dynamic = "force-dynamic";
@@ -131,6 +132,7 @@ export default async function RootLayout({
 
         {/* Pixels + scripts (Admin → Configurações → Marketing) */}
         <SiteTracking tracking={s.tracking} />
+        <TrackingPageViews />
       </body>
     </html>
   );

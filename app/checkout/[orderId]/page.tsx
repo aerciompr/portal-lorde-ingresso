@@ -19,11 +19,12 @@ import {
 import PurchaseSuccessModal, {
   type PurchaseModalVariant,
 } from '@/components/PurchaseSuccessModal';
+import { trackAddPaymentInfo, trackPurchaseOnce } from '@/lib/client-tracking';
 
 interface OrderData {
   id: string;
   totalCents: number;
-  event: { title: string; date: string };
+  event: { id: string; title: string; date: string };
   tickets: { id: string }[];
   status: string;
   discountCents?: number;
@@ -90,6 +91,17 @@ export default function CheckoutPage() {
   ]);
 
   const orderId = params.orderId;
+
+  function trackConfirmedPurchase() {
+    if (!order) return;
+    trackPurchaseOnce({
+      orderId,
+      eventId: order.event.id,
+      title: order.event.title,
+      valueCents: order.totalCents,
+      quantity: order.tickets.length,
+    });
+  }
 
   useEffect(() => {
     fetch('/api/admin/settings')
@@ -254,6 +266,7 @@ export default function CheckoutPage() {
           setModalVariant('paid');
           setModalOpen(true);
           setBlockAutoRedirect(true);
+          trackConfirmedPurchase();
           return;
         }
         if (data.mpStatus && ['rejected', 'cancelled', 'canceled', 'expired'].includes(data.mpStatus)) {
@@ -370,6 +383,7 @@ export default function CheckoutPage() {
         setPaymentStatus('waiting');
         if (data.accessCode) setPaidAccessCode(data.accessCode);
         toast.success('PIX gerado — pague com o QR ou copia e cola');
+        if (order) trackAddPaymentInfo({ orderId, eventId: order.event.id, title: order.event.title, valueCents: order.totalCents, method });
         // sem modal de “código de acesso” antes do pagamento
       } else if (data.type === 'stripe' && data.clientSecret) {
         setClientSecret(data.clientSecret);
@@ -382,6 +396,7 @@ export default function CheckoutPage() {
           }
         }
         toast.info('Preencha os dados do cartão abaixo');
+        if (order) trackAddPaymentInfo({ orderId, eventId: order.event.id, title: order.event.title, valueCents: order.totalCents, method });
 
         // Garante Stripe.js com a pk_ retornada pela API (admin/env)
         let s = stripe;
@@ -536,6 +551,7 @@ export default function CheckoutPage() {
             setModalVariant('paid');
             setModalOpen(true);
             toast.success('Pagamento confirmado!');
+            trackConfirmedPurchase();
             setProcessing(false);
             return;
           }

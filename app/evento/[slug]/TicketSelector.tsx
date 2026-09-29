@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
 import { matchTicketTypeToLote } from '@/lib/lote-match';
+import { getMarketingAttribution } from '@/lib/marketing-attribution';
+import { trackBeginCheckout, trackViewItem } from '@/lib/client-tracking';
 
 interface TicketType {
   id: string;
@@ -42,6 +44,11 @@ export default function TicketSelector({ event }: Props) {
   const [promoCode, setPromoCode] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    const lowest = Math.min(...event.ticketTypes.map((t) => t.priceCents).filter((v) => v > 0));
+    trackViewItem({ eventId: event.id, title: event.title, valueCents: Number.isFinite(lowest) ? lowest : 0 });
+  }, [event.id, event.title, event.ticketTypes]);
 
   const currentLote = event.activeLote || null;
   const hasLotes = (event.lotes?.length || 0) > 0;
@@ -113,11 +120,20 @@ export default function TicketSelector({ event }: Props) {
           eventId: event.id,
           items,
           ...(promoCode.trim() ? { promoCode: promoCode.trim() } : {}),
+          attribution: getMarketingAttribution(),
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao criar pedido');
+
+      trackBeginCheckout({
+        orderId: data.orderId,
+        eventId: event.id,
+        title: event.title,
+        valueCents: data.totalCents || total,
+        quantity: items.reduce((sum, item) => sum + item.quantity, 0),
+      });
 
       if (data.promoApplied) {
         toast.success(
